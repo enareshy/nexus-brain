@@ -1,4 +1,6 @@
 import js from "@eslint/js";
+import jsxA11y from "eslint-plugin-jsx-a11y";
+import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 // Vendor LLM SDKs may only be imported inside packages/llm-gateway (CLAUDE.md rule 3).
@@ -15,11 +17,20 @@ const VENDOR_SDKS = [
 ];
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.turbo/**"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "**/.turbo/**",
+      "**/.next/**",
+      "**/next-env.d.ts",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["**/*.ts"],
+    files: ["**/*.ts", "**/*.tsx"],
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
@@ -41,6 +52,17 @@ export default tseslint.config(
   {
     files: ["packages/llm-gateway/**/*.ts"],
     rules: { "no-restricted-imports": "off" },
+  },
+  {
+    // React 19 injects no global React; DOM globals come from TypeScript's lib for .tsx.
+    files: ["apps/web/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks, "jsx-a11y": jsxA11y },
+    rules: {
+      "no-undef": "off",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
+      ...jsxA11y.flatConfigs.recommended.rules,
+    },
   },
   {
     files: ["**/scripts/**", "**/*.mjs"],

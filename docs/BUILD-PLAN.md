@@ -35,10 +35,12 @@ Done (slice 1a: Jira path end to end against a local mock MCP server):
 - API: `GET /connections`, `POST /connections/:id/authorize`, `GET /oauth/callback`, `DELETE /connections/:id`, `GET /connections/:id/tools`, `GET /search`; audit rows (query hashed); rate limit; CORS.
 - `scripts/dev-brain.mjs` to connect, capture tools and search before the UI exists.
 - Security review fixes (0 critical/high; all 6 medium fixed): login-CSRF (completion requires the signed-in owner of the state, migration 0004), per-(tenant,user,server) session serialisation against refresh races, RFC 7009 revocation on disconnect, per-credential rate limits + bounded pending states + 5 MB response cap, citation host allow-list (https on the connected service only), https-only URLs in production; plus IPv6-mapped address checks, consent-URL host check, keyed (HMAC) audit fingerprints, validated stored tokens, no-store/no-referrer on the callback.
+- Web UI shell (`apps/web`, Next.js 16 / React 19 / Tailwind 4): Keycloak sign-in (PKCE), Connections page (connect, reconnect, disconnect with revocation result), consent completion page, Search page with safe citations and per-source status; strict CSP and security headers; verified in the browser (sign-in, search, connections, error paths, 375px mobile, silent token renewal). React review: 0 critical; both high (hook/a11y lint rules now enforced; sessions renew via refresh token or clear on expiry) and all medium findings fixed (stale results, bfcache, load retry, base-path join, production env guard, a11y labels/headings/live regions, recovery paths, request cancellation + timeout, HSTS).
+Note: never run `next build` while `next dev` is running in the same app; they rewrite `next-env.d.ts` differently and cause a reload loop.
 Not done yet (remaining Phase 1):
 - Connect real Atlassian and capture `tools/list` into ADR 0001 (needs a human Atlassian login), then trim adapter candidates.
 - Reranker, answer generation with citations (needs LLM gateway keys), golden set of 300 queries.
-- Web UI shell + Connections page; other connectors (Drive, Slack, M365/Teams, Gmail, GitHub).
+- Other connectors (Drive, Slack, M365/Teams, Gmail, GitHub); Playwright E2E for the browser flows; move browser tokens to a backend-for-frontend with httpOnly cookies and nonce-based CSP (Phase 5).
 - Deferred review items: key id + rotation in the sealed format (KMS), Postgres advisory lock for refresh across multiple API instances, pin resolved IPs in the fetch (DNS rebinding), cancel abandoned source sessions on budget timeout, de-duplicate concurrent first-use client registration.
 
 ## Phase 1 — MCP connectors + federated retrieval (+ optional index) (5–7 wks)  [FR-ING-01..03, FR-MCP-02,05,06, FR-RET-01,04,05,06]

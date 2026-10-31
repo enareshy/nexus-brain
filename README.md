@@ -33,8 +33,11 @@ node scripts/smoke-login.mjs
 ```
 Checks: `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:int && pnpm eval`.
 
-### Connect Jira (Phase 1, before the web UI)
-With `pnpm dev` running:
+### Web app
+`pnpm dev` starts the API (http://127.0.0.1:3001) and the web app (http://localhost:3000). Sign in as a dev user, open **Connections**, click **Connect** for Atlassian, approve in Atlassian, and you return to the app connected. Then search from the home page.
+
+### Connect Jira from the terminal (alternative)
+With `pnpm dev` running (stop the web app first: the CLI listens on port 3000 for the redirect):
 ```bash
 node scripts/dev-brain.mjs connect pat.acme atlassian   # open the printed URL, approve in Atlassian
 node scripts/dev-brain.mjs status pat.acme
