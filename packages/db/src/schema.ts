@@ -46,4 +46,46 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const schema = { tenants, users, groups, groupMembers, auditLog };
+export const mcpConnections = pgTable(
+  "mcp_connections",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    serverId: text("server_id").notNull(),
+    status: text("status", { enum: ["active", "needs_reauth"] }).notNull(),
+    tokensCiphertext: text("tokens_ciphertext").notNull(),
+    scopes: text("scopes"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.userId, table.serverId] })],
+);
+
+export const oauthStates = pgTable("oauth_states", {
+  stateHash: text("state_hash").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  serverId: text("server_id").notNull(),
+  verifierCiphertext: text("verifier_ciphertext").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mcpClientRegistrations = pgTable("mcp_client_registrations", {
+  serverId: text("server_id").primaryKey(),
+  clientInfoCiphertext: text("client_info_ciphertext").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const schema = {
+  tenants,
+  users,
+  groups,
+  groupMembers,
+  auditLog,
+  mcpConnections,
+  oauthStates,
+  mcpClientRegistrations,
+};

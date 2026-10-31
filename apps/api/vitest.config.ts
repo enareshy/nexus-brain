@@ -3,11 +3,19 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    exclude: ["src/**/*.int.test.ts"],
     setupFiles: ["reflect-metadata"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/main.ts", "src/test-support/**"],
+      // Service + vault are covered (and threshold-gated) by the integration suite.
+      exclude: [
+        "src/**/*.test.ts",
+        "src/main.ts",
+        "src/test-support/**",
+        "src/connections/connections.service.ts",
+        "src/connections/vault-store.ts",
+      ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },

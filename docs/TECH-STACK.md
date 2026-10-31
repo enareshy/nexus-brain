@@ -22,7 +22,7 @@ Legend: **Chosen** = decision for this build. **Alt** = acceptable swap. ClickUp
 | Embeddings | Configurable: `voyage-3-large` or OpenAI `text-embedding-3-large` (dim 1024/3072 → store `model`+`dim` per vector) | Cohere embed v4, BGE self-host | Pick after eval on golden set |
 | Reranker | Cohere Rerank 3.x API | BGE-reranker-v2 self-hosted | Quick win; swap by eval |
 | Agent orchestration | LangGraph.js (`@langchain/langgraph`) + Postgres checkpointer | Mastra, custom | Confirmed ClickUp (LangGraph) |
-| MCP | Official `@modelcontextprotocol/sdk` (target spec 2026-07-28) | — | Server + **client (primary connector path)**; per-user OAuth, token vault in Postgres encrypted via AWS KMS envelope keys |
+| MCP | Official `@modelcontextprotocol/sdk` **1.32.2** (pinned). Correction 2026-10-31: this SDK's latest protocol is `2025-11-25`, not `2026-07-28`; we use whatever the SDK negotiates and adopt the stateless revision when the SDK ships it | — | Server + **client (primary connector path)**; per-user OAuth via the SDK's `OAuthClientProvider`, token vault in Postgres (AES-256-GCM now, AWS KMS envelope keys in Phase 5) |
 | Connector model | MCP client adapters, federated first (see `DECISIONS-AND-INTEGRATIONS.md`) | Bespoke API connectors | User-linked servers inherit source permissions |
 | Write policy | In-repo policy engine: tool classification, approval cards, exact-args binding, idempotency | — | FR-WR-* |
 | Frontend | Next.js 15 (React 19), Tailwind, shadcn/ui, TanStack Query | Angular (ClickUp uses) | Streaming UI, rich ecosystem |

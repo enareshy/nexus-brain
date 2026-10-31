@@ -51,6 +51,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:cov
-      - name: Tenant isolation leak suite
-        run: pnpm test:leak
+      - name: Integration tests (RLS leak suite, API + mock MCP OAuth flow)
+        run: pnpm test:int
       - run: pnpm eval

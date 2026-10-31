@@ -27,6 +27,20 @@ Deferred review items (address before production):
 - Add rate limiting, CORS, security headers and `trustProxy` to Fastify with the first Phase 1 endpoints.
 - Revisit the per-request directory lookup (one DB transaction per request) once revocation semantics are decided.
 
+### Phase 1 status (2026-10-31, branch `phase-1-mcp-jira`)
+Done (slice 1a: Jira path end to end against a local mock MCP server):
+- `packages/mcp-client`: SDK-based OAuth (discovery incl. fallback when RFC 9728 metadata is missing, DCR, PKCE S256, refresh), SSRF-guarded fetch, sessions, error mapping, mock OAuth+MCP server for tests.
+- Token vault: AES-256-GCM with (tenant, user, server) bound as AAD; `mcp_connections` RLS per tenant **and user**; single-use hashed OAuth state with 10-minute expiry.
+- `packages/connectors`: schema-driven search adapter (no hard-coded argument shapes), safe citation extraction, federated search with RRF and per-source budget.
+- API: `GET /connections`, `POST /connections/:id/authorize`, `GET /oauth/callback`, `DELETE /connections/:id`, `GET /connections/:id/tools`, `GET /search`; audit rows (query hashed); rate limit; CORS.
+- `scripts/dev-brain.mjs` to connect, capture tools and search before the UI exists.
+- Security review fixes (0 critical/high; all 6 medium fixed): login-CSRF (completion requires the signed-in owner of the state, migration 0004), per-(tenant,user,server) session serialisation against refresh races, RFC 7009 revocation on disconnect, per-credential rate limits + bounded pending states + 5 MB response cap, citation host allow-list (https on the connected service only), https-only URLs in production; plus IPv6-mapped address checks, consent-URL host check, keyed (HMAC) audit fingerprints, validated stored tokens, no-store/no-referrer on the callback.
+Not done yet (remaining Phase 1):
+- Connect real Atlassian and capture `tools/list` into ADR 0001 (needs a human Atlassian login), then trim adapter candidates.
+- Reranker, answer generation with citations (needs LLM gateway keys), golden set of 300 queries.
+- Web UI shell + Connections page; other connectors (Drive, Slack, M365/Teams, Gmail, GitHub).
+- Deferred review items: key id + rotation in the sealed format (KMS), Postgres advisory lock for refresh across multiple API instances, pin resolved IPs in the fetch (DNS rebinding), cancel abandoned source sessions on budget timeout, de-duplicate concurrent first-use client registration.
+
 ## Phase 1 — MCP connectors + federated retrieval (+ optional index) (5–7 wks)  [FR-ING-01..03, FR-MCP-02,05,06, FR-RET-01,04,05,06]
 Tasks (revised after decisions: existing product as system of record, all sources via MCP)
 1. (Replaces first-party work system.) Pick and verify MCP servers per source (Q1a/Q2a): list tools, auth model, search capability, rate limits. Record in `docs/adr/0001-mcp-servers.md`.

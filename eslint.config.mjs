@@ -22,7 +22,10 @@ export default tseslint.config(
     files: ["**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true },
+      ],
       "no-console": "error",
       "no-restricted-imports": [
         "error",
@@ -46,7 +49,10 @@ export default tseslint.config(
         process: "readonly",
         console: "readonly",
         fetch: "readonly",
+        URL: "readonly",
         URLSearchParams: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
     },
     rules: { "no-console": "off" },

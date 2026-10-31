@@ -5,11 +5,19 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MIGRATIONS_DIR } from "./config.js";
 import { findUserBySubject } from "./directory.js";
 import { applyMigrations, loadMigrations } from "./migrator.js";
+import {
+  consumePendingAuthorization,
+  deleteConnection,
+  getConnection,
+  listConnections,
+  saveConnection,
+  savePendingAuthorization,
+} from "./connections.js";
 import { assertRlsEnforced } from "./pool.js";
-import { auditLog, groupMembers, tenants, users } from "./schema.js";
+import { auditLog, groupMembers, mcpConnections, oauthStates, tenants, users } from "./schema.js";
 import { GROUPS, TENANTS, seedUser } from "./seed-data.js";
 import { seed } from "./seed.js";
-import { withTenant } from "./tenant.js";
+import { withTenant, withUser } from "./tenant.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL =
@@ -148,6 +156,99 @@ describe("assertRlsEnforced", () => {
     } finally {
       await ownerPool.end();
     }
+  });
+});
+
+describe("MCP connections are private to one user", () => {
+  const pat = { tenantId: ACME, userId: seedUser("patAcme").id };
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const patGlobex = { tenantId: GLOBEX, userId: seedUser("patGlobex").id };
+
+  it("hides a user's connection from a colleague in the same tenant", async () => {
+    await saveConnection(appPool, pat, {
+      serverId: "leaktest",
+      tokensCiphertext: "v1.sealed",
+      scopes: null,
+      expiresAt: null,
+    });
+    expect(await getConnection(appPool, pat, "leaktest")).not.toBeNull();
+    expect(await getConnection(appPool, bob, "leaktest")).toBeNull();
+    expect((await listConnections(appPool, bob)).map((c) => c.serverId)).not.toContain("leaktest");
+    expect(await deleteConnection(appPool, bob, "leaktest")).toBe(false);
+    expect(await getConnection(appPool, pat, "leaktest")).not.toBeNull();
+  });
+
+  it("hides it from the same person in another tenant", async () => {
+    expect(await getConnection(appPool, patGlobex, "leaktest")).toBeNull();
+  });
+
+  it("returns no connections when only the tenant (no user) is set", async () => {
+    const rows = await withTenant(appPool, ACME, (db) => db.select().from(mcpConnections));
+    expect(rows).toEqual([]);
+  });
+
+  it("rejects writing a connection for another user", async () => {
+    await expect(
+      withUser(appPool, bob, (db) =>
+        db.insert(mcpConnections).values({
+          tenantId: ACME,
+          userId: pat.userId,
+          serverId: "forged",
+          status: "active",
+          tokensCiphertext: "x",
+        }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  const pending = (stateHash: string, serverId = "leaktest", ttlMs = 60_000) => ({
+    stateHash,
+    serverId,
+    verifierCiphertext: "v1.verifier",
+    expiresAt: new Date(Date.now() + ttlMs),
+  });
+
+  it("consumes an OAuth state exactly once, for its owner", async () => {
+    const stateHash = `hash-${Date.now()}`;
+    await savePendingAuthorization(appPool, pat, pending(stateHash));
+    expect(await consumePendingAuthorization(appPool, pat, stateHash)).toMatchObject({
+      serverId: "leaktest",
+    });
+    expect(await consumePendingAuthorization(appPool, pat, stateHash)).toBeNull();
+  });
+
+  it("does not let another user consume or burn a pending state (login-CSRF)", async () => {
+    const stateHash = `csrf-${Date.now()}`;
+    await savePendingAuthorization(appPool, pat, pending(stateHash));
+    expect(await consumePendingAuthorization(appPool, bob, stateHash)).toBeNull();
+    expect(await consumePendingAuthorization(appPool, patGlobex, stateHash)).toBeNull();
+    expect(await consumePendingAuthorization(appPool, pat, stateHash)).not.toBeNull();
+  });
+
+  it("refuses an expired OAuth state", async () => {
+    const stateHash = `expired-${Date.now()}`;
+    await savePendingAuthorization(appPool, pat, pending(stateHash, "leaktest", -1_000));
+    expect(await consumePendingAuthorization(appPool, pat, stateHash)).toBeNull();
+  });
+
+  it("keeps one pending state per user and server, and purges expired ones", async () => {
+    await savePendingAuthorization(appPool, pat, pending(`old-${Date.now()}`, "other", -1_000));
+    await savePendingAuthorization(appPool, pat, pending(`first-${Date.now()}`));
+    const latest = `second-${Date.now()}`;
+    await savePendingAuthorization(appPool, pat, pending(latest));
+    const rows = await withUser(appPool, pat, (db) => db.select().from(oauthStates));
+    expect(rows.map((r) => r.stateHash)).toEqual([latest]);
+    await consumePendingAuthorization(appPool, pat, latest);
+  });
+
+  it("never shows other users' pending states", async () => {
+    await savePendingAuthorization(appPool, pat, pending(`visible-${Date.now()}`));
+    const rows = await withUser(appPool, bob, (db) => db.select().from(oauthStates));
+    expect(rows.every((r) => r.userId === bob.userId)).toBe(true);
+  });
+
+  afterAll(async () => {
+    await deleteConnection(appPool, pat, "leaktest");
   });
 });
 
