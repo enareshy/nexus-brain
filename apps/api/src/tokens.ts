@@ -1,0 +1,5 @@
+// Explicit DI tokens. The build uses esbuild (no emitDecoratorMetadata), so every
+// constructor dependency must be injected with @Inject(TOKEN).
+export const IDENTITY_VERIFIER = Symbol("IDENTITY_VERIFIER");
+export const USER_DIRECTORY = Symbol("USER_DIRECTORY");
+export const LOGGER = Symbol("LOGGER");

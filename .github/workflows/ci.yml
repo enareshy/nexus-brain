@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# TODO(security): pin third-party actions to commit SHAs before the repo goes public.
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check:
+    needs: secrets
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: brain
+          POSTGRES_PASSWORD: brain
+          POSTGRES_DB: brain
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U brain"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://brain:brain@localhost:5432/brain
+      DATABASE_APP_ROLE_URL: postgres://brain_app:brain_app@localhost:5432/brain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create CI app role
+        run: psql "$DATABASE_URL" -c "CREATE ROLE brain_app LOGIN PASSWORD 'brain_app';"
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:cov
+      - name: Tenant isolation leak suite
+        run: pnpm test:leak
+      - run: pnpm eval

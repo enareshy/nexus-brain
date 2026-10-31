@@ -1,0 +1,21 @@
+{
+  "name": "@brain/telemetry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "~1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
+    "@opentelemetry/instrumentation-http": "^0.57.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
+    "pino": "^9.5.0"
+  }
+}
