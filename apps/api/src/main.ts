@@ -40,6 +40,7 @@ const connections = new ConnectionsService({
   registry: createRegistry(enabled.map((e) => e.def)),
   adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
+  onBackgroundError: (err) => logger.warn({ err }, "MCP session housekeeping failed"),
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
@@ -65,6 +66,7 @@ const app = await createApp({
 });
 
 app.getHttpAdapter().getInstance().addHook("onClose", async () => {
+  connections.close();
   await pool.end();
   await tracing.shutdown();
 });

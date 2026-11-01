@@ -30,13 +30,23 @@ export interface MockMcpServer {
     codeGrants: number;
     refreshGrants: number;
     revocations: number;
+    /** MCP sessions started, to prove reuse. */
+    initializes: number;
+    /** All authenticated MCP requests. */
+    mcpCalls: number;
   };
   readonly createdIssues: Array<{ identity: string; summary: string }>;
   /** Identity the next /authorize call "logs in" as (simulates the user's consent). */
   setNextIdentity(identity: string): void;
   expireAccessTokens(): void;
   revokeRefreshTokens(): void;
+  /** Makes the next MCP request fail, as a session the server has dropped would. */
+  failNextMcpRequest(): void;
+  /** Slows MCP requests, to hold a request in flight in race tests. */
+  setMcpDelay(ms: number): void;
   close(): Promise<void>;
+  /** Listens again on the same port after close(). */
+  listen(): Promise<void>;
 }
 
 interface Grant {
@@ -49,7 +59,9 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
   const codes = new Map<string, { identity: string; challenge: string; redirectUri: string; clientId: string }>();
   const accessTokens = new Map<string, Grant>();
   const refreshTokens = new Map<string, string>();
-  const stats = { registrations: 0, codeGrants: 0, refreshGrants: 0, revocations: 0 };
+  const stats = { registrations: 0, codeGrants: 0, refreshGrants: 0, revocations: 0, initializes: 0, mcpCalls: 0 };
+  let failNext = false;
+  let mcpDelayMs = 0;
   const createdIssues: Array<{ identity: string; summary: string }> = [];
   let nextIdentity = Object.keys(options.issuesByIdentity)[0] ?? "anonymous";
   let baseUrl = "";
@@ -152,6 +164,13 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
         return;
       }
       const raw = await readBody(req);
+      stats.mcpCalls += 1;
+      if (mcpDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, mcpDelayMs));
+      if (failNext) {
+        failNext = false;
+        return json(res, 500, { error: "session_lost" });
+      }
+      if (raw.includes('"method":"initialize"')) stats.initializes += 1;
       const mcp = buildMcpServer(grant.identity);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => {
@@ -199,7 +218,8 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
   }
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const { port } = server.address() as AddressInfo;
+  baseUrl = `http://127.0.0.1:${port}`;
 
   return {
     baseUrl,
@@ -219,7 +239,18 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
       for (const grant of accessTokens.values()) grant.expiresAt = 0;
     },
     revokeRefreshTokens: () => refreshTokens.clear(),
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    failNextMcpRequest: () => {
+      failNext = true;
+    },
+    setMcpDelay: (ms) => {
+      mcpDelayMs = ms;
+    },
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+    listen: () => new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve)),
   };
 }
 

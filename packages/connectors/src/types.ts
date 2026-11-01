@@ -17,6 +17,11 @@ export type ToolSession = Pick<McpSession, "listTools" | "callTool">;
 
 export interface SearchAdapter {
   readonly serverId: string;
+  /**
+   * Slow-changing read-only tools and how long their results may be reused, in ms, per user.
+   * Never list a tool whose result decides access to content.
+   */
+  readonly cachedTools?: Readonly<Record<string, number>>;
   search(session: ToolSession, query: string, limit: number): Promise<readonly SearchHit[]>;
   /**
    * Reads full text for hits, as the signed-in user, so access is re-checked at read time.

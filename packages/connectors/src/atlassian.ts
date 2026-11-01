@@ -12,6 +12,7 @@ const CONFLUENCE_TOOL = "searchConfluenceUsingCql";
 const JIRA_SCOPE = "read:jira-work";
 const CONFLUENCE_SCOPE = "search:confluence";
 const MAX_SITES = 3;
+const SITES_TTL_MS = 5 * 60 * 1000;
 const SNIPPET_CHARS = 300;
 const SITE_HOST = /^[a-z0-9-]+\.atlassian\.net$/i;
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
@@ -232,6 +233,8 @@ async function readBody(session: ToolSession, hit: SearchHit): Promise<string | 
 /** Searches Jira (JQL) and Confluence (CQL) on each site the user's grant covers. */
 export const atlassianSearch: SearchAdapter = {
   serverId: "atlassian",
+  // Only where to search; every search and read still runs with the user's token.
+  cachedTools: { [SITES_TOOL]: SITES_TTL_MS },
   async readDocuments(session, hits) {
     const settled = await Promise.allSettled(
       hits.map(async (hit) => [hit.url, await readBody(session, hit)] as const),

@@ -26,6 +26,21 @@ Raw tool list: [`0001-atlassian-tools.json`](0001-atlassian-tools.json) (32 tool
 | Latency | connect 0.4-1 s, tools/list 0.2 s, sites 0.8-1.2 s, JQL/CQL 1.1-2.1 s; end-to-end search 2-3.4 s |
 | Tool annotations | Read tools have `readOnlyHint: true`; write tools have `destructiveHint: false`. No delete tools are listed |
 
+### Speed work (measured live, 2026-11-01)
+Reused MCP sessions per user (60 s idle), per-user site list cache (5 min) and per-user search cache (60 s, non-empty only). Document reads stay uncached because they re-check access.
+
+| Step | Before | After |
+|---|---|---|
+| Search, cold | 2-3.4 s | 3.9 s (includes connect) |
+| New search, warm session | same as cold | 2.0 s |
+| Repeat search | same as cold | 26 ms |
+| First answer text, after searching | 5.7 s | 3.5 s |
+| First answer text, new question, warm session | 5.7 s | 3.8 s |
+
+The 2.5 s first-text target is still not met: about 1.6 s is document reads and 1.1-1.9 s is the model. One run each on a small site, so treat these as indicative. Search results can be up to 60 s stale.
+
+Isolation rules for this code: every cache and pool key starts with tenant, user and server; reconnecting takes the same per-user lock as session work, so a request on the old account cannot refill the caches afterwards (a mutation-checked integration test covers this); needing re-auth, disconnecting and connecting all clear that user's entries. Known gaps: one heavy user can push out others' cache entries (shared size bound), audit rows do not mark cached results, and caches and the pool are per API instance.
+
 ### Not verified
 - **Jira issue result shape:** the connected site has a project but no visible issues. `parseJiraIssues` follows the documented Jira REST format (`key`, `fields.summary`). Create an issue and re-test.
 - Rate limits (responses include `x-ratelimit-*` headers; values not yet recorded).

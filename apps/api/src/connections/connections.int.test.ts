@@ -10,7 +10,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { randomBytes } from "node:crypto";
 import { Writable } from "node:stream";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
@@ -163,9 +163,81 @@ describe("connect Jira (mock) and search as that user", () => {
   it("handles concurrent searches without racing the refresh token", async () => {
     mock.expireAccessTokens();
     const pat = await as("patAcme");
-    const results = await Promise.all([1, 2, 3].map(() => pat("GET", "/search?q=login")));
+    // Distinct queries, because a repeated query would be answered from the cache.
+    const results = await Promise.all(["sso", "bug", "on"].map((q) => pat("GET", `/search?q=${q}`)));
     for (const res of results) expect(res.json().data.sources[0]).toMatchObject({ ok: true });
     expect((await pat("GET", "/connections")).json().data[0].status).toBe("active");
+  });
+
+  it("reuses the MCP session across requests", async () => {
+    const pat = await as("patAcme");
+    await pat("GET", "/search?q=first-reuse");
+    const before = mock.stats.initializes;
+    await pat("GET", "/search?q=second-reuse");
+    await pat("GET", "/search?q=third-reuse");
+    expect(mock.stats.initializes).toBe(before);
+  });
+
+  it("answers a repeated search from the per-user cache, for that user only", async () => {
+    const pat = await as("patAcme");
+    const first = await pat("GET", "/search?q=login");
+    expect(first.json().data.hits).toHaveLength(1);
+    await mock.close();
+    try {
+      // The server is down, so this can only come from the cache.
+      const again = await pat("GET", "/search?q=login");
+      expect(again.json().data.hits).toHaveLength(1);
+      const bob = await as("bob");
+      expect((await bob("GET", "/search?q=login")).json().data.hits).toEqual([]);
+    } finally {
+      await mock.listen();
+    }
+  });
+
+  it("does not cache empty results", async () => {
+    const pat = await as("patAcme");
+    const before = mock.stats.mcpCalls;
+    await pat("GET", "/search?q=nothing-matches-this");
+    await pat("GET", "/search?q=nothing-matches-this");
+    expect(mock.stats.mcpCalls - before).toBeGreaterThan(2);
+  });
+
+  it("replaces a reused session that has gone stale", async () => {
+    const pat = await as("patAcme");
+    await pat("GET", "/search?q=before-stale");
+    mock.failNextMcpRequest();
+    const before = mock.stats.initializes;
+    const res = await pat("GET", "/search?q=after-stale");
+    expect(res.json().data.sources[0]).toMatchObject({ ok: true });
+    expect(mock.stats.initializes).toBe(before + 1);
+  });
+
+  it("never serves the old account after reconnecting a different one mid-request", async () => {
+    const pat = await as("patAcme");
+    const query = "/search?q=sso";
+    mock.setNextIdentity("other-account");
+    const started = await pat("POST", `/connections/${SERVER}/authorize`);
+    const forwarded = await consentViaCallback(started.json().data.authorizationUrl);
+
+    // A new query still running on Pat's old account while the reconnect arrives.
+    mock.setMcpDelay(300);
+    const before = mock.stats.mcpCalls;
+    const inFlight = pat("GET", "/search?q=login+bug");
+    // Wait for the search call itself (after tools/list), so it already ran as the old account.
+    await vi.waitFor(() => expect(mock.stats.mcpCalls).toBeGreaterThanOrEqual(before + 2));
+    const reconnect = await pat("POST", "/connections/complete", forwarded);
+    mock.setMcpDelay(0);
+    await inFlight;
+    expect(reconnect.statusCode).toBe(200);
+
+    // The new account sees none of Pat's issues: not from the cache, and not via an old session.
+    expect((await pat("GET", query)).json().data.hits).toEqual([]);
+    expect((await pat("GET", "/search?q=login+bug")).json().data.hits).toEqual([]);
+
+    // Put Pat's original account back for the tests that follow.
+    mock.setNextIdentity("pat-jira");
+    const again = await pat("POST", `/connections/${SERVER}/authorize`);
+    await pat("POST", "/connections/complete", await consentViaCallback(again.json().data.authorizationUrl));
   });
 
   it("does not let a colleague use Pat's connection", async () => {
@@ -217,6 +289,7 @@ describe("connect Jira (mock) and search as that user", () => {
     const search = await pat("GET", "/search?q=login");
     expect(search.json().data.sources[0]).toMatchObject({ ok: false, error: "RECONNECT_REQUIRED" });
     expect((await pat("GET", "/connections")).json().data[0].status).toBe("needs_reauth");
+    expect((await pat("GET", `/connections/${SERVER}/tools`)).json().error.code).toBe("RECONNECT_REQUIRED");
     await pat("DELETE", `/connections/${SERVER}`);
   });
 });
