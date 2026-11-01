@@ -18,9 +18,19 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan full history with gitleaks (values redacted in output)
-        run: >-
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2
-          git /repo --config /repo/.gitleaks.toml --redact --no-banner --verbose
+        run: |
+          status=0
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner \
+            --report-format json --report-path /repo/gitleaks-report.json > gitleaks.log 2>&1 || status=$?
+          # Annotations are readable without signing in. They name the rule, file and commit, never the value.
+          if [ -s gitleaks-report.json ] && [ "$(jq length gitleaks-report.json)" -gt 0 ]; then
+            findings=$(jq -r '.[] | "\(.RuleID) \(.File) \(.Commit[0:7])"' gitleaks-report.json | sort -u | paste -sd '~' | sed 's/~/%0A/g')
+            echo "::error title=gitleaks findings::$findings"
+          elif [ "$status" -ne 0 ]; then
+            echo "::error title=gitleaks did not finish::$(tail -n 3 gitleaks.log | paste -sd '~' | sed 's/~/%0A/g')"
+          fi
+          exit "$status"
 
   check:
     runs-on: ubuntu-latest
