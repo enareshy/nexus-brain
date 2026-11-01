@@ -1,5 +1,6 @@
 // Tenant-isolation leak suite (NFR-SEC-01, FR-ID-03). Run with `pnpm test:leak` after `pnpm infra:up`.
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MIGRATIONS_DIR } from "./config.js";
@@ -14,7 +15,17 @@ import {
   savePendingAuthorization,
 } from "./connections.js";
 import { assertRlsEnforced } from "./pool.js";
-import { auditLog, groupMembers, mcpConnections, oauthStates, tenants, usageLedger, users } from "./schema.js";
+import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
+import {
+  auditLog,
+  groupMembers,
+  mcpConnections,
+  oauthStates,
+  tenants,
+  usageLedger,
+  users,
+  writeProposals,
+} from "./schema.js";
 import { appendUsage } from "./usage.js";
 import { GROUPS, TENANTS, seedUser } from "./seed-data.js";
 import { seed } from "./seed.js";
@@ -43,6 +54,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await appPool?.end();
+  const owner = new pg.Client({ connectionString: OWNER_URL });
+  await owner.connect();
+  try {
+    // These rows belong to a seed user, so they would otherwise count towards that user's caps.
+    await owner.query("DELETE FROM write_proposals WHERE server_id = 'leaktest'");
+  } finally {
+    await owner.end();
+  }
 });
 
 describe("row-level security as brain_app", () => {
@@ -285,6 +304,71 @@ describe("usage ledger", () => {
         db.insert(usageLedger).values({ ...entry, tenantId: ACME, userId: pat.userId, costUsd: null }),
       ),
     ).rejects.toThrow(/row-level security/);
+  });
+});
+
+describe("write proposals are private and cannot change after creation", () => {
+  const pat = { tenantId: ACME, userId: seedUser("patAcme").id };
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const proposal = (id: string, expiresAt = new Date(Date.now() + 60_000)) => ({
+    id,
+    serverId: "leaktest",
+    action: "create_issue",
+    toolName: "create",
+    toolClass: "write" as const,
+    args: { summary: "x" },
+    argsHash: "hash",
+    siteOrigin: "https://acme.atlassian.net",
+    expiresAt,
+  });
+
+  it("hides a proposal from a colleague, who cannot approve or reject it", async () => {
+    const id = randomUUID();
+    await createProposal(appPool, pat, proposal(id));
+    expect(await getProposal(appPool, bob, id)).toBeNull();
+    expect(await claimProposal(appPool, bob, id, "hash", 10)).toBeNull();
+    expect(await rejectProposal(appPool, bob, id)).toBeNull();
+    expect((await getProposal(appPool, pat, id))?.status).toBe("pending");
+  });
+
+  it("hides it from the same user id in another tenant", async () => {
+    const id = randomUUID();
+    await createProposal(appPool, pat, proposal(id));
+    expect(await getProposal(appPool, { tenantId: GLOBEX, userId: pat.userId }, id)).toBeNull();
+  });
+
+  it("rejects creating a proposal for another user", async () => {
+    await expect(
+      withUser(appPool, bob, (db) =>
+        db.insert(writeProposals).values({ ...proposal(randomUUID()), tenantId: ACME, userId: pat.userId, status: "pending" }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("does not let the app change the arguments, tool or hash, or delete a proposal", async () => {
+    const id = randomUUID();
+    await createProposal(appPool, pat, proposal(id));
+    const update = (set: Partial<typeof writeProposals.$inferInsert>) =>
+      withUser(appPool, pat, (db) => db.update(writeProposals).set(set).where(eq(writeProposals.id, id)));
+    await expect(update({ args: { summary: "changed" } })).rejects.toThrow(/permission denied/);
+    await expect(update({ toolName: "other" })).rejects.toThrow(/permission denied/);
+    await expect(update({ argsHash: "other" })).rejects.toThrow(/permission denied/);
+    await expect(withUser(appPool, pat, (db) => db.delete(writeProposals))).rejects.toThrow(/permission denied/);
+  });
+
+  it("claims once, only with the approved hash, and never after expiry", async () => {
+    const id = randomUUID();
+    await createProposal(appPool, pat, proposal(id));
+    expect(await claimProposal(appPool, pat, id, "changed", 10)).toBeNull();
+    const claims = await Promise.all([
+      claimProposal(appPool, pat, id, "hash", 10),
+      claimProposal(appPool, pat, id, "hash", 10),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+
+    const expired = randomUUID();
+    await createProposal(appPool, pat, proposal(expired, new Date(Date.now() - 1_000)));
+    expect(await claimProposal(appPool, pat, expired, "hash", 10)).toBeNull();
   });
 });
 

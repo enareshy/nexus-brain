@@ -10,7 +10,12 @@ export default defineConfig({
     hookTimeout: 60_000,
     coverage: {
       provider: "v8",
-      include: ["src/connections/connections.service.ts", "src/connections/vault-store.ts"],
+      include: [
+        "src/connections/connections.service.ts",
+        "src/connections/vault-store.ts",
+        "src/proposals/proposals.service.ts",
+        "src/proposals/proposals.controller.ts",
+      ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },

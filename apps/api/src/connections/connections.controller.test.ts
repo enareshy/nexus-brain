@@ -7,6 +7,7 @@ import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import type { UserDirectory } from "../auth/user-directory.js";
 import { createFakeConnections, type FakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
+import { unusedProposals } from "../test-support/fake-proposals.js";
 
 const ACME = "0a000000-0000-4000-8000-000000000001";
 const PAT = "0a000000-0000-4000-8000-0000000000a4";
@@ -31,6 +32,7 @@ beforeAll(async () => {
     logger: createLogger({ service: "t", destination: new Writable({ write: (_c, _e, d) => d() }) }),
     directory,
     connections: fake,
+    proposals: unusedProposals,
     answers: { answer: async () => {} },
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),

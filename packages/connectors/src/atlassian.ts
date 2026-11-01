@@ -3,10 +3,9 @@ import { escapeJql, sanitizeQuery } from "./schema-search.js";
 import type { SearchAdapter, SearchHit, ToolSession } from "./types.js";
 
 // Tool names and result shapes verified against the live Atlassian MCP server on
-// 2026-11-01 (docs/adr/0001-mcp-servers.md), except the Jira issue shape: that site had
-// no issues, so parseJiraIssues follows the documented Jira REST format until confirmed.
+// 2026-11-01 (docs/adr/0001-mcp-servers.md), except Jira descriptions, which are still untested.
 // Never call the `search` tool: its description says each call may use up to 10 Rovo Credits.
-const SITES_TOOL = "getAccessibleAtlassianResources";
+export const SITES_TOOL = "getAccessibleAtlassianResources";
 const JIRA_TOOL = "searchJiraIssuesUsingJql";
 const CONFLUENCE_TOOL = "searchConfluenceUsingCql";
 const JIRA_SCOPE = "read:jira-work";
@@ -15,7 +14,7 @@ const MAX_SITES = 3;
 const SITES_TTL_MS = 5 * 60 * 1000;
 const SNIPPET_CHARS = 300;
 const SITE_HOST = /^[a-z0-9-]+\.atlassian\.net$/i;
-const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
+export const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 /** Characters with special meaning in Jira/Confluence text search (Lucene syntax). */
 const TEXT_SEARCH_OPERATORS = /[+\-&|!(){}[\]^~*?:\\/"'=<>,.;]/g;
 const MAX_KEYWORDS = 8;
@@ -205,7 +204,7 @@ async function searchConfluence(session: ToolSession, site: Site, term: string, 
 
 const CONFLUENCE_ID = /^confluence:(\d+)$/;
 
-/** Reads one hit's markdown body; Jira descriptions follow the documented shape (unverified). */
+/** Reads one hit's markdown body. The Jira description shape is documented but not yet seen live. */
 async function readBody(session: ToolSession, hit: SearchHit): Promise<string | null> {
   if (!hit.siteId) return null;
   const page = CONFLUENCE_ID.exec(hit.externalId)?.[1];

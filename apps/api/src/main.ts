@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
-import { atlassianSearch, type SearchAdapter } from "@brain/connectors";
+import { atlassianSearch, atlassianWrites, type SearchAdapter, type WriteAdapter } from "@brain/connectors";
 import { assertRlsEnforced, createAppPool } from "@brain/db";
 import { createAnthropicGateway } from "@brain/llm-gateway";
 import { ATLASSIAN_SERVER, createRegistry, type McpServerDefinition } from "@brain/mcp-client";
@@ -12,10 +12,13 @@ import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { ConnectionsService } from "./connections/connections.service.js";
+import { ProposalsService } from "./proposals/proposals.service.js";
 
 /** Servers this build knows how to talk to. MCP_SERVERS selects which are enabled. */
-const KNOWN_SERVERS: ReadonlyMap<string, { def: McpServerDefinition; adapter: SearchAdapter }> =
-  new Map([[ATLASSIAN_SERVER.id, { def: ATLASSIAN_SERVER, adapter: atlassianSearch }]]);
+const KNOWN_SERVERS: ReadonlyMap<
+  string,
+  { def: McpServerDefinition; adapter: SearchAdapter; writes?: WriteAdapter }
+> = new Map([[ATLASSIAN_SERVER.id, { def: ATLASSIAN_SERVER, adapter: atlassianSearch, writes: atlassianWrites }]]);
 
 const env = loadApiEnv();
 const tracing = startTracing("brain-api", env.OTEL_EXPORTER_OTLP_ENDPOINT);
@@ -52,10 +55,18 @@ const answers = new AnswersService({
   gateway: env.ANTHROPIC_API_KEY ? createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }) : null,
 });
 
+const proposals = new ProposalsService({
+  pool,
+  logger,
+  sessions: connections,
+  adapters: new Map(enabled.flatMap((e) => (e.writes ? [[e.def.id, e.writes] as const] : []))),
+});
+
 const app = await createApp({
   logger,
   connections,
   answers,
+  proposals,
   webAppUrl: env.WEB_APP_URL,
   verifier: createJwtVerifier({
     issuer: env.OIDC_ISSUER,

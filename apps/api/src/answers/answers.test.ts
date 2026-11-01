@@ -12,6 +12,7 @@ import type { GatheredDocuments } from "../connections/connections.service.js";
 import { createFakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER } from "../test-support/tokens.js";
 import { AnswersService, type AnswersApi, type AnswerStreamEvent } from "./answers.service.js";
+import { unusedProposals } from "../test-support/fake-proposals.js";
 
 const scope = { tenantId: "0a000000-0000-4000-8000-000000000001", userId: "0a000000-0000-4000-8000-0000000000a4" };
 const signal = new AbortController().signal;
@@ -230,6 +231,7 @@ describe("POST /answers", () => {
           subject === SUBJECT ? { userId: scope.userId, tenantId, role: "member", groupIds: [] } : null,
       },
       connections: createFakeConnections(),
+      proposals: unusedProposals,
       answers: { answer: (...args) => behaviour(...args) },
       webAppUrl: "http://localhost:3000",
       verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),

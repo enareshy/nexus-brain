@@ -41,8 +41,16 @@ The 2.5 s first-text target is still not met: about 1.6 s is document reads and 
 
 Isolation rules for this code: every cache and pool key starts with tenant, user and server; reconnecting takes the same per-user lock as session work, so a request on the old account cannot refill the caches afterwards (a mutation-checked integration test covers this); needing re-auth, disconnecting and connecting all clear that user's entries. Known gaps: one heavy user can push out others' cache entries (shared size bound), audit rows do not mark cached results, and caches and the pool are per API instance.
 
+### Write path (FR-WR-01..05, FR-WS-J04)
+Only `createJiraIssue` and `editJiraIssue` (write) and `addCommentToJiraIssue` (external-effect) can be called. Everything else, including transitions, worklogs, links and Confluence writes, is unknown to the manifest and so treated as destructive. `editJiraIssue` is limited to summary and description; `commentId` is never sent, because it would overwrite an existing comment.
+
+How a write runs: the request names an action, never a tool, and the arguments are built field by field and stored unchanged (the app role has no UPDATE on those columns). Approval sends back the hash of the arguments shown. A single per-user-locked transaction checks the cap and moves the row from pending to executing, so a replay cannot write twice. The call runs once on a new session with no retry. A failure before sending leaves the change open; a failure after sending is recorded as `unknown` and is never retried, because Jira has no idempotency key here.
+
+Known gaps: no undo or before-state (FR-WR-06, P1); no tenant-wide write cap, because RLS limits these rows to their owner; the per-tenant admin switch for destructive tools (FR-WR-03) does not exist, so they are simply unavailable; the card has no "sources read" list because only people draft changes so far, and it needs one when the model starts drafting; stuck rows are finalised when their owner next lists changes, not by a background job.
+
 ### Not verified
-- **Jira issue result shape:** the connected site has a project but no visible issues. `parseJiraIssues` follows the documented Jira REST format (`key`, `fields.summary`). Create an issue and re-test.
+- **Jira descriptions:** the search shape is now confirmed live on a real issue (`issues[].key`, `fields.summary`, `fields.updated`), and `createJiraIssue` returned a usable `key`. Reading `fields.description` for answers is still untested, because the test issue has no description.
+- **`editJiraIssue` and `addCommentToJiraIssue`:** tested against the mock server only. `createJiraIssue` was run once live through the approval flow on 2026-11-01.
 - Rate limits (responses include `x-ratelimit-*` headers; values not yet recorded).
 - Accounts with several sites.
 
