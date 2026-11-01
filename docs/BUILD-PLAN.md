@@ -27,6 +27,26 @@ Deferred review items (address before production):
 - Add rate limiting, CORS, security headers and `trustProxy` to Fastify with the first Phase 1 endpoints.
 - Revisit the per-request directory lookup (one DB transaction per request) once revocation semantics are decided.
 
+### Phase 1 status (2026-10-31, branch `phase-1-mcp-jira`)
+Done (slice 1a: Jira path end to end against a local mock MCP server):
+- `packages/mcp-client`: SDK-based OAuth (discovery incl. fallback when RFC 9728 metadata is missing, DCR, PKCE S256, refresh), SSRF-guarded fetch, sessions, error mapping, mock OAuth+MCP server for tests.
+- Token vault: AES-256-GCM with (tenant, user, server) bound as AAD; `mcp_connections` RLS per tenant **and user**; single-use hashed OAuth state with 10-minute expiry.
+- `packages/connectors`: schema-driven search adapter (no hard-coded argument shapes), safe citation extraction, federated search with RRF and per-source budget.
+- API: `GET /connections`, `POST /connections/:id/authorize`, `GET /oauth/callback`, `DELETE /connections/:id`, `GET /connections/:id/tools`, `GET /search`; audit rows (query hashed); rate limit; CORS.
+- `scripts/dev-brain.mjs` to connect, capture tools and search before the UI exists.
+- Security review fixes (0 critical/high; all 6 medium fixed): login-CSRF (completion requires the signed-in owner of the state, migration 0004), per-(tenant,user,server) session serialisation against refresh races, RFC 7009 revocation on disconnect, per-credential rate limits + bounded pending states + 5 MB response cap, citation host allow-list (https on the connected service only), https-only URLs in production; plus IPv6-mapped address checks, consent-URL host check, keyed (HMAC) audit fingerprints, validated stored tokens, no-store/no-referrer on the callback.
+- Web UI shell (`apps/web`, Next.js 16 / React 19 / Tailwind 4): Keycloak sign-in (PKCE), Connections page (connect, reconnect, disconnect with revocation result), consent completion page, Search page with safe citations and per-source status; strict CSP and security headers; verified in the browser (sign-in, search, connections, error paths, 375px mobile, silent token renewal). React review: 0 critical; both high (hook/a11y lint rules now enforced; sessions renew via refresh token or clear on expiry) and all medium findings fixed (stale results, bfcache, load retry, base-path join, production env guard, a11y labels/headings/live regions, recovery paths, request cancellation + timeout, HSTS).
+Note: never run `next build` while `next dev` is running in the same app; they rewrite `next-env.d.ts` differently and cause a reload loop.
+- Real Atlassian connected and verified (ADR 0001): live OAuth, 32 tools captured, dedicated Jira + Confluence adapter using JQL/CQL only (the `search` tool can consume Rovo Credits), real cited Confluence results in 2-3.4 s.
+- AI answers: `packages/llm-gateway` (Claude with native citations, no tools offered, refusal fallbacks, typed errors), `POST /answers` SSE stream, full-text reads with the user's token, usage ledger (migration 0005) including aborted and failed calls, per-user limits (10/min, 2 concurrent), "Answer with AI" button so answers only run on request. Security review: 0 critical; both high (unmetered failed calls, weak cost guard) and the medium items fixed.
+Not done yet (remaining Phase 1):
+- Answers verified live (2026-11-01) through the API and browser: real citations, ledger and audit rows, about $0.025 per answer on one small test site (4,676 input and 299 output tokens), first text 5.7 s, reduced to about 3.5 s with session reuse and per-user caches (ADR 0001; target NFR-PERF-01 of 2.5 s still not met). Answer quality has not been evaluated; that needs real questions and a golden set.
+- Answer known gaps: rate limits are in-process (reset on restart, per instance); no SSE heartbeat; cited text is not yet shown in the UI; model-written "[n]" text is not distinguished from real citations; no plan budgets (FR-MET-02/03).
+- Verify the Jira issue result shape against a site with real issues.
+- Reranker, answer generation with citations (needs LLM gateway keys), golden set of 300 queries.
+- Other connectors (Drive, Slack, M365/Teams, Gmail, GitHub); Playwright E2E for the browser flows; move browser tokens to a backend-for-frontend with httpOnly cookies and nonce-based CSP (Phase 5).
+- Deferred review items: key id + rotation in the sealed format (KMS), Postgres advisory lock for refresh across multiple API instances, pin resolved IPs in the fetch (DNS rebinding), cancel abandoned source sessions on budget timeout, de-duplicate concurrent first-use client registration.
+
 ## Phase 1 — MCP connectors + federated retrieval (+ optional index) (5–7 wks)  [FR-ING-01..03, FR-MCP-02,05,06, FR-RET-01,04,05,06]
 Tasks (revised after decisions: existing product as system of record, all sources via MCP)
 1. (Replaces first-party work system.) Pick and verify MCP servers per source (Q1a/Q2a): list tools, auth model, search capability, rate limits. Record in `docs/adr/0001-mcp-servers.md`.

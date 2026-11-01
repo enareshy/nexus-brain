@@ -8,12 +8,17 @@
     "start": "node --env-file-if-exists=../../.env --import tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --coverage",
+    "test:int": "vitest run --config vitest.int.config.ts --coverage"
   },
   "dependencies": {
+    "@brain/connectors": "workspace:*",
     "@brain/core": "workspace:*",
     "@brain/db": "workspace:*",
+    "@brain/llm-gateway": "workspace:*",
+    "@brain/mcp-client": "workspace:*",
     "@brain/telemetry": "workspace:*",
+    "@fastify/rate-limit": "^10.2.1",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
@@ -24,6 +29,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.0.0"
+    "@nestjs/testing": "^11.0.0",
+    "pg": "^8.13.1",
+    "@types/pg": "^8.11.10"
   }
 }

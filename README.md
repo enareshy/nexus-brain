@@ -31,7 +31,19 @@ pnpm db:migrate && pnpm db:seed
 pnpm dev                  # API on http://127.0.0.1:3001
 node scripts/smoke-login.mjs
 ```
-Checks: `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:leak && pnpm eval`.
+Checks: `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:int && pnpm eval`.
+
+### Web app
+`pnpm dev` starts the API (http://127.0.0.1:3001) and the web app (http://localhost:3000). Sign in as a dev user, open **Connections**, click **Connect** for Atlassian, approve in Atlassian, and you return to the app connected. Then search from the home page.
+
+### Connect Jira from the terminal (alternative)
+With `pnpm dev` running (stop the web app first: the CLI listens on port 3000 for the redirect):
+```bash
+node scripts/dev-brain.mjs connect pat.acme atlassian   # open the printed URL, approve in Atlassian
+node scripts/dev-brain.mjs status pat.acme
+node scripts/dev-brain.mjs tools pat.acme atlassian     # records the real tool list for ADR 0001
+node scripts/dev-brain.mjs search pat.acme "login bug"
+```
 Dev logins (Keycloak at http://localhost:8081, realm `brain`): `alice`, `bob`, `gina`, `pat.acme` (tenant Acme), `pat.globex`, `gus` (tenant Globex); passwords are in `infra/keycloak/brain-realm.json` (local test values only).
 
 ## Operating tips

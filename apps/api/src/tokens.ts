@@ -3,3 +3,6 @@
 export const IDENTITY_VERIFIER = Symbol("IDENTITY_VERIFIER");
 export const USER_DIRECTORY = Symbol("USER_DIRECTORY");
 export const LOGGER = Symbol("LOGGER");
+export const CONNECTIONS = Symbol("CONNECTIONS");
+export const ANSWERS = Symbol("ANSWERS");
+export const WEB_APP_URL = Symbol("WEB_APP_URL");

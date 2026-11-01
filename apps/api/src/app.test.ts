@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import type { DirectoryUser, UserDirectory } from "./auth/user-directory.js";
+import { createFakeConnections } from "./test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "./test-support/tokens.js";
 
 const ACME = "0a000000-0000-4000-8000-000000000001";
@@ -44,6 +45,9 @@ beforeAll(async () => {
   app = await createApp({
     logger: silentLogger,
     directory,
+    connections: createFakeConnections(),
+    answers: { answer: async () => {} },
+    webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
   });
   await app.init();
