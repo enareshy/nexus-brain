@@ -13,6 +13,13 @@ export interface McpServerDefinition {
   /** Test/dev only: permit plain http to loopback. Never set for real servers. */
   readonly allowInsecureLoopback?: boolean;
   readonly scope?: string;
+  /** For servers without client registration: an app created in advance. Never stored per user. */
+  readonly client?: PreRegisteredClient;
+}
+
+export interface PreRegisteredClient {
+  readonly clientId: string;
+  readonly clientSecret: string;
 }
 
 /**
@@ -26,6 +33,20 @@ export const ATLASSIAN_SERVER: McpServerDefinition = Object.freeze({
   url: "https://mcp.atlassian.com/v1/mcp",
   allowedHosts: Object.freeze(["mcp.atlassian.com"]),
 });
+
+/**
+ * GitHub remote MCP, on the endpoint where the server itself refuses writes. Its sign-in has
+ * no client registration (probed 2026-11-01), so it needs a GitHub App created in advance.
+ */
+export function createGithubServer(client: PreRegisteredClient): McpServerDefinition {
+  return Object.freeze({
+    id: "github",
+    displayName: "GitHub",
+    url: "https://api.githubcopilot.com/mcp/readonly",
+    allowedHosts: Object.freeze(["api.githubcopilot.com", "github.com"]),
+    client,
+  });
+}
 
 export interface ServerRegistry {
   get(id: string): McpServerDefinition;

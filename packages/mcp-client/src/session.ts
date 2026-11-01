@@ -75,6 +75,18 @@ function guardedFetchFor(def: McpServerDefinition, ctx: ClientContext): FetchLik
   });
 }
 
+/** A pre-registered app comes from configuration, so it is neither loaded from nor saved to the vault. */
+function withConfiguredClient(def: McpServerDefinition, store: CredentialStore): CredentialStore {
+  if (!def.client) return store;
+  // GitHub documents the secret as a body parameter and its metadata names no method.
+  const clientInfo = {
+    client_id: def.client.clientId,
+    client_secret: def.client.clientSecret,
+    token_endpoint_auth_method: "client_secret_post",
+  };
+  return { ...store, loadClientInfo: async () => clientInfo, saveClientInfo: async () => {} };
+}
+
 /**
  * Starts the OAuth authorization-code + PKCE flow for the current user. Existing tokens
  * are ignored so the user always sees the consent screen when they click Connect.
@@ -86,7 +98,7 @@ export async function beginAuthorization(
 ): Promise<AuthorizationStart> {
   const state = randomBytes(32).toString("base64url");
   const provider = new StoreBackedOAuthProvider({
-    store: { ...store, loadTokens: async () => undefined },
+    store: { ...withConfiguredClient(def, store), loadTokens: async () => undefined },
     redirectUrl: ctx.redirectUrl,
     clientName: ctx.clientName,
     mode: "interactive",
@@ -154,7 +166,7 @@ export async function completeAuthorization(
   input: { readonly code: string; readonly codeVerifier: string },
 ): Promise<void> {
   const provider = new StoreBackedOAuthProvider({
-    store,
+    store: withConfiguredClient(def, store),
     redirectUrl: ctx.redirectUrl,
     clientName: ctx.clientName,
     mode: "background",
@@ -179,7 +191,7 @@ export async function openSession(
   ctx: ClientContext,
 ): Promise<McpSession> {
   const provider = new StoreBackedOAuthProvider({
-    store,
+    store: withConfiguredClient(def, store),
     redirectUrl: ctx.redirectUrl,
     clientName: ctx.clientName,
     mode: "background",

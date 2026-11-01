@@ -65,5 +65,28 @@ Known gaps: no undo or before-state (FR-WR-06, P1); no tenant-wide write cap, be
 - The 3 s fan-out target in FR-MCP-05 is not met with a fresh session per request. The budget is 10 s for now; reused sessions and cached sites are the way to reach it.
 - `editJiraIssue`, `transitionJiraIssue` and similar report `destructiveHint: false`, but our policy (FR-WR) still requires approval for all writes, and comments are `external-effect`.
 
+## GitHub (`https://api.githubcopilot.com/mcp/readonly`)
+Raw tool list: [`0001-github-tools.json`](0001-github-tools.json) (28 tools, all `readOnlyHint: true`, captured from the live server).
+
+### Connection (verified live, 2026-11-01)
+- GitHub's authorization server has no registration endpoint, so this needs a GitHub App created in advance. Its client id and secret come from `GITHUB_MCP_CLIENT_ID` and `GITHUB_MCP_CLIENT_SECRET`, and are never stored per user. The secret is sent in the request body, because GitHub's metadata names no method and the SDK would otherwise use HTTP Basic.
+- `/mcp/readonly` is used so the server itself refuses writes, and the app has read-only permissions. A token reaches only repositories where the app is installed.
+- There is no revocation endpoint, so disconnecting tells the user to revoke access in GitHub.
+
+### Decisions
+1. **Search only the user's own repositories.** Without a scope, GitHub searches every public repository, which is noisy and brings in strangers' text.
+2. **Pull requests use `user:<login>` with keywords joined by OR**, at most six keywords because GitHub allows five operators. Questions lose all punctuation first, and keywords are lowercased, so they cannot add qualifiers or operators.
+3. **Issues are searched per repository**, in the three most recently updated repositories: `search_issues` takes natural language, returned an error with a `user:` qualifier, and returned nothing with no scope.
+4. **Links must be `https://github.com/<owner>/<repo>/(issues|pull)/<n>`.** Anything else is dropped.
+
+### Not verified, and known gaps
+- Issue result shape: the test repository has no issues, so it follows the pull request shape from the same search API.
+- Code search returned nothing on the test repository, so it is left out. `get_file_contents` returned only 81 characters of text (not read, length only), and our client keeps only text parts, so reading files needs work too.
+- Organisation repositories are not searched, which pilot customers will need.
+- Only three repositories are searched for issues.
+- Pull request descriptions are unread on the test pull request, which has none.
+
 ## Other servers
-Google Drive, Gmail, Slack, GitHub, Microsoft 365 and Teams: not verified. Do the same capture before writing each adapter. Read every tool description for cost or side effects before the first call.
+Slack has no client registration either (probed 2026-11-01), so it needs an app created in advance. Google Drive and Gmail answered an unauthenticated initialize with 200 and advertised no sign-in details. The Microsoft Teams endpoint tried returned 400.
+
+Google Drive, Gmail, Slack, Microsoft 365 and Teams: not verified. Do the same capture before writing each adapter. Read every tool description for cost or side effects before the first call.
