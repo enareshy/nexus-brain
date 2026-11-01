@@ -1,9 +1,81 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { INITIAL_ANSWER, type AnswerState } from "@/lib/answer";
 import type { Connection, SearchResult } from "@/lib/api";
+import { AnswerPanel } from "./AnswerPanel";
 import { ConnectionsList } from "./ConnectionsList";
 import { SearchResults } from "./SearchResults";
+
+describe("AnswerPanel", () => {
+  const hit = {
+    serverId: "atlassian",
+    externalId: "confluence:1",
+    title: "Runbook",
+    url: "https://acme.atlassian.net/wiki/p/1",
+    snippet: "",
+    updatedAt: null,
+    score: 1,
+  };
+  const base: AnswerState = { ...INITIAL_ANSWER, hits: [hit] };
+
+  it("shows progress before text arrives", () => {
+    render(<AnswerPanel state={INITIAL_ANSWER} />);
+    expect(screen.getByText("Reading your sources…")).toBeInTheDocument();
+  });
+
+  it("renders inline citations and a source list linking safely", () => {
+    const state: AnswerState = {
+      ...base,
+      status: "done",
+      outcome: "answered",
+      grounded: true,
+      parts: [{ kind: "text", text: "Rotate monthly." }, { kind: "cite", source: 1 }],
+    };
+    render(<AnswerPanel state={state} />);
+    const marker = screen.getByRole("link", { name: "Source 1: Runbook" });
+    expect(marker).toHaveAttribute("href", hit.url);
+    expect(marker).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByRole("link", { name: "Runbook" })).toHaveAttribute("href", hit.url);
+  });
+
+  it("does not link unsafe URLs or missing sources, and renders hostile text as text", () => {
+    const hostile = { ...hit, title: "<img src=x onerror=alert(1)>", url: "javascript:alert(1)" };
+    const state: AnswerState = {
+      ...base,
+      hits: [hostile],
+      parts: [
+        { kind: "text", text: "<script>alert(1)</script>" },
+        { kind: "cite", source: 1 },
+        { kind: "cite", source: 9 },
+      ],
+    };
+    const { container } = render(<AnswerPanel state={state} />);
+    expect(screen.queryAllByRole("link")).toEqual([]);
+    expect(screen.getByText("<script>alert(1)</script>")).toBeInTheDocument();
+    expect(container.querySelector("img, script")).toBeNull();
+  });
+
+  it.each([
+    ["no_documents", true, /Nothing you can access/],
+    ["refused", true, /declined/],
+    ["incomplete", true, /cut off/],
+    ["answered", false, /no citations/],
+  ] as const)("explains outcome %s", (outcome, grounded, pattern) => {
+    render(<AnswerPanel state={{ ...base, status: "done", outcome, grounded }} />);
+    expect(screen.getByText(pattern)).toBeInTheDocument();
+  });
+
+  it("reports partly read documents and errors", () => {
+    const { unmount } = render(<AnswerPanel state={{ ...base, status: "done", outcome: "answered", grounded: true, truncatedDocuments: 2 }} />);
+    expect(screen.getByText(/2 long documents were only partly read/)).toBeInTheDocument();
+    unmount();
+    render(<AnswerPanel state={{ ...base, status: "done", outcome: "answered", grounded: true, truncatedDocuments: 1 }} />);
+    expect(screen.getByText(/One long document was only partly read/)).toBeInTheDocument();
+    render(<AnswerPanel state={{ ...base, status: "error", error: "Not configured" }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Not configured");
+  });
+});
 
 const CONNECTIONS: Connection[] = [
   { serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: "2026-10-31T10:00:00Z" },

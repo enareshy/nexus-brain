@@ -15,6 +15,7 @@
     "@brain/connectors": "workspace:*",
     "@brain/core": "workspace:*",
     "@brain/db": "workspace:*",
+    "@brain/llm-gateway": "workspace:*",
     "@brain/mcp-client": "workspace:*",
     "@brain/telemetry": "workspace:*",
     "@fastify/rate-limit": "^10.2.1",

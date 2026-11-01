@@ -44,7 +44,7 @@ pnpm secrets:scan
 - Zod schemas in `packages/core` are the single source of truth for types.
 - Errors: typed `AppError` with codes; never swallow; log with `tenant_id`, `user_id`, `request_id`; no PII in logs.
 - Config via typed env loader (`packages/core/env.ts`); fail fast on missing vars.
-- Model IDs live only in `config/models.ts`: standard `claude-sonnet-5-5`, fast `claude-haiku-5-5`, premium `claude-opus-5-5`.
+- Model IDs live only in `packages/llm-gateway/src/models.ts`. Answers use `claude-opus-5-5`; changing the model is a one-line decision for the project owner.
 - API shape: `{ success, data, error, meta }`.
 - Database: Drizzle for queries; **raw SQL migrations** in `packages/db/migrations/NNNN_*.sql` are the source of truth (forward-only); RLS via `withTenant()` which sets `app.tenant_id` transaction-locally. The app connects as `brain_app` (no BYPASSRLS); migrations/seed use the owner role.
 - NestJS runs under tsx/esbuild **without `emitDecoratorMetadata`**: every constructor dependency needs an explicit `@Inject(TOKEN)` (tokens in `apps/api/src/tokens.ts`). No `ValidationPipe` with class types; validate with Zod.

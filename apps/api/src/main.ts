@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
 import { atlassianSearch, type SearchAdapter } from "@brain/connectors";
 import { assertRlsEnforced, createAppPool } from "@brain/db";
+import { createAnthropicGateway } from "@brain/llm-gateway";
 import { ATLASSIAN_SERVER, createRegistry, type McpServerDefinition } from "@brain/mcp-client";
 import { createLogger, startTracing } from "@brain/telemetry";
 import { createRemoteJWKSet } from "jose";
@@ -9,6 +10,7 @@ import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
+import { AnswersService } from "./answers/answers.service.js";
 import { ConnectionsService } from "./connections/connections.service.js";
 
 /** Servers this build knows how to talk to. MCP_SERVERS selects which are enabled. */
@@ -40,9 +42,19 @@ const connections = new ConnectionsService({
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
 });
 
+const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
+const answers = new AnswersService({
+  pool,
+  box,
+  logger,
+  documents: connections,
+  gateway: env.ANTHROPIC_API_KEY ? createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }) : null,
+});
+
 const app = await createApp({
   logger,
   connections,
+  answers,
   webAppUrl: env.WEB_APP_URL,
   verifier: createJwtVerifier({
     issuer: env.OIDC_ISSUER,

@@ -31,6 +31,7 @@ beforeAll(async () => {
     logger: createLogger({ service: "t", destination: new Writable({ write: (_c, _e, d) => d() }) }),
     directory,
     connections: fake,
+    answers: { answer: async () => {} },
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
   });

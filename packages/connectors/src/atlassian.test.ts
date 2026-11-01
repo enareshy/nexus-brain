@@ -150,6 +150,46 @@ describe("toTextSearchTerm", () => {
   });
 });
 
+describe("readDocuments", () => {
+  const page = { serverId: "atlassian", externalId: "confluence:12345", title: "t", url: `${ORIGIN}/wiki/p`, snippet: "", updatedAt: null, siteId: CLOUD };
+  const issue = { ...page, externalId: "ACME-1", url: `${ORIGIN}/browse/ACME-1` };
+
+  it("reads Confluence and Jira bodies by hit URL with the right arguments", async () => {
+    const session = fakeSession({
+      getConfluencePage: result({ id: "12345", body: "# Runbook" }),
+      getJiraIssue: result({ key: "ACME-1", fields: { description: "Steps to reproduce" } }),
+    });
+    const bodies = await atlassianSearch.readDocuments!(session, [page, issue]);
+    expect(bodies.get(page.url)).toBe("# Runbook");
+    expect(bodies.get(issue.url)).toBe("Steps to reproduce");
+    expect(session.calls.find(([n]) => n === "getConfluencePage")?.[1]).toEqual({ cloudId: CLOUD, pageId: "12345", contentFormat: "markdown" });
+    expect(session.calls.find(([n]) => n === "getJiraIssue")?.[1]).toMatchObject({ cloudId: CLOUD, issueIdOrKey: "ACME-1" });
+  });
+
+  it("leaves out unreadable hits: errors, revoked access, no site, odd ids", async () => {
+    const session = fakeSession({ getConfluencePage: result("Forbidden", true), getJiraIssue: result("not json") });
+    const noSite = { ...page, siteId: undefined, url: `${ORIGIN}/x` };
+    const odd = { ...page, externalId: "../../evil", url: `${ORIGIN}/y` };
+    const bodies = await atlassianSearch.readDocuments!(session, [page, issue, noSite, odd]);
+    expect(bodies.size).toBe(0);
+  });
+
+  it("survives a thrown tool call", async () => {
+    const session = fakeSession({});
+    session.callTool = async () => {
+      throw new Error("network");
+    };
+    expect((await atlassianSearch.readDocuments!(session, [page])).size).toBe(0);
+  });
+
+  it("carries the site id from search results", () => {
+    const [hit] = parseConfluenceResults(JSON.stringify(CONFLUENCE), { origin: ORIGIN, id: CLOUD });
+    expect(hit?.siteId).toBe(CLOUD);
+    const [jira] = parseJiraIssues(JSON.stringify(JIRA), { origin: ORIGIN, id: CLOUD });
+    expect(jira?.siteId).toBe(CLOUD);
+  });
+});
+
 describe("atlassianSearch", () => {
   const full = {
     getAccessibleAtlassianResources: result(SITES),

@@ -46,6 +46,7 @@ beforeAll(async () => {
     logger: silentLogger,
     directory,
     connections: createFakeConnections(),
+    answers: { answer: async () => {} },
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
   });

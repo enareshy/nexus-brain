@@ -7,3 +7,4 @@ export * from "./pool.js";
 export * from "./schema.js";
 export * from "./seed.js";
 export * from "./tenant.js";
+export * from "./usage.js";

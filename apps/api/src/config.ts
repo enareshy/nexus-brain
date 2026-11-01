@@ -19,6 +19,11 @@ const apiEnvObject = baseEnvSchema.extend({
   CONNECTOR_TOKEN_ENC_KEY: z.string().min(40),
   /** Comma-separated allow-listed MCP server IDs (FR-MCP-02). */
   MCP_SERVERS: z.string().default("atlassian"),
+  /** Optional: without it search works and AI answers report that they are not configured. */
+  ANTHROPIC_API_KEY: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() || undefined),
 });
 
 /** In production, every externally visible URL must be https and not loopback (review M6). */

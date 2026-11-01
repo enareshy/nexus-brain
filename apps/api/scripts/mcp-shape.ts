@@ -102,6 +102,13 @@ try {
       session.callTool("searchConfluenceUsingCql", { cloudId: site.id, cql: "type = page", limit: 1 }),
     );
     console.log("cql:", wiki.isError ? errorSummary(wiki.text) : `${wiki.text.length} chars`);
+    const pageId = (JSON.parse(wiki.text) as { results?: Array<{ content?: { id?: string } }> }).results?.[0]?.content?.id;
+    if (pageId) {
+      const page = await timed("page", () =>
+        session.callTool("getConfluencePage", { cloudId: site.id, pageId, contentFormat: "markdown" }),
+      );
+      console.log("page:", page.isError ? errorSummary(page.text) : JSON.stringify(describe(page.text), null, 1));
+    }
   }
 } finally {
   await session.close();

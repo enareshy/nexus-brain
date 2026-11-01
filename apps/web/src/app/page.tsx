@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { AnswerPanel } from "@/components/AnswerPanel";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { SearchResults } from "@/components/SearchResults";
+import { INITIAL_ANSWER, readAnswerStream, reduceAnswer, type AnswerState } from "@/lib/answer";
 import { ApiError, describeError, type SearchResult } from "@/lib/api";
 
 const MAX_QUERY_CHARS = 200;
@@ -20,6 +22,45 @@ function SearchPage() {
   const { api } = useAuth();
   const [draft, setDraft] = useState(query);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [answer, setAnswer] = useState<{ query: string; state: AnswerState } | null>(null);
+  const answerAbort = useRef<AbortController | null>(null);
+
+  // Leaving this query (or the page) cancels any answer still streaming, which stops spending.
+  // Clearing it also means returning to this query later offers the button again.
+  useEffect(
+    () => () => {
+      answerAbort.current?.abort();
+      setAnswer(null);
+    },
+    [query],
+  );
+
+  async function handleAnswer() {
+    const controller = new AbortController();
+    answerAbort.current?.abort();
+    answerAbort.current = controller;
+    const asked = query;
+    const apply = (next: (state: AnswerState) => AnswerState) =>
+      setAnswer((prev) => {
+        if (controller.signal.aborted) return prev;
+        return { query: asked, state: next(prev?.query === asked ? prev.state : INITIAL_ANSWER) };
+      });
+
+    setAnswer({ query: asked, state: INITIAL_ANSWER });
+    try {
+      const body = await api.openAnswerStream(asked, controller.signal);
+      await readAnswerStream(body, (event) => apply((state) => reduceAnswer(state, event)));
+      // A stream that closes without `done` or `error` lost its connection part-way.
+      apply((state) =>
+        state.status === "streaming"
+          ? { ...state, status: "error", error: "The answer was interrupted. Please try again." }
+          : state,
+      );
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      apply((state) => ({ ...state, status: "error", error: describeError(e) }));
+    }
+  }
 
   // Keep the input in step with Back/Forward navigation.
   useEffect(() => {
@@ -41,6 +82,10 @@ function SearchPage() {
 
   // Only show an outcome that belongs to the current query (no stale results).
   const current = outcome && outcome.query === query ? outcome : null;
+  const currentAnswer = answer && answer.query === query ? answer.state : null;
+  // Answers cost money, so they only run on request, and only when there is something to read.
+  const canAnswer =
+    current !== null && "result" in current && current.result.hits.length > 0 && currentAnswer?.status !== "streaming" && currentAnswer?.status !== "done";
   const isLoading = Boolean(query) && current === null;
   const statusText = isLoading
     ? "Searching…"
@@ -86,6 +131,16 @@ function SearchPage() {
         {statusText}
       </p>
       <div className="mt-12 max-w-3xl">
+        {currentAnswer && <AnswerPanel state={currentAnswer} />}
+        {canAnswer && (
+          <button
+            type="button"
+            onClick={() => void handleAnswer()}
+            className="mb-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            Answer with AI
+          </button>
+        )}
         {current && "error" in current && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {current.error}

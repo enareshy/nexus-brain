@@ -14,7 +14,8 @@ import {
   savePendingAuthorization,
 } from "./connections.js";
 import { assertRlsEnforced } from "./pool.js";
-import { auditLog, groupMembers, mcpConnections, oauthStates, tenants, users } from "./schema.js";
+import { auditLog, groupMembers, mcpConnections, oauthStates, tenants, usageLedger, users } from "./schema.js";
+import { appendUsage } from "./usage.js";
 import { GROUPS, TENANTS, seedUser } from "./seed-data.js";
 import { seed } from "./seed.js";
 import { withTenant, withUser } from "./tenant.js";
@@ -249,6 +250,41 @@ describe("MCP connections are private to one user", () => {
 
   afterAll(async () => {
     await deleteConnection(appPool, pat, "leaktest");
+  });
+});
+
+describe("usage ledger", () => {
+  const entry = {
+    feature: "leaktest",
+    model: "m",
+    inputTokens: 1,
+    outputTokens: 2,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    costUsd: 0.000123,
+  };
+  const pat = { tenantId: ACME, userId: seedUser("patAcme").id };
+
+  it("is tenant-isolated", async () => {
+    await appendUsage(appPool, pat, entry);
+    const own = await withTenant(appPool, ACME, (db) => db.select().from(usageLedger));
+    expect(own.some((r) => r.feature === "leaktest" && r.costUsd === "0.000123")).toBe(true);
+    const other = await withTenant(appPool, GLOBEX, (db) => db.select().from(usageLedger));
+    expect(other.some((r) => r.tenantId === ACME)).toBe(false);
+  });
+
+  it("is append-only for the app and accepts an unknown cost", async () => {
+    await appendUsage(appPool, pat, { ...entry, costUsd: null });
+    await expect(withTenant(appPool, ACME, (db) => db.delete(usageLedger))).rejects.toThrow(/permission denied/);
+    await expect(withTenant(appPool, ACME, (db) => db.update(usageLedger).set({ model: "x" }))).rejects.toThrow(/permission denied/);
+  });
+
+  it("rejects a row for another tenant", async () => {
+    await expect(
+      withTenant(appPool, GLOBEX, (db) =>
+        db.insert(usageLedger).values({ ...entry, tenantId: ACME, userId: pat.userId, costUsd: null }),
+      ),
+    ).rejects.toThrow(/row-level security/);
   });
 });
 

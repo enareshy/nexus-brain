@@ -47,6 +47,20 @@ export interface ConnectionsApi {
   search(scope: UserScope, query: string, limit: number): Promise<FederatedResult>;
 }
 
+export interface GatheredDocuments extends FederatedResult {
+  /** Full text by hit URL, read with the user's own token. */
+  readonly bodies: ReadonlyMap<string, string>;
+}
+
+/** What the answer service needs from connections. */
+export interface DocumentSource {
+  gatherDocuments(
+    scope: UserScope,
+    query: string,
+    options: { readonly limit: number; readonly maxDocuments: number; readonly signal?: AbortSignal },
+  ): Promise<GatheredDocuments>;
+}
+
 export interface ConnectionsDeps {
   readonly pool: PoolLike;
   readonly box: SecretBox;
@@ -59,7 +73,7 @@ export function hashState(state: string): string {
   return createHash("sha256").update(state).digest("hex");
 }
 
-export class ConnectionsService implements ConnectionsApi {
+export class ConnectionsService implements ConnectionsApi, DocumentSource {
   private readonly sessions = new KeyedMutex();
 
   constructor(private readonly deps: ConnectionsDeps) {}
@@ -164,6 +178,39 @@ export class ConnectionsService implements ConnectionsApi {
       sources: result.sources,
     });
     return result;
+  }
+
+  /** Searches, then reads the top hits' full text in the same session per source. */
+  async gatherDocuments(
+    scope: UserScope,
+    query: string,
+    options: { readonly limit: number; readonly maxDocuments: number; readonly signal?: AbortSignal },
+  ): Promise<GatheredDocuments> {
+    const active = (await listConnections(this.deps.pool, scope)).filter(
+      (c) => c.status === "active" && this.deps.adapters.has(c.serverId),
+    );
+    const bodies = new Map<string, string>();
+    const result = await federatedSearch(
+      active.map((c) => ({
+        id: c.serverId,
+        run: (signal) =>
+          this.withSession(
+            scope,
+            c.serverId,
+            async (session) => {
+              const adapter = this.deps.adapters.get(c.serverId)!;
+              const hits = await adapter.search(session, query, options.limit);
+              const read = await adapter.readDocuments?.(session, hits.slice(0, options.maxDocuments));
+              read?.forEach((text, url) => bodies.set(url, text));
+              return hits;
+            },
+            // Stops on the time budget or when the caller goes away.
+            options.signal ? AbortSignal.any([signal, options.signal]) : signal,
+          ),
+      })),
+      { limit: options.limit },
+    );
+    return { ...result, bodies };
   }
 
   private lockKey(scope: UserScope, serverId: string): string {

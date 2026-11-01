@@ -17,8 +17,8 @@ Legend: **Chosen** = decision for this build. **Alt** = acceptable swap. ClickUp
 | Cache | Redis 7 / Valkey | — | Confirmed ClickUp |
 | Object storage | S3 (MinIO locally) | — | Raw files, exports |
 | Auth | OIDC; Keycloak locally; `jose` for JWT | Auth0, Cognito, WorkOS | Standards-based |
-| LLM gateway | In-repo `packages/llm-gateway` using Vercel AI SDK provider adapters | LiteLLM proxy | Typed, testable, no extra service |
-| LLMs (defaults) | Anthropic `claude-sonnet-5-5` (standard), `claude-haiku-5-5` (fast), `claude-opus-5-5` (premium); OpenAI/Google adapters | Bedrock-hosted | Model IDs in config only |
+| LLM gateway | In-repo `packages/llm-gateway` on the official `@anthropic-ai/sdk` (pinned 1.3.0). Other vendors and tier routing are not built; add them when there is a need | LiteLLM proxy | Typed, testable, no extra service |
+| LLMs | `claude-opus-5-5` for answers ($4/$20 per MTok), effort `low`, server-side refusal fallbacks on. Cheaper option: `claude-sonnet-5-5` ($2/$10), one line in `models.ts` | Bedrock-hosted | Model IDs in config only |
 | Embeddings | Configurable: `voyage-3-large` or OpenAI `text-embedding-3-large` (dim 1024/3072 → store `model`+`dim` per vector) | Cohere embed v4, BGE self-host | Pick after eval on golden set |
 | Reranker | Cohere Rerank 3.x API | BGE-reranker-v2 self-hosted | Quick win; swap by eval |
 | Agent orchestration | LangGraph.js (`@langchain/langgraph`) + Postgres checkpointer | Mastra, custom | Confirmed ClickUp (LangGraph) |

@@ -55,6 +55,7 @@ beforeAll(async () => {
     directory: createDbUserDirectory(pool),
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
+    answers: { answer: async () => {} },
     connections: new ConnectionsService({
       pool,
       box: createSecretBox(randomBytes(32).toString("base64")),

@@ -24,6 +24,7 @@ interface Site {
   readonly scopes: ReadonlySet<string>;
 }
 
+type SiteRef = Pick<Site, "origin"> & { readonly id?: string };
 type Obj = Record<string, unknown>;
 
 function isObj(value: unknown): value is Obj {
@@ -75,7 +76,7 @@ export function parseSites(text: string): Site[] {
   return [...sites].map(([id, site]) => ({ id, ...site }));
 }
 
-export function parseJiraIssues(text: string, site: Pick<Site, "origin">): SearchHit[] {
+export function parseJiraIssues(text: string, site: SiteRef): SearchHit[] {
   const data = parseJson(text);
   const issues = isObj(data) && Array.isArray(data.issues) ? data.issues : [];
   const hits: SearchHit[] = [];
@@ -92,13 +93,14 @@ export function parseJiraIssues(text: string, site: Pick<Site, "origin">): Searc
       url: `${site.origin}/browse/${key}`,
       snippet: "",
       updatedAt: str(fields.updated),
+      ...(site.id ? { siteId: site.id } : {}),
     });
   }
   return hits;
 }
 
 /** Confluence results carry a URL relative to <site>/wiki and highlight markers in excerpts. */
-export function parseConfluenceResults(text: string, site: Pick<Site, "origin">): SearchHit[] {
+export function parseConfluenceResults(text: string, site: SiteRef): SearchHit[] {
   const data = parseJson(text);
   const results = isObj(data) && Array.isArray(data.results) ? data.results : [];
   const hits: SearchHit[] = [];
@@ -116,6 +118,7 @@ export function parseConfluenceResults(text: string, site: Pick<Site, "origin">)
       url,
       snippet: stripHighlights(str(result.excerpt) ?? "").slice(0, SNIPPET_CHARS),
       updatedAt: str(result.lastModified),
+      ...(site.id ? { siteId: site.id } : {}),
     });
   }
   return hits;
@@ -169,9 +172,46 @@ async function searchConfluence(session: ToolSession, site: Site, term: string, 
   return parseConfluenceResults(result.text, site);
 }
 
+const CONFLUENCE_ID = /^confluence:(\d+)$/;
+
+/** Reads one hit's markdown body; Jira descriptions follow the documented shape (unverified). */
+async function readBody(session: ToolSession, hit: SearchHit): Promise<string | null> {
+  if (!hit.siteId) return null;
+  const page = CONFLUENCE_ID.exec(hit.externalId)?.[1];
+  if (page) {
+    const result = await session.callTool("getConfluencePage", {
+      cloudId: hit.siteId,
+      pageId: page,
+      contentFormat: "markdown",
+    });
+    const data = result.isError ? null : parseJson(result.text);
+    return isObj(data) ? str(data.body) : null;
+  }
+  if (!ISSUE_KEY.test(hit.externalId)) return null;
+  const result = await session.callTool("getJiraIssue", {
+    cloudId: hit.siteId,
+    issueIdOrKey: hit.externalId,
+    fields: ["summary", "description"],
+    responseContentFormat: "markdown",
+  });
+  const data = result.isError ? null : parseJson(result.text);
+  const fields = isObj(data) && isObj(data.fields) ? data.fields : {};
+  return str(fields.description);
+}
+
 /** Searches Jira (JQL) and Confluence (CQL) on each site the user's grant covers. */
 export const atlassianSearch: SearchAdapter = {
   serverId: "atlassian",
+  async readDocuments(session, hits) {
+    const settled = await Promise.allSettled(
+      hits.map(async (hit) => [hit.url, await readBody(session, hit)] as const),
+    );
+    const bodies = new Map<string, string>();
+    for (const outcome of settled) {
+      if (outcome.status === "fulfilled" && outcome.value[1]) bodies.set(outcome.value[0], outcome.value[1]);
+    }
+    return bodies;
+  },
   async search(session: ToolSession, query: string, limit: number): Promise<SearchHit[]> {
     const term = toTextSearchTerm(query);
     if (!term) return [];

@@ -14,8 +14,10 @@ import {
   SearchController,
 } from "./connections/connections.controller.js";
 import type { ConnectionsApi } from "./connections/connections.service.js";
+import { AnswersController } from "./answers/answers.controller.js";
+import type { AnswersApi } from "./answers/answers.service.js";
 import { HealthController, MeController } from "./controllers.js";
-import { CONNECTIONS, IDENTITY_VERIFIER, LOGGER, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { ANSWERS, CONNECTIONS, IDENTITY_VERIFIER, LOGGER, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -24,6 +26,7 @@ export interface AppDeps {
   readonly directory: UserDirectory;
   readonly logger: Logger;
   readonly connections: ConnectionsApi;
+  readonly answers: AnswersApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -39,12 +42,14 @@ class AppModule {
         ConnectionsController,
         SearchController,
         OAuthCallbackController,
+        AnswersController,
       ],
       providers: [
         { provide: IDENTITY_VERIFIER, useValue: deps.verifier },
         { provide: USER_DIRECTORY, useValue: deps.directory },
         { provide: LOGGER, useValue: deps.logger },
         { provide: CONNECTIONS, useValue: deps.connections },
+        { provide: ANSWERS, useValue: deps.answers },
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
