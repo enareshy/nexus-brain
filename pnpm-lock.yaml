@@ -185,6 +185,9 @@ importers:
       '@brain/connectors':
         specifier: workspace:*
         version: link:../connectors
+      '@brain/llm-gateway':
+        specifier: workspace:*
+        version: link:../llm-gateway
       zod:
         specifier: ^3.24.1
         version: 3.25.76

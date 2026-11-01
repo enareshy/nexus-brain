@@ -228,6 +228,16 @@ const hit = (over: Partial<SearchResult["hits"][number]> = {}) => ({
 });
 
 describe("SearchResults", () => {
+  it("says when results came from AI-suggested words, as plain text", () => {
+    const result: SearchResult = {
+      hits: [],
+      sources: [{ id: "a", ok: true, hits: 0, ms: 1 }],
+      expandedTerms: ["rotation", "<b>keys</b>"],
+    };
+    render(<SearchResults result={result} query="q" />);
+    expect(screen.getByText(/No matches, even with AI-suggested words: rotation, <b>keys<\/b>/)).toBeInTheDocument();
+  });
+
   it("links safe citations in a new tab without opener access", () => {
     render(<SearchResults query="login" result={{ hits: [hit()], sources: [{ id: "atlassian", ok: true, hits: 1, ms: 40 }] }} />);
     const link = screen.getByRole("link", { name: "Login bug on SSO" });

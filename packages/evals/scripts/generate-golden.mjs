@@ -140,8 +140,8 @@ ABSENT.forEach((topic) => {
 
 const description = "SYNTHETIC. Invented documents and questions that test ranking mechanics and catch regressions; they say nothing about quality on real company data.";
 writeFileSync("golden/corpus.json", `${JSON.stringify({ version: 1, description, documents }, null, 2)}\n`);
-// The 0.85 target (NFR-QUAL-01) is not met, because keyword search cannot find rephrased questions.
-// This floor only catches things getting worse. Raise it to 0.85 once that gap is closed.
+// Floor for searching with the question alone, which cannot find rephrased questions. It only
+// catches things getting worse. With recorded rewrites, the eval also requires the 0.85 target.
 const minRecallAtK = 0.8;
 writeFileSync("golden/synthetic.json", `${JSON.stringify({ version: 1, description, minRecallAtK, cases }, null, 2)}\n`);
 console.log(`${documents.length} documents, ${cases.length} questions`);

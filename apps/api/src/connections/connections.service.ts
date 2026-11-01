@@ -33,6 +33,7 @@ import {
   type ToolResult,
 } from "@brain/mcp-client";
 import { createHash } from "node:crypto";
+import { withExpandedTerms, type QueryExpander } from "../answers/query-rewriter.js";
 import { KeyedMutex } from "./keyed-mutex.js";
 import { SessionPool } from "./session-pool.js";
 import { TtlCache } from "./ttl-cache.js";
@@ -47,6 +48,7 @@ const MAX_IDLE_SESSIONS = 200;
 const HITS_TTL_MS = 60_000;
 const MAX_CACHED_SEARCHES = 500;
 const MAX_CACHED_TOOL_RESULTS = 500;
+const EXPAND_TIMEOUT_MS = 8_000;
 
 export type ConnectionState = "not_connected" | "active" | "needs_reauth";
 
@@ -102,6 +104,8 @@ export interface ConnectionsDeps {
   readonly adapters: ReadonlyMap<string, SearchAdapter>;
   readonly client: ClientContext;
   readonly onBackgroundError?: (err: unknown) => void;
+  /** Suggests other words when a search finds nothing. Without one, an empty search stays empty. */
+  readonly expander?: QueryExpander;
 }
 
 function appContext(tenantId: string, serverId: string): string {
@@ -304,10 +308,38 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async search(scope: UserScope, query: string, limit: number): Promise<FederatedResult> {
+    const first = await this.searchOnce(scope, query, limit);
+    const result = await this.retryWithBetterWords(scope, query, limit, first);
+    await this.audit(scope, "search", undefined, {
+      queryFingerprint: this.deps.box.fingerprint(query),
+      results: result.hits.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
+      sources: result.sources,
+      expanded: result.expandedTerms !== undefined,
+    });
+    return result;
+  }
+
+  /** Only a clean search that found nothing retries: an empty result during an outage means nothing. */
+  private async retryWithBetterWords(
+    scope: UserScope,
+    query: string,
+    limit: number,
+    first: FederatedResult,
+  ): Promise<FederatedResult> {
+    const expander = this.deps.expander;
+    const cleanAndEmpty = first.hits.length === 0 && first.sources.length > 0 && first.sources.every((s) => s.ok);
+    if (!expander || !cleanAndEmpty) return first;
+    const expandedTerms = await expander.expand(scope, query, AbortSignal.timeout(EXPAND_TIMEOUT_MS));
+    if (expandedTerms.length === 0) return first;
+    const second = await this.searchOnce(scope, withExpandedTerms(query, expandedTerms), limit);
+    return { ...second, expandedTerms };
+  }
+
+  private async searchOnce(scope: UserScope, query: string, limit: number): Promise<FederatedResult> {
     const active = (await this.currentConnections(scope)).filter(
       (c) => c.status === "active" && this.deps.adapters.has(c.serverId),
     );
-    const result = await federatedSearch(
+    return federatedSearch(
       active.map((c) => ({
         id: c.serverId,
         run: async (signal) => {
@@ -324,13 +356,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       })),
       { limit, rerankQuery: query },
     );
-
-    await this.audit(scope, "search", undefined, {
-      queryFingerprint: this.deps.box.fingerprint(query),
-      results: result.hits.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
-      sources: result.sources,
-    });
-    return result;
   }
 
   /** Searches, then reads the top hits' full text in the same session per source. */

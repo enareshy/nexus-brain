@@ -56,6 +56,14 @@ export function SearchResults({ result, query }: Props) {
       <h2 id="results-heading" className="mb-4 text-sm font-medium uppercase tracking-widest text-slate-500">
         {result.hits.length} {result.hits.length === 1 ? "result" : "results"} for “{query}”
       </h2>
+      {result.expandedTerms && result.expandedTerms.length > 0 && (
+        <p className="mb-4 text-sm text-slate-500">
+          {result.hits.length > 0
+            ? "No exact matches, so these results also use AI-suggested words: "
+            : "No matches, even with AI-suggested words: "}
+          {result.expandedTerms.join(", ")}.
+        </p>
+      )}
       {result.hits.length === 0 ? (
         <p className="text-slate-500">Nothing you can access matched. Try different words.</p>
       ) : (

@@ -4,6 +4,7 @@ import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/
 import type { AnswerDocument, AnswerOutcome, LlmGateway, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import type { DocumentSource } from "../connections/connections.service.js";
+import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 
 const SEARCH_LIMIT = 10;
 const MAX_DOCUMENTS = 5;
@@ -46,6 +47,8 @@ export interface AnswersDeps {
   readonly gateway: LlmGateway | null;
   readonly logger: Pick<Logger, "error">;
   readonly now?: () => number;
+  /** Finds documents worded differently from the question. Without one, it searches as asked. */
+  readonly expander?: QueryExpander;
 }
 
 function userKey(scope: UserScope): string {
@@ -91,7 +94,9 @@ export class AnswersService implements AnswersApi {
     emit: (event: AnswerStreamEvent) => void,
     signal: AbortSignal,
   ): Promise<void> {
-    const gathered = await this.deps.documents.gatherDocuments(scope, question, {
+    const terms = (await this.deps.expander?.expand(scope, question, signal)) ?? [];
+    // The answer itself still responds to the question exactly as asked.
+    const gathered = await this.deps.documents.gatherDocuments(scope, withExpandedTerms(question, terms), {
       limit: SEARCH_LIMIT,
       maxDocuments: MAX_DOCUMENTS,
       signal,

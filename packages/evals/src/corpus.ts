@@ -1,6 +1,6 @@
 import { federatedSearch, stem, toKeywords, toTextSearchTerm, type FederatedSource, type SearchHit } from "@brain/connectors";
 import { z } from "zod";
-import { runEval, type EvalReport, type GoldenSet, type Retriever } from "./harness.js";
+import { DEFAULT_THRESHOLDS, runEval, type EvalReport, type GoldenSet, type Retriever } from "./harness.js";
 
 /** What one simulated source returns at most, like the limit sent to a real service. */
 const SOURCE_LIMIT = 20;
@@ -51,11 +51,16 @@ function toHit(doc: Document): SearchHit {
  * what this user may see. The merging and reranking after that are the production code. It measures
  * ranking on made-up documents, so it cannot show how well real searches or answers work.
  */
-export function corpusRetriever(corpus: Corpus, options: { readonly rerank: boolean }): Retriever {
+export function corpusRetriever(
+  corpus: Corpus,
+  options: { readonly rerank: boolean; readonly rewrites?: Rewrites },
+): Retriever {
   const indexed = corpus.documents.map((doc) => ({ doc, words: wordsOf(`${doc.title} ${doc.body}`) }));
   const sourceIds = [...new Set(corpus.documents.map((doc) => doc.source))];
   return {
-    async retrieve({ asUser, query, k }) {
+    async retrieve({ asUser, query: asked, k }) {
+      // Same as production: new words go first, because only the first few keywords are kept.
+      const query = [...(options.rewrites?.[asked] ?? []), asked].join(" ");
       const keywords = keywordsOf(query);
       const sources: FederatedSource[] = sourceIds.map((id) => ({
         id,
@@ -73,19 +78,42 @@ export function corpusRetriever(corpus: Corpus, options: { readonly rerank: bool
   };
 }
 
+export const RewritesSchema = z.record(z.string(), z.array(z.string()));
+export type Rewrites = z.infer<typeof RewritesSchema>;
+
 export interface RankingComparison {
   readonly baseline: EvalReport;
   readonly reranked: EvalReport;
+  /** With recorded model rewrites, when supplied. */
+  readonly rewritten?: EvalReport;
   readonly passed: boolean;
 }
 
-/** Fails on any leak, on recall under the set's floor, or if reranking makes ranking worse. */
-export async function compareRanking(golden: GoldenSet, corpus: Corpus, k = 10): Promise<RankingComparison> {
+/**
+ * Fails on any leak, on recall under the set's floor, or if reranking makes ranking worse. With
+ * rewrites, recall must also meet the target, so stale recordings fail rather than pass quietly.
+ */
+export async function compareRanking(
+  golden: GoldenSet,
+  corpus: Corpus,
+  k = 10,
+  rewrites?: Rewrites,
+): Promise<RankingComparison> {
   const baseline = await runEval(golden, corpusRetriever(corpus, { rerank: false }), k);
   const reranked = await runEval(golden, corpusRetriever(corpus, { rerank: true }), k);
+  const rewritten = rewrites ? await runEval(golden, corpusRetriever(corpus, { rerank: true, rewrites }), k) : undefined;
   return {
     baseline,
     reranked,
-    passed: baseline.leakCount === 0 && reranked.passed && reranked.ndcgAtK >= baseline.ndcgAtK,
+    ...(rewritten ? { rewritten } : {}),
+    passed:
+      baseline.leakCount === 0 &&
+      reranked.passed &&
+      reranked.ndcgAtK >= baseline.ndcgAtK &&
+      (rewritten
+        ? rewritten.leakCount === 0 &&
+          rewritten.recallAtK >= reranked.recallAtK &&
+          rewritten.recallAtK >= DEFAULT_THRESHOLDS.minRecallAtK
+        : true),
   };
 }

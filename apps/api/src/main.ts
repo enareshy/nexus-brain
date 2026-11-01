@@ -28,6 +28,7 @@ import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
 import { AnswersService } from "./answers/answers.service.js";
+import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
 
@@ -78,8 +79,12 @@ const enabled = env.MCP_SERVERS.split(",").map((s) => s.trim()).filter(Boolean).
   return known();
 });
 
+const gateway = env.ANTHROPIC_API_KEY ? createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }) : null;
+const expander = new QueryRewriter({ pool, gateway, logger });
+
 const connections = new ConnectionsService({
   pool,
+  expander,
   box: createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY),
   registry: createRegistry(enabled.map((e) => e.def)),
   adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
@@ -93,7 +98,8 @@ const answers = new AnswersService({
   box,
   logger,
   documents: connections,
-  gateway: env.ANTHROPIC_API_KEY ? createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }) : null,
+  gateway,
+  expander,
 });
 
 const proposals = new ProposalsService({
