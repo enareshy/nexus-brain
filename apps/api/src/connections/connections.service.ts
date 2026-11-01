@@ -147,9 +147,12 @@ export class ConnectionsService implements ConnectionsApi {
     const result = await federatedSearch(
       active.map((c) => ({
         id: c.serverId,
-        run: () =>
-          this.withSession(scope, c.serverId, (session) =>
-            this.deps.adapters.get(c.serverId)!.search(session, query, limit),
+        run: (signal) =>
+          this.withSession(
+            scope,
+            c.serverId,
+            (session) => this.deps.adapters.get(c.serverId)!.search(session, query, limit),
+            signal,
           ),
       })),
       { limit },
@@ -167,21 +170,29 @@ export class ConnectionsService implements ConnectionsApi {
     return `${scope.tenantId}|${scope.userId}|${serverId}`;
   }
 
-  /** One session at a time per (tenant, user, server): no refresh-token races. */
+  /**
+   * One session at a time per (tenant, user, server): no refresh-token races.
+   * Aborting closes the session so a timed-out search cannot hold the user's lock.
+   */
   private withSession<T>(
     scope: UserScope,
     serverId: string,
     work: (session: McpSession) => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const def = this.deps.registry.get(serverId);
     return this.sessions.run(this.lockKey(scope, serverId), async () => {
+      if (signal?.aborted) throw new AppError("UNAVAILABLE", "Search budget exceeded");
       const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
       const session = await openSession(def, store, this.deps.client);
+      const closeOnAbort = () => void session.close();
+      signal?.addEventListener("abort", closeOnAbort, { once: true });
       try {
         const result = await work(session);
-        await touchConnection(this.deps.pool, scope, serverId);
+        if (!signal?.aborted) await touchConnection(this.deps.pool, scope, serverId);
         return result;
       } finally {
+        signal?.removeEventListener("abort", closeOnAbort);
         await session.close();
       }
     });

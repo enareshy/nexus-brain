@@ -211,6 +211,23 @@ describe("federatedSearch", () => {
     expect(result.hits).toHaveLength(1);
   });
 
+  it("signals abort to a source that exceeds the budget, and not to one that finishes", async () => {
+    vi.useFakeTimers();
+    const signals: Record<string, AbortSignal> = {};
+    const pending = federatedSearch(
+      [
+        { id: "slow", run: (signal) => { signals.slow = signal; return new Promise(() => {}); } },
+        { id: "fast", run: async (signal) => { signals.fast = signal; return []; } },
+      ],
+      { limit: 10, budgetMs: 50 },
+    );
+    await vi.advanceTimersByTimeAsync(60);
+    await pending;
+    vi.useRealTimers();
+    expect(signals.slow?.aborted).toBe(true);
+    expect(signals.fast?.aborted).toBe(false);
+  });
+
   it("respects the limit", async () => {
     const result = await federatedSearch([{ id: "a", run: async () => [hit("1"), hit("2"), hit("3")] }], { limit: 2 });
     expect(result.hits).toHaveLength(2);

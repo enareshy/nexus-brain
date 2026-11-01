@@ -3,11 +3,14 @@ import type { SearchHit } from "./types.js";
 
 /** Reciprocal-rank-fusion constant (standard value). */
 const RRF_K = 60;
-const DEFAULT_BUDGET_MS = 3_000;
+// Measured against live Atlassian (2026-11-01): connect 0.4-1 s, sites 0.8-1.2 s, JQL/CQL 1.1-2.1 s.
+// The 3 s target in FR-MCP-05 needs reused sessions and cached sites; until then allow 10 s.
+const DEFAULT_BUDGET_MS = 10_000;
 
 export interface FederatedSource {
   readonly id: string;
-  run(): Promise<readonly SearchHit[]>;
+  /** `signal` aborts when the budget runs out; stop work and release resources. */
+  run(signal: AbortSignal): Promise<readonly SearchHit[]>;
 }
 
 export interface SourceStatus {
@@ -58,12 +61,16 @@ async function runWithBudget(
   budgetMs: number,
 ): Promise<{ hits: readonly SearchHit[]; status: SourceStatus }> {
   const started = Date.now();
+  const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("TIMEOUT")), budgetMs);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("TIMEOUT"));
+    }, budgetMs);
   });
   try {
-    const hits = await Promise.race([source.run(), timeout]);
+    const hits = await Promise.race([source.run(controller.signal), timeout]);
     return { hits, status: { id: source.id, ok: true, hits: hits.length, ms: Date.now() - started } };
   } catch (err) {
     const error = isAppError(err) ? err.code : err instanceof Error && err.message === "TIMEOUT" ? "TIMEOUT" : "ERROR";
