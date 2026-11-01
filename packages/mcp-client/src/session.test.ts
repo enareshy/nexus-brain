@@ -1,6 +1,12 @@
 import { AppError } from "@brain/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createGithubServer, createRegistry } from "./registry.js";
+import {
+  createGithubServer,
+  createGmailServer,
+  createGoogleDriveServer,
+  createRegistry,
+  createSlackServer,
+} from "./registry.js";
 import {
   beginAuthorization,
   completeAuthorization,
@@ -149,6 +155,33 @@ describe("a server without client registration", () => {
     expect(store.state.tokens).toBeUndefined();
   });
 
+  it("sends a server's extra sign-in settings and its scope", async () => {
+    const def = {
+      ...appMock.definition,
+      client,
+      scope: "read.only",
+      authorizationParams: { access_type: "offline", prompt: "consent" },
+    };
+    const start = await beginAuthorization(def, createMemoryStore(), ctx);
+    const url = new URL(start.authorizationUrl);
+    expect(url.searchParams.get("access_type")).toBe("offline");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("scope")).toBe("read.only");
+  });
+
+  it("revokes with the configured app, which is not in the vault", async () => {
+    const def = { ...appMock.definition, client };
+    const store = createMemoryStore();
+    appMock.setNextIdentity("pat");
+    const start = await beginAuthorization(def, store, ctx);
+    const consent = await simulateConsent(start.authorizationUrl);
+    await completeAuthorization(def, store, ctx, { code: consent.code, codeVerifier: start.codeVerifier });
+
+    const before = appMock.stats.revocations;
+    expect(await revokeAuthorization(def, ctx, store.state.tokens!, undefined)).toBe(true);
+    expect(appMock.stats.revocations).toBeGreaterThan(before);
+  });
+
   it("cannot connect without an app configured", async () => {
     await expect(beginAuthorization(appMock.definition, createMemoryStore(), ctx)).rejects.toBeInstanceOf(AppError);
   });
@@ -160,6 +193,36 @@ describe("createGithubServer", () => {
     expect(def.url).toBe("https://api.githubcopilot.com/mcp/readonly");
     expect(def.allowedHosts).toEqual(["api.githubcopilot.com", "github.com"]);
     expect(def.client).toEqual({ clientId: "id", clientSecret: "secret" });
+  });
+});
+
+describe("createGoogleDriveServer", () => {
+  it("asks only for read-only access, and only Google's hosts are allowed", () => {
+    const def = createGoogleDriveServer({ clientId: "id", clientSecret: "secret" });
+    expect(def.url).toBe("https://drivemcp.googleapis.com/mcp/v1");
+    expect(def.scope).toBe("https://www.googleapis.com/auth/drive.readonly");
+    expect(def.allowedHosts).toEqual(["drivemcp.googleapis.com", "accounts.google.com", "oauth2.googleapis.com"]);
+    expect(def.authorizationParams).toEqual({ access_type: "offline", prompt: "consent" });
+  });
+});
+
+describe("createGmailServer", () => {
+  it("can only read mail, and shares Google's app with Drive", () => {
+    const def = createGmailServer();
+    expect(def.url).toBe("https://gmailmcp.googleapis.com/mcp/v1");
+    expect(def.scope).toBe("https://www.googleapis.com/auth/gmail.readonly");
+    expect(def.needsApp).toBe(true);
+    expect(def.appKey).toBe(createGoogleDriveServer().appKey);
+    expect(def.client).toBeUndefined();
+  });
+});
+
+describe("createSlackServer", () => {
+  it("asks for no posting scope and no direct messages", () => {
+    const def = createSlackServer();
+    expect(def.allowedHosts).toEqual(["mcp.slack.com", "slack.com"]);
+    expect(def.scope).not.toMatch(/write|im:|mpim/);
+    expect(def.needsApp).toBe(true);
   });
 });
 
@@ -279,6 +342,11 @@ describe("revokeAuthorization", () => {
 });
 
 describe("toToolResult", () => {
+  it("falls back to structured content when there is no text", () => {
+    expect(toToolResult({ content: [], structuredContent: { files: [] } }).text).toBe('{"files":[]}');
+    expect(toToolResult({ content: [{ type: "text", text: "a" }], structuredContent: { b: 1 } }).text).toBe("a");
+  });
+
   it("joins text parts, ignores others and flags errors", () => {
     const result = toToolResult({
       content: [{ type: "text", text: "a" }, { type: "image", data: "x" }, { type: "text", text: "b" }],

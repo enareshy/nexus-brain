@@ -18,10 +18,12 @@ const apiEnvObject = baseEnvSchema.extend({
   /** 32 random bytes, base64. Seals connector tokens (FR-CON-02). */
   CONNECTOR_TOKEN_ENC_KEY: z.string().min(40),
   /** Comma-separated allow-listed MCP server IDs (FR-MCP-02). */
-  MCP_SERVERS: z.string().default("atlassian"),
-  /** GitHub App used for sign-in. Needed only when MCP_SERVERS lists github. */
+  MCP_SERVERS: z.string().default("atlassian,github,google-drive,gmail,slack"),
+  /** Optional: normally an admin sets these apps up in the web app, per company. These override that. */
   GITHUB_MCP_CLIENT_ID: z.string().optional().transform((value) => value?.trim() || undefined),
   GITHUB_MCP_CLIENT_SECRET: z.string().optional().transform((value) => value?.trim() || undefined),
+  GOOGLE_MCP_CLIENT_ID: z.string().optional().transform((value) => value?.trim() || undefined),
+  GOOGLE_MCP_CLIENT_SECRET: z.string().optional().transform((value) => value?.trim() || undefined),
   /** Optional: without it search works and AI answers report that they are not configured. */
   ANTHROPIC_API_KEY: z
     .string()

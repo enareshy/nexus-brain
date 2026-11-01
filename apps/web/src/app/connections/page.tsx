@@ -10,12 +10,15 @@ import { safeHttpUrl } from "@/lib/safe-url";
 
 type Message = { readonly tone: "ok" | "error"; readonly text: string };
 
+const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
+
 function ConnectionsPage() {
   const { api } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const justConnected = params.get("connected");
   const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [canSetUp, setCanSetUp] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyServerId, setBusyServerId] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -23,7 +26,9 @@ function ConnectionsPage() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      setConnections(await api.connections());
+      const [loaded, me] = await Promise.all([api.connections(), api.me()]);
+      setConnections(loaded);
+      setCanSetUp(ADMIN_ROLES.has(me.role));
     } catch (e) {
       setLoadError(describeError(e));
     }
@@ -63,6 +68,21 @@ function ConnectionsPage() {
       setMessage({ tone: "error", text: describeError(e) });
       setBusyServerId(null);
     }
+  }
+
+  /** Saving goes straight on to connecting, so the admin has nothing more to click. */
+  async function handleSaveApp(serverId: string, app: { clientId: string; clientSecret: string }) {
+    setBusyServerId(serverId);
+    setMessage(null);
+    try {
+      await api.saveServerApp(serverId, app);
+    } catch (e) {
+      setMessage({ tone: "error", text: describeError(e) });
+      setBusyServerId(null);
+      return;
+    }
+    await load();
+    await handleConnect(serverId);
   }
 
   async function handleDisconnect(serverId: string) {
@@ -121,6 +141,8 @@ function ConnectionsPage() {
             busyServerId={busyServerId}
             onConnect={(id) => void handleConnect(id)}
             onDisconnect={(id) => void handleDisconnect(id)}
+            canSetUp={canSetUp}
+            onSaveApp={(id, app) => void handleSaveApp(id, app)}
           />
         )}
       </div>

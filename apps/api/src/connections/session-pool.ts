@@ -43,6 +43,13 @@ export class SessionPool {
     this.idle.set(key, { session, timer });
   }
 
+  /** Closes every idle session whose key matches. */
+  evictWhere(matches: (key: string) => boolean): void {
+    for (const key of [...this.idle.keys()]) {
+      if (matches(key)) this.evict(key);
+    }
+  }
+
   evict(key: string): void {
     const session = this.take(key);
     if (session) this.close(session);

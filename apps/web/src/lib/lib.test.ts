@@ -11,7 +11,7 @@ const fail = (code: string, message: string, status: number) =>
 describe("createApiClient", () => {
   it("sends the bearer token and validates the response", async () => {
     const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) =>
-      ok([{ serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: null }]),
+      ok([{ serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" }]),
     );
     const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
     const connections = await api.connections();
@@ -34,6 +34,46 @@ describe("createApiClient", () => {
     fetchImpl.mockResolvedValueOnce(ok({ hits: [], sources: [] }));
     await api.search("a&b=c");
     expect(String(fetchImpl.mock.calls[1]![0])).toBe("http://api.test/search?q=a%26b%3Dc&limit=10");
+  });
+
+  it("saves a service's app and sends changes for approval", async () => {
+    const proposal = {
+      id: "p1",
+      serverId: "atlassian",
+      action: "create_issue",
+      toolName: "createJiraIssue",
+      toolClass: "write",
+      args: { summary: "x" },
+      argsHash: "h",
+      status: "pending",
+      externalId: null,
+      url: null,
+      errorCode: null,
+      createdAt: "2026-11-01T00:00:00Z",
+      expiresAt: "2026-11-01T01:00:00Z",
+    };
+    const target = { siteId: "s", siteOrigin: "https://a.atlassian.net", projects: [] };
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo, _init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/app")) return ok({ saved: true });
+      if (path === "/proposals/targets/atlassian") return ok([target]);
+      if (path === "/proposals" && _init?.method !== "POST") return ok([proposal]);
+      return ok(proposal);
+    });
+    const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
+
+    expect(await api.saveServerApp("github", { clientId: "i", clientSecret: "s" })).toEqual({ saved: true });
+    const saved = fetchImpl.mock.calls[0]!;
+    expect(String(saved[0])).toBe("http://api.test/connections/github/app");
+    expect(saved[1]?.body).toBe(JSON.stringify({ clientId: "i", clientSecret: "s" }));
+
+    expect(await api.writeTargets("atlassian")).toEqual([target]);
+    expect((await api.proposals())[0]?.id).toBe("p1");
+    const request = { action: "add_comment", siteId: "s", issueKey: "A-1", body: "b" } as const;
+    expect((await api.propose("atlassian", request)).id).toBe("p1");
+    expect((await api.approveProposal("p1", "h")).id).toBe("p1");
+    expect((await api.rejectProposal("p1")).id).toBe("p1");
+    expect(fetchImpl.mock.calls.at(-2)?.[1]?.body).toBe(JSON.stringify({ argsHash: "h" }));
   });
 
   it("covers the remaining endpoints", async () => {

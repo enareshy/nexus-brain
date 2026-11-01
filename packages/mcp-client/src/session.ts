@@ -120,6 +120,7 @@ export async function beginAuthorization(
     def.allowInsecureLoopback === true,
     ctx.resolve,
   );
+  for (const [name, value] of Object.entries(def.authorizationParams ?? {})) url.searchParams.set(name, value);
   return { authorizationUrl: url.toString(), state, codeVerifier: verifier };
 }
 
@@ -131,9 +132,10 @@ export async function revokeAuthorization(
   def: McpServerDefinition,
   ctx: ClientContext,
   tokens: OAuthTokens,
-  client: OAuthClientInformationMixed | undefined,
+  storedClient: OAuthClientInformationMixed | undefined,
 ): Promise<boolean> {
   const fetchFn = guardedFetchFor(def, ctx);
+  const client = def.client ? { client_id: def.client.clientId, client_secret: def.client.clientSecret } : storedClient;
   try {
     const info = await discoverOAuthServerInfo(def.url, { fetchFn });
     // RFC 8414 field; not declared on the SDK's metadata type.
@@ -235,12 +237,14 @@ export async function openSession(
 
 /** Joins text content and caps its size. Non-text content is ignored. */
 export function toToolResult(result: unknown): ToolResult {
-  const record = result as { content?: unknown; isError?: unknown };
+  const record = result as { content?: unknown; structuredContent?: unknown; isError?: unknown };
   const parts = Array.isArray(record.content) ? record.content : [];
-  const text = parts
+  const joined = parts
     .filter((p): p is { type: "text"; text: string } => p?.type === "text" && typeof p.text === "string")
     .map((p) => p.text)
     .join("\n");
+  // Servers with an output schema may return their data only as structured content.
+  const text = joined || (record.structuredContent ? JSON.stringify(record.structuredContent) : "");
   const truncated = text.length > MAX_TOOL_RESULT_CHARS;
   return {
     text: truncated ? text.slice(0, MAX_TOOL_RESULT_CHARS) : text,

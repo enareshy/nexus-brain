@@ -1,3 +1,4 @@
+import { AppError } from "@brain/core";
 import type { ClientBase } from "pg";
 import { GROUPS, TENANTS, USERS, seedUser } from "./seed-data.js";
 import { rollbackQuietly } from "./tx.js";
@@ -9,6 +10,10 @@ type Query = Pick<ClientBase, "query">;
  * the forced RLS policies even when the owner role is not a superuser.
  */
 export async function seed(client: Query): Promise<void> {
+  // Demo accounts have known passwords, so these rows must never reach a real deployment.
+  if (process.env.NODE_ENV === "production") {
+    throw new AppError("CONFIG_INVALID", "The demo seed cannot run in production");
+  }
   await client.query("BEGIN");
   try {
     for (const [key, tenant] of Object.entries(TENANTS)) {

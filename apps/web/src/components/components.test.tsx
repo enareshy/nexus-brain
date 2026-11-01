@@ -77,10 +77,11 @@ describe("AnswerPanel", () => {
   });
 });
 
+const READY = { setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" } as const;
 const CONNECTIONS: Connection[] = [
-  { serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: "2026-10-31T10:00:00Z" },
-  { serverId: "slack", displayName: "Slack", status: "not_connected", lastUsedAt: null },
-  { serverId: "github", displayName: "GitHub", status: "needs_reauth", lastUsedAt: null },
+  { serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: "2026-10-31T10:00:00Z", ...READY },
+  { serverId: "slack", displayName: "Slack", status: "not_connected", lastUsedAt: null, ...READY },
+  { serverId: "github", displayName: "GitHub", status: "needs_reauth", lastUsedAt: null, ...READY },
 ];
 
 describe("ConnectionsList", () => {
@@ -100,6 +101,102 @@ describe("ConnectionsList", () => {
     await userEvent.click(within(rows[2]!).getByRole("button", { name: "Reconnect GitHub" }));
     expect(onDisconnect).toHaveBeenCalledWith("atlassian");
     expect(onConnect.mock.calls).toEqual([["slack"], ["github"]]);
+  });
+
+  describe("a service that needs setup", () => {
+    const NEEDS_SETUP: Connection[] = [
+      {
+        serverId: "google-drive",
+        displayName: "Google Drive",
+        status: "not_connected",
+        lastUsedAt: null,
+        setup: "needs_app",
+        redirectUrl: "http://127.0.0.1:3001/oauth/callback",
+      },
+    ];
+    const noop = () => {};
+
+    it("offers no connect button, and tells a member to ask an admin", () => {
+      render(<ConnectionsList connections={NEEDS_SETUP} busyServerId={null} onConnect={noop} onDisconnect={noop} />);
+      expect(screen.getByText(/Ask a workspace admin/)).toBeInTheDocument();
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    });
+
+    it("guides an admin with links, the redirect address and a secret field", async () => {
+      const user = userEvent.setup();
+      const onSaveApp = vi.fn();
+      render(
+        <ConnectionsList connections={NEEDS_SETUP} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp onSaveApp={onSaveApp} />,
+      );
+      await user.click(screen.getByRole("button", { name: "Set up Google Drive" }));
+
+      expect(screen.getByRole("link", { name: "Create client" })).toHaveAttribute("rel", "noopener noreferrer");
+      expect(screen.getByText(NEEDS_SETUP[0]!.redirectUrl)).toBeInTheDocument();
+      expect(screen.getByLabelText("Client secret")).toHaveAttribute("type", "password");
+
+      const save = screen.getByRole("button", { name: "Save and connect" });
+      expect(save).toBeDisabled();
+      await user.type(screen.getByLabelText("Client ID"), " my-id ");
+      await user.type(screen.getByLabelText("Client secret"), "my-secret");
+      await user.click(save);
+      expect(onSaveApp).toHaveBeenCalledWith("google-drive", { clientId: "my-id", clientSecret: "my-secret" });
+    });
+
+    it("lets an admin, but not a member, change a saved setup and warns about reconnecting", async () => {
+      const user = userEvent.setup();
+      const configured: Connection[] = [{ ...NEEDS_SETUP[0]!, setup: "configured" }];
+      const { unmount } = render(<ConnectionsList connections={configured} busyServerId={null} onConnect={noop} onDisconnect={noop} />);
+      expect(screen.queryByRole("button", { name: /Change setup/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeInTheDocument();
+      unmount();
+
+      render(<ConnectionsList connections={configured} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp />);
+      await user.click(screen.getByRole("button", { name: "Change setup for Google Drive" }));
+      expect(screen.getByText(/asks everyone in your workspace to connect again/)).toBeInTheDocument();
+    });
+
+    it("uses one Google setup for Gmail too, and lists only read scopes for Slack", async () => {
+      const user = userEvent.setup();
+      const rows = [
+        { ...NEEDS_SETUP[0]!, serverId: "gmail", displayName: "Gmail" },
+        { ...NEEDS_SETUP[0]!, serverId: "slack", displayName: "Slack" },
+      ];
+      render(<ConnectionsList connections={rows} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp />);
+      await user.click(screen.getByRole("button", { name: "Set up Gmail" }));
+      expect(screen.getByText(/covers both Google Drive and Gmail/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Set up Slack" }));
+      const scopes = screen.getByText(/user token scopes/).textContent ?? "";
+      expect(scopes).not.toMatch(/write|im:|mpim/);
+    });
+
+    it("copies the redirect address", async () => {
+      const user = userEvent.setup();
+      const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+      render(<ConnectionsList connections={NEEDS_SETUP} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp />);
+      await user.click(screen.getByRole("button", { name: "Set up Google Drive" }));
+      await user.click(screen.getByRole("button", { name: "Copy" }));
+      expect(writeText).toHaveBeenCalledWith(NEEDS_SETUP[0]!.redirectUrl);
+      expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    });
+
+    it("says so when a service has no guide", async () => {
+      const user = userEvent.setup();
+      const unknown = [{ ...NEEDS_SETUP[0]!, serverId: "other", displayName: "Other" }];
+      render(<ConnectionsList connections={unknown} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp />);
+      await user.click(screen.getByRole("button", { name: "Set up Other" }));
+      expect(screen.getByText(/can't be set up from here/)).toBeInTheDocument();
+    });
+
+    it("builds a prefilled, read-only GitHub link with the redirect address", async () => {
+      const user = userEvent.setup();
+      const github = [{ ...NEEDS_SETUP[0]!, serverId: "github", displayName: "GitHub" }];
+      render(<ConnectionsList connections={github} busyServerId={null} onConnect={noop} onDisconnect={noop} canSetUp />);
+      await user.click(screen.getByRole("button", { name: "Set up GitHub" }));
+      const href = screen.getByRole("link", { name: "Open GitHub" }).getAttribute("href") ?? "";
+      expect(href).toContain("contents=read");
+      expect(href).not.toContain("=write");
+      expect(href).toContain(encodeURIComponent(NEEDS_SETUP[0]!.redirectUrl));
+    });
   });
 
   it("disables the busy row's button", () => {

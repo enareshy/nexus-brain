@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import type { Connection } from "@/lib/api";
+import { ServerSetup } from "./ServerSetup";
 import { StatusBadge } from "./StatusBadge";
 
 type Props = {
@@ -6,6 +10,8 @@ type Props = {
   busyServerId: string | null;
   onConnect: (serverId: string) => void;
   onDisconnect: (serverId: string) => void;
+  canSetUp?: boolean;
+  onSaveApp?: (serverId: string, app: { clientId: string; clientSecret: string }) => void;
 };
 
 function lastUsedLabel(value: string | null): string {
@@ -13,7 +19,16 @@ function lastUsedLabel(value: string | null): string {
   return `Last used ${new Date(value).toLocaleString()}`;
 }
 
-export function ConnectionsList({ connections, busyServerId, onConnect, onDisconnect }: Props) {
+export function ConnectionsList({
+  connections,
+  busyServerId,
+  onConnect,
+  onDisconnect,
+  canSetUp = false,
+  onSaveApp = () => {},
+}: Props) {
+  const [settingUp, setSettingUp] = useState<string | null>(null);
+
   if (connections.length === 0) {
     return <p className="text-slate-500">No services are enabled for this workspace yet.</p>;
   }
@@ -24,16 +39,48 @@ export function ConnectionsList({ connections, busyServerId, onConnect, onDiscon
         const isBusy = busyServerId === c.serverId;
         const isConnected = c.status === "active";
         const actionLabel = c.status === "needs_reauth" ? "Reconnect" : "Connect";
+        const needsSetup = c.setup === "needs_app";
+        const canChange = canSetUp && c.setup === "configured";
+        const isSettingUp = (needsSetup || canChange) && settingUp === c.serverId;
         return (
-          <li key={c.serverId} className="grid grid-cols-[1fr_auto] items-center gap-6 py-5">
+          <li key={c.serverId} className="grid grid-cols-[1fr_auto] items-center gap-x-6 gap-y-4 py-5">
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-lg font-semibold tracking-tight">{c.displayName}</h2>
-                <StatusBadge status={c.status} />
+                {!needsSetup && <StatusBadge status={c.status} />}
               </div>
-              <p className="mt-1 text-sm text-slate-500">{lastUsedLabel(c.lastUsedAt)}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {needsSetup
+                  ? canSetUp
+                    ? "Needs a one-time setup before anyone can connect."
+                    : "Not available yet. Ask a workspace admin to set it up."
+                  : lastUsedLabel(c.lastUsedAt)}
+              </p>
+              {canChange && (
+                <button
+                  type="button"
+                  aria-expanded={isSettingUp}
+                  aria-label={`Change setup for ${c.displayName}`}
+                  onClick={() => setSettingUp(isSettingUp ? null : c.serverId)}
+                  className="mt-1 text-sm font-medium text-slate-600 underline underline-offset-4 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                >
+                  {isSettingUp ? "Close setup" : "Change setup"}
+                </button>
+              )}
             </div>
-            {isConnected ? (
+            {needsSetup ? (
+              canSetUp && (
+                <button
+                  type="button"
+                  aria-expanded={isSettingUp}
+                  aria-label={`Set up ${c.displayName}`}
+                  onClick={() => setSettingUp(isSettingUp ? null : c.serverId)}
+                  className="rounded-md bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:translate-y-px"
+                >
+                  {isSettingUp ? "Close" : "Set up"}
+                </button>
+              )
+            ) : isConnected ? (
               <button
                 type="button"
                 disabled={isBusy}
@@ -53,6 +100,11 @@ export function ConnectionsList({ connections, busyServerId, onConnect, onDiscon
               >
                 {isBusy ? "Opening…" : actionLabel}
               </button>
+            )}
+            {isSettingUp && (
+              <div className="col-span-2">
+                <ServerSetup connection={c} isBusy={isBusy} onSave={onSaveApp} />
+              </div>
             )}
           </li>
         );

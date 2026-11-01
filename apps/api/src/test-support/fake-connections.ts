@@ -13,7 +13,7 @@ export function createFakeConnections(): FakeConnections {
     calls,
     list: async (...args) => {
       record("list", args);
-      return [{ serverId: "atlassian", displayName: "Atlassian", status: "not_connected", lastUsedAt: null }];
+      return [{ serverId: "atlassian", displayName: "Atlassian", status: "not_connected", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" }];
     },
     authorize: async (...args) => {
       record("authorize", args);
@@ -27,6 +27,10 @@ export function createFakeConnections(): FakeConnections {
     disconnect: async (...args) => {
       record("disconnect", args);
       return { disconnected: true, revoked: true };
+    },
+    saveApp: async (...args) => {
+      record("saveApp", args);
+      return { saved: true };
     },
     tools: async (...args) => {
       record("tools", args);

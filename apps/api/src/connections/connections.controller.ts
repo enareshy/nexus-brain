@@ -20,6 +20,8 @@ import { Ctx, type RequestContext } from "../context/request-context.js";
 import { CONNECTIONS, WEB_APP_URL } from "../tokens.js";
 import type { ConnectionsApi, ConnectionView } from "./connections.service.js";
 
+const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
+
 const ServerIdSchema = z.string().regex(/^[a-z0-9-]{1,40}$/);
 const SearchQuerySchema = z.object({
   q: z.string().trim().min(1).max(200),
@@ -28,6 +30,11 @@ const SearchQuerySchema = z.object({
 const CompleteBodySchema = z.object({
   code: z.string().min(1).max(2048),
   state: z.string().min(1).max(128),
+});
+
+const ServerAppSchema = z.strictObject({
+  clientId: z.string().trim().regex(/^[\w.-]{1,200}$/),
+  clientSecret: z.string().trim().regex(/^\S{1,500}$/),
 });
 
 function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
@@ -70,6 +77,20 @@ export class ConnectionsController {
     return ok(await this.connections.complete(scopeOf(ctx), code, state), {
       requestId: ctx.requestId,
     });
+  }
+
+  /** Sets up this company's sign-in app for a service. Admins only. Takes effect immediately. */
+  @Post(":serverId/app")
+  @HttpCode(200)
+  async saveApp(
+    @Ctx() ctx: RequestContext,
+    @Param("serverId") serverId: string,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<{ saved: true }>> {
+    if (!ADMIN_ROLES.has(ctx.role)) throw new AppError("FORBIDDEN", "Only an admin can set up a service");
+    const id = parse(ServerIdSchema, serverId);
+    const app = parse(ServerAppSchema, body);
+    return ok(await this.connections.saveApp(scopeOf(ctx), id, app), { requestId: ctx.requestId });
   }
 
   @Delete(":serverId")
