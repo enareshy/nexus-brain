@@ -103,6 +103,19 @@ export const usageLedger = pgTable("usage_ledger", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const mcpServerApps = pgTable(
+  "mcp_server_apps",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    serverId: text("server_id").notNull(),
+    clientId: text("client_id").notNull(),
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    updatedBy: uuid("updated_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.serverId] })],
+);
+
 export const writeProposals = pgTable("write_proposals", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
@@ -127,6 +140,7 @@ export const writeProposals = pgTable("write_proposals", {
 export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | "unknown" | "rejected";
 
 export const schema = {
+  mcpServerApps,
   writeProposals,
   usageLedger,
   tenants,

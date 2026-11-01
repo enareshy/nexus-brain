@@ -9,9 +9,13 @@ import {
 import {
   appendAudit,
   consumePendingAuthorization,
+  type ConnectionSummary,
   deleteConnection,
+  getServerApp,
   listConnections,
+  listServerApps,
   savePendingAuthorization,
+  saveServerApp,
   touchConnection,
   type PoolLike,
   type UserScope,
@@ -22,6 +26,7 @@ import {
   openSession,
   revokeAuthorization,
   type ClientContext,
+  type McpServerDefinition,
   type McpSession,
   type ServerRegistry,
   type ToolInfo,
@@ -50,6 +55,18 @@ export interface ConnectionView {
   readonly displayName: string;
   readonly status: ConnectionState;
   readonly lastUsedAt: string | null;
+  /**
+   * needs_app: an admin must set up this company's sign-in app before anyone can connect.
+   * configured: done, and an admin can change it. ready: nothing to set up.
+   */
+  readonly setup: "ready" | "needs_app" | "configured";
+  /** The redirect address an admin gives the provider during setup. */
+  readonly redirectUrl: string;
+}
+
+export interface ServerAppInput {
+  readonly clientId: string;
+  readonly clientSecret: string;
 }
 
 /** What the HTTP layer needs. Implemented by ConnectionsService; faked in unit tests. */
@@ -58,6 +75,8 @@ export interface ConnectionsApi {
   authorize(scope: UserScope, serverId: string): Promise<{ authorizationUrl: string }>;
   complete(scope: UserScope, code: string, state: string): Promise<{ serverId: string }>;
   disconnect(scope: UserScope, serverId: string): Promise<{ disconnected: boolean; revoked: boolean }>;
+  /** Saves this company's sign-in app. Callers must have checked the user is an admin. */
+  saveApp(scope: UserScope, serverId: string, app: ServerAppInput): Promise<{ saved: true }>;
   tools(scope: UserScope, serverId: string): Promise<readonly ToolInfo[]>;
   search(scope: UserScope, query: string, limit: number): Promise<FederatedResult>;
 }
@@ -85,6 +104,10 @@ export interface ConnectionsDeps {
   readonly onBackgroundError?: (err: unknown) => void;
 }
 
+function appContext(tenantId: string, serverId: string): string {
+  return `app|${tenantId}|${serverId}`;
+}
+
 export function hashState(state: string): string {
   return createHash("sha256").update(state).digest("hex");
 }
@@ -109,7 +132,9 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async list(scope: UserScope): Promise<readonly ConnectionView[]> {
-    const rows = new Map((await listConnections(this.deps.pool, scope)).map((r) => [r.serverId, r]));
+    const rows = new Map((await this.currentConnections(scope)).map((r) => [r.serverId, r]));
+    const apps = new Set((await listServerApps(this.deps.pool, scope.tenantId)).map((a) => a.serverId));
+    const appKeyOf = (def: McpServerDefinition) => def.appKey ?? def.id;
     return this.deps.registry.list().map((def) => {
       const row = rows.get(def.id);
       return {
@@ -117,12 +142,63 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
         displayName: def.displayName,
         status: row?.status ?? "not_connected",
         lastUsedAt: row?.lastUsedAt?.toISOString() ?? null,
+        setup: !def.needsApp || def.client ? "ready" : apps.has(appKeyOf(def)) ? "configured" : "needs_app",
+        redirectUrl: this.deps.client.redirectUrl,
       };
     });
   }
 
-  async authorize(scope: UserScope, serverId: string): Promise<{ authorizationUrl: string }> {
+  async saveApp(scope: UserScope, serverId: string, app: ServerAppInput): Promise<{ saved: true }> {
     const def = this.deps.registry.get(serverId);
+    if (!def.needsApp || def.client) throw new AppError("VALIDATION", "This service does not need setting up");
+    const appKey = def.appKey ?? def.id;
+    await saveServerApp(this.deps.pool, scope, appKey, {
+      clientId: app.clientId,
+      secretCiphertext: this.deps.box.seal(app.clientSecret, appContext(scope.tenantId, appKey)),
+    });
+    // Sessions opened with the previous app stop now; currentConnections asks people to reconnect.
+    const tenantPrefix = `${scope.tenantId}|`;
+    const sharing = this.deps.registry.list().filter((d) => (d.appKey ?? d.id) === appKey);
+    this.idleSessions.evictWhere(
+      (key) => key.startsWith(tenantPrefix) && sharing.some((d) => key.endsWith(`|${d.id}`)),
+    );
+    this.hitCache.deleteByPrefix(tenantPrefix);
+    this.toolCache.deleteByPrefix(tenantPrefix);
+    await this.audit(scope, "connection.app_saved", serverId);
+    return { saved: true };
+  }
+
+  /**
+   * The user's connections. One made before the company's app last changed belongs to the old
+   * app and cannot refresh with the new one, so it needs reconnecting. RLS keeps each user's
+   * rows private, so this is worked out when read rather than updated for everyone at once.
+   */
+  private async currentConnections(scope: UserScope): Promise<ConnectionSummary[]> {
+    const [rows, apps] = await Promise.all([
+      listConnections(this.deps.pool, scope),
+      listServerApps(this.deps.pool, scope.tenantId),
+    ]);
+    const changedAt = new Map(apps.map((app) => [app.serverId, app.updatedAt.getTime()]));
+    const appKeys = new Map(this.deps.registry.list().map((d) => [d.id, d.appKey ?? d.id]));
+    return rows.map((row) => {
+      const appChanged = changedAt.get(appKeys.get(row.serverId) ?? row.serverId) ?? 0;
+      return row.updatedAt.getTime() < appChanged ? { ...row, status: "needs_reauth" as const } : row;
+    });
+  }
+
+  /** The server's definition with this company's sign-in app, when it needs one. */
+  private async definitionFor(scope: UserScope, serverId: string): Promise<McpServerDefinition> {
+    const def = this.deps.registry.get(serverId);
+    if (!def.needsApp || def.client) return def;
+    const appKey = def.appKey ?? def.id;
+    const app = await getServerApp(this.deps.pool, scope.tenantId, appKey);
+    if (!app) throw new AppError("VALIDATION", "An admin needs to set up this service first");
+    const clientSecret = this.deps.box.open(app.secretCiphertext, appContext(scope.tenantId, appKey));
+    return { ...def, client: { clientId: app.clientId, clientSecret } };
+  }
+
+  async authorize(scope: UserScope, serverId: string): Promise<{ authorizationUrl: string }> {
+    const def = await this.definitionFor(scope, serverId);
     const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
     const start = await beginAuthorization(def, store, this.deps.client);
     const stateHash = hashState(start.state);
@@ -153,7 +229,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       throw new AppError("VALIDATION", "Authorization expired, was already used, or belongs to another user");
     }
 
-    const def = this.deps.registry.get(pending.serverId);
+    const def = await this.definitionFor(scope, pending.serverId);
     // Same lock as all session work: a request still using the previous account finishes
     // first, so it cannot re-populate the caches or pool after this reset.
     await this.sessions.run(this.lockKey(scope, def.id), async () => {
@@ -173,7 +249,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     scope: UserScope,
     serverId: string,
   ): Promise<{ disconnected: boolean; revoked: boolean }> {
-    const def = this.deps.registry.get(serverId);
+    const def = await this.definitionFor(scope, serverId);
     return this.sessions.run(this.lockKey(scope, serverId), async () => {
       const tokens = await readStoredTokens(this.deps.pool, this.deps.box, scope, serverId);
       const revoked = tokens
@@ -228,7 +304,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async search(scope: UserScope, query: string, limit: number): Promise<FederatedResult> {
-    const active = (await listConnections(this.deps.pool, scope)).filter(
+    const active = (await this.currentConnections(scope)).filter(
       (c) => c.status === "active" && this.deps.adapters.has(c.serverId),
     );
     const result = await federatedSearch(
@@ -263,7 +339,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     query: string,
     options: { readonly limit: number; readonly maxDocuments: number; readonly signal?: AbortSignal },
   ): Promise<GatheredDocuments> {
-    const active = (await listConnections(this.deps.pool, scope)).filter(
+    const active = (await this.currentConnections(scope)).filter(
       (c) => c.status === "active" && this.deps.adapters.has(c.serverId),
     );
     const bodies = new Map<string, string>();
@@ -376,11 +452,11 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     });
   }
 
-  private openFresh(scope: UserScope, serverId: string): Promise<McpSession> {
+  private async openFresh(scope: UserScope, serverId: string): Promise<McpSession> {
     const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
     // Needing consent ends this account's access, so nothing cached for it may be reused.
     return openSession(
-      this.deps.registry.get(serverId),
+      await this.definitionFor(scope, serverId),
       {
         ...store,
         markNeedsReauth: async () => {
@@ -393,7 +469,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   private async requireActive(scope: UserScope, serverId: string): Promise<void> {
-    const connection = (await listConnections(this.deps.pool, scope)).find((c) => c.serverId === serverId);
+    const connection = (await this.currentConnections(scope)).find((c) => c.serverId === serverId);
     if (connection?.status !== "active") {
       throw new AppError("RECONNECT_REQUIRED", "This connection needs to be reconnected");
     }

@@ -2,7 +2,7 @@
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MIGRATIONS_DIR } from "./config.js";
 import { findUserBySubject } from "./directory.js";
 import { applyMigrations, loadMigrations } from "./migrator.js";
@@ -20,6 +20,7 @@ import {
   auditLog,
   groupMembers,
   mcpConnections,
+  mcpServerApps,
   oauthStates,
   tenants,
   usageLedger,
@@ -29,7 +30,8 @@ import {
 import { appendUsage } from "./usage.js";
 import { GROUPS, TENANTS, seedUser } from "./seed-data.js";
 import { seed } from "./seed.js";
-import { withTenant, withUser } from "./tenant.js";
+import { getServerApp, listServerApps, saveServerApp } from "./server-apps.js";
+import { inScopedTransaction, withTenant, withUser } from "./tenant.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL =
@@ -59,6 +61,7 @@ afterAll(async () => {
   try {
     // These rows belong to a seed user, so they would otherwise count towards that user's caps.
     await owner.query("DELETE FROM write_proposals WHERE server_id = 'leaktest'");
+    await owner.query("DELETE FROM mcp_server_apps WHERE server_id = 'leaktest'");
   } finally {
     await owner.end();
   }
@@ -307,6 +310,46 @@ describe("usage ledger", () => {
   });
 });
 
+describe("demo seed", () => {
+  it("refuses to run in production, before touching the database", async () => {
+    const query = vi.fn();
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      await expect(seed({ query } as never)).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe("server apps belong to one company", () => {
+  const alice = { tenantId: ACME, userId: seedUser("alice").id };
+  const app = { clientId: "leaktest-id", secretCiphertext: "sealed" };
+
+  it("hides a company's app from another company", async () => {
+    await saveServerApp(appPool, alice, "leaktest", app);
+    expect(await getServerApp(appPool, ACME, "leaktest")).toEqual(app);
+    expect(await getServerApp(appPool, GLOBEX, "leaktest")).toBeNull();
+    expect((await listServerApps(appPool, GLOBEX)).map((a) => a.serverId)).not.toContain("leaktest");
+  });
+
+  it("returns nothing when no tenant is set, and rejects writing into another company", async () => {
+    await saveServerApp(appPool, alice, "leaktest", app);
+    const unscoped = await inScopedTransaction(appPool, {}, (db) => db.select().from(mcpServerApps));
+    expect(unscoped).toEqual([]);
+    await expect(
+      withTenant(appPool, GLOBEX, (db) =>
+        db.insert(mcpServerApps).values({ ...app, tenantId: ACME, serverId: "leaktest2", updatedBy: alice.userId }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("cannot be deleted by the app", async () => {
+    await expect(withTenant(appPool, ACME, (db) => db.delete(mcpServerApps))).rejects.toThrow(/permission denied/);
+  });
+});
+
 describe("write proposals are private and cannot change after creation", () => {
   const pat = { tenantId: ACME, userId: seedUser("patAcme").id };
   const bob = { tenantId: ACME, userId: seedUser("bob").id };
@@ -379,7 +422,7 @@ describe("findUserBySubject", () => {
     expect(user).toEqual({
       userId: pat.id,
       tenantId: ACME,
-      role: "member",
+      role: "admin",
       groupIds: [GROUPS[0].id],
     });
   });

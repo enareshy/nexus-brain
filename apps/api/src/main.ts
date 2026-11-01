@@ -1,9 +1,26 @@
 import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
-import { atlassianSearch, atlassianWrites, githubSearch, type SearchAdapter, type WriteAdapter } from "@brain/connectors";
+import {
+  atlassianSearch,
+  atlassianWrites,
+  driveSearch,
+  githubSearch,
+  gmailSearch,
+  slackSearch,
+  type SearchAdapter,
+  type WriteAdapter,
+} from "@brain/connectors";
 import { assertRlsEnforced, createAppPool } from "@brain/db";
 import { createAnthropicGateway } from "@brain/llm-gateway";
-import { ATLASSIAN_SERVER, createGithubServer, createRegistry, type McpServerDefinition } from "@brain/mcp-client";
+import {
+  ATLASSIAN_SERVER,
+  createGithubServer,
+  createGmailServer,
+  createGoogleDriveServer,
+  createRegistry,
+  createSlackServer,
+  type McpServerDefinition,
+} from "@brain/mcp-client";
 import { createLogger, startTracing } from "@brain/telemetry";
 import { createRemoteJWKSet } from "jose";
 import { createApp } from "./app.js";
@@ -16,25 +33,33 @@ import { ProposalsService } from "./proposals/proposals.service.js";
 
 interface KnownServer {
   readonly def: McpServerDefinition;
-  /** A server without one can connect, but is not searched. */
-  readonly adapter?: SearchAdapter;
+  readonly adapter: SearchAdapter;
   readonly writes?: WriteAdapter;
 }
 
 const env = loadApiEnv();
 
-function githubServer(): KnownServer {
-  const { GITHUB_MCP_CLIENT_ID: clientId, GITHUB_MCP_CLIENT_SECRET: clientSecret } = env;
-  if (!clientId || !clientSecret) {
-    throw new AppError("CONFIG_INVALID", "MCP_SERVERS lists github, which needs GITHUB_MCP_CLIENT_ID and GITHUB_MCP_CLIENT_SECRET");
-  }
-  return { def: createGithubServer({ clientId, clientSecret }), adapter: githubSearch };
+/** An app in the environment applies to every company; without one, each company's admin sets it up. */
+function envClient(clientId: string | undefined, clientSecret: string | undefined) {
+  return clientId && clientSecret ? { clientId, clientSecret } : undefined;
 }
 
 /** Servers this build knows how to talk to. MCP_SERVERS selects which are enabled. */
 const KNOWN_SERVERS: Readonly<Record<string, () => KnownServer>> = {
   [ATLASSIAN_SERVER.id]: () => ({ def: ATLASSIAN_SERVER, adapter: atlassianSearch, writes: atlassianWrites }),
-  github: githubServer,
+  github: () => ({
+    def: createGithubServer(envClient(env.GITHUB_MCP_CLIENT_ID, env.GITHUB_MCP_CLIENT_SECRET)),
+    adapter: githubSearch,
+  }),
+  "google-drive": () => ({
+    def: createGoogleDriveServer(envClient(env.GOOGLE_MCP_CLIENT_ID, env.GOOGLE_MCP_CLIENT_SECRET)),
+    adapter: driveSearch,
+  }),
+  gmail: () => ({
+    def: createGmailServer(envClient(env.GOOGLE_MCP_CLIENT_ID, env.GOOGLE_MCP_CLIENT_SECRET)),
+    adapter: gmailSearch,
+  }),
+  slack: () => ({ def: createSlackServer(), adapter: slackSearch }),
 };
 
 const tracing = startTracing("brain-api", env.OTEL_EXPORTER_OTLP_ENDPOINT);
@@ -57,7 +82,7 @@ const connections = new ConnectionsService({
   pool,
   box: createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY),
   registry: createRegistry(enabled.map((e) => e.def)),
-  adapters: new Map(enabled.flatMap((e) => (e.adapter ? [[e.def.id, e.adapter] as const] : []))),
+  adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
   onBackgroundError: (err) => logger.warn({ err }, "MCP session housekeeping failed"),
 });

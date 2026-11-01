@@ -13,8 +13,14 @@ export interface McpServerDefinition {
   /** Test/dev only: permit plain http to loopback. Never set for real servers. */
   readonly allowInsecureLoopback?: boolean;
   readonly scope?: string;
-  /** For servers without client registration: an app created in advance. Never stored per user. */
+  /** The server has no client registration, so each company needs an app created in advance. */
+  readonly needsApp?: boolean;
+  /** Services from one provider can share a company's app. Defaults to the server id. */
+  readonly appKey?: string;
+  /** That app. Comes from the company's encrypted setup or the environment, never from a user's vault. */
   readonly client?: PreRegisteredClient;
+  /** Extra query parameters a provider needs on its consent URL. */
+  readonly authorizationParams?: Readonly<Record<string, string>>;
 }
 
 export interface PreRegisteredClient {
@@ -38,13 +44,75 @@ export const ATLASSIAN_SERVER: McpServerDefinition = Object.freeze({
  * GitHub remote MCP, on the endpoint where the server itself refuses writes. Its sign-in has
  * no client registration (probed 2026-11-01), so it needs a GitHub App created in advance.
  */
-export function createGithubServer(client: PreRegisteredClient): McpServerDefinition {
+export function createGithubServer(client?: PreRegisteredClient): McpServerDefinition {
   return Object.freeze({
     id: "github",
     displayName: "GitHub",
     url: "https://api.githubcopilot.com/mcp/readonly",
     allowedHosts: Object.freeze(["api.githubcopilot.com", "github.com"]),
+    needsApp: true,
+    ...(client ? { client } : {}),
+  });
+}
+
+/**
+ * Google has no client registration (probed 2026-11-01) and issues a refresh token only with
+ * these consent URL parameters. Its services share one company app.
+ */
+function createGoogleServer(
+  server: Pick<McpServerDefinition, "id" | "displayName" | "scope"> & { readonly host: string },
+  client?: PreRegisteredClient,
+): McpServerDefinition {
+  const { host, ...rest } = server;
+  return Object.freeze({
+    ...rest,
+    url: `https://${host}/mcp/v1`,
+    allowedHosts: Object.freeze([host, "accounts.google.com", "oauth2.googleapis.com"]),
+    authorizationParams: Object.freeze({ access_type: "offline", prompt: "consent" }),
+    needsApp: true,
+    appKey: "google",
+    ...(client ? { client } : {}),
+  });
+}
+
+/** Google Drive remote MCP, limited to the read-only scope. */
+export function createGoogleDriveServer(client?: PreRegisteredClient): McpServerDefinition {
+  return createGoogleServer(
+    {
+      id: "google-drive",
+      displayName: "Google Drive",
+      host: "drivemcp.googleapis.com",
+      scope: "https://www.googleapis.com/auth/drive.readonly",
+    },
     client,
+  );
+}
+
+/** Gmail remote MCP, limited to the read-only scope: it cannot send, change or draft mail. */
+export function createGmailServer(client?: PreRegisteredClient): McpServerDefinition {
+  return createGoogleServer(
+    {
+      id: "gmail",
+      displayName: "Gmail",
+      host: "gmailmcp.googleapis.com",
+      scope: "https://www.googleapis.com/auth/gmail.readonly",
+    },
+    client,
+  );
+}
+
+/**
+ * Slack remote MCP. Slack allows only Marketplace and internal apps, with a client secret.
+ * Search and channel reading only: no posting, and no direct or group messages.
+ */
+export function createSlackServer(): McpServerDefinition {
+  return Object.freeze({
+    id: "slack",
+    displayName: "Slack",
+    url: "https://mcp.slack.com/mcp",
+    allowedHosts: Object.freeze(["mcp.slack.com", "slack.com"]),
+    scope: "search:read.public search:read.private channels:history groups:history",
+    needsApp: true,
   });
 }
 

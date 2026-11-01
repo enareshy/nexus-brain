@@ -4,6 +4,8 @@ export * from "./atlassian-writes.js";
 export * from "./extract.js";
 export * from "./federated.js";
 export * from "./github.js";
+export * from "./google.js";
 export * from "./schema-search.js";
+export * from "./slack.js";
 export * from "./types.js";
 export * from "./write-policy.js";

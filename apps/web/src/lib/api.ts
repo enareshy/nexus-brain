@@ -5,6 +5,8 @@ export const ConnectionSchema = z.object({
   displayName: z.string(),
   status: z.enum(["not_connected", "active", "needs_reauth"]),
   lastUsedAt: z.string().nullable(),
+  setup: z.enum(["ready", "needs_app", "configured"]),
+  redirectUrl: z.string(),
 });
 export type Connection = z.infer<typeof ConnectionSchema>;
 
@@ -102,6 +104,7 @@ export interface ApiClient {
   authorize(serverId: string): Promise<{ authorizationUrl: string }>;
   complete(code: string, state: string): Promise<{ serverId: string }>;
   disconnect(serverId: string): Promise<{ disconnected: boolean; revoked: boolean }>;
+  saveServerApp(serverId: string, app: { clientId: string; clientSecret: string }): Promise<{ saved: true }>;
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
@@ -172,6 +175,11 @@ export function createApiClient(
     disconnect: (serverId) =>
       request(z.object({ disconnected: z.boolean(), revoked: z.boolean() }), `/connections/${enc(serverId)}`, {
         method: "DELETE",
+      }),
+    saveServerApp: (serverId, app) =>
+      request(z.object({ saved: z.literal(true) }), `/connections/${enc(serverId)}/app`, {
+        method: "POST",
+        body: JSON.stringify(app),
       }),
     search: (query, options = {}) =>
       request(SearchResultSchema, `/search?q=${enc(query)}&limit=${options.limit ?? 10}`, {
