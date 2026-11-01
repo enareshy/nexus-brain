@@ -202,6 +202,18 @@ async function searchConfluence(session: ToolSession, site: Site, term: string, 
   return parseConfluenceResults(result.text, site);
 }
 
+/** Takes turns between lists, so one long list cannot crowd out the others. */
+export function interleave(lists: readonly (readonly SearchHit[])[], limit: number): SearchHit[] {
+  const merged: SearchHit[] = [];
+  for (let i = 0; merged.length < limit && lists.some((list) => i < list.length); i += 1) {
+    for (const list of lists) {
+      const hit = list[i];
+      if (hit && merged.length < limit) merged.push(hit);
+    }
+  }
+  return merged;
+}
+
 const CONFLUENCE_ID = /^confluence:(\d+)$/;
 
 /** Reads one hit's markdown body. The Jira description shape is documented but not yet seen live. */
@@ -262,14 +274,6 @@ export const atlassianSearch: SearchAdapter = {
     const succeeded = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
     if (succeeded.length === 0) throw new AppError("UNAVAILABLE", "Atlassian search failed");
 
-    // Interleave products so one long list cannot crowd out the other.
-    const merged: SearchHit[] = [];
-    for (let i = 0; merged.length < limit && succeeded.some((list) => i < list.length); i += 1) {
-      for (const list of succeeded) {
-        const hit = list[i];
-        if (hit && merged.length < limit) merged.push(hit);
-      }
-    }
-    return merged;
+    return interleave(succeeded, limit);
   },
 };

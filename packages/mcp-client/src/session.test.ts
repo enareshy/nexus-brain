@@ -1,6 +1,6 @@
 import { AppError } from "@brain/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRegistry } from "./registry.js";
+import { createGithubServer, createRegistry } from "./registry.js";
 import {
   beginAuthorization,
   completeAuthorization,
@@ -89,6 +89,77 @@ describe("OAuth authorization flow", () => {
     await connect("pat", store);
     const again = await beginAuthorization(mock.definition, store, ctx);
     expect(again.authorizationUrl).toContain("/authorize");
+  });
+});
+
+describe("a server without client registration", () => {
+  const client = { clientId: "app-client-id", clientSecret: "app-client-secret" };
+  let appMock: MockMcpServer;
+
+  beforeAll(async () => {
+    appMock = await startMockMcpServer({ issuesByIdentity: ISSUES, preRegisteredClient: client });
+  });
+
+  afterAll(async () => {
+    await appMock.close();
+  });
+
+  it("connects with the configured app, never registers, and never stores its secret", async () => {
+    const def = { ...appMock.definition, client };
+    const store = createMemoryStore();
+    appMock.setNextIdentity("pat");
+
+    const start = await beginAuthorization(def, store, ctx);
+    expect(new URL(start.authorizationUrl).searchParams.get("client_id")).toBe(client.clientId);
+    const consent = await simulateConsent(start.authorizationUrl);
+    await completeAuthorization(def, store, ctx, { code: consent.code, codeVerifier: start.codeVerifier });
+
+    expect(appMock.stats.registrations).toBe(0);
+    expect(store.state.clientInfo).toBeUndefined();
+    expect(JSON.stringify(store.state)).not.toContain(client.clientSecret);
+
+    const session = await openSession(def, store, ctx);
+    await session.close();
+    expect(store.state.tokens?.access_token).toBeTruthy();
+  });
+
+  it("refreshes tokens with the configured app", async () => {
+    const def = { ...appMock.definition, client };
+    const store = createMemoryStore();
+    appMock.setNextIdentity("pat");
+    const start = await beginAuthorization(def, store, ctx);
+    const consent = await simulateConsent(start.authorizationUrl);
+    await completeAuthorization(def, store, ctx, { code: consent.code, codeVerifier: start.codeVerifier });
+
+    const before = appMock.stats.refreshGrants;
+    appMock.expireAccessTokens();
+    const session = await openSession(def, store, ctx);
+    await session.close();
+    expect(appMock.stats.refreshGrants).toBe(before + 1);
+  });
+
+  it("fails clearly when the app's secret is wrong, keeping no tokens", async () => {
+    const def = { ...appMock.definition, client: { ...client, clientSecret: "wrong" } };
+    const store = createMemoryStore();
+    const start = await beginAuthorization(def, store, ctx);
+    const consent = await simulateConsent(start.authorizationUrl);
+    await expect(
+      completeAuthorization(def, store, ctx, { code: consent.code, codeVerifier: start.codeVerifier }),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(store.state.tokens).toBeUndefined();
+  });
+
+  it("cannot connect without an app configured", async () => {
+    await expect(beginAuthorization(appMock.definition, createMemoryStore(), ctx)).rejects.toBeInstanceOf(AppError);
+  });
+});
+
+describe("createGithubServer", () => {
+  it("uses the read-only endpoint and only GitHub's hosts", () => {
+    const def = createGithubServer({ clientId: "id", clientSecret: "secret" });
+    expect(def.url).toBe("https://api.githubcopilot.com/mcp/readonly");
+    expect(def.allowedHosts).toEqual(["api.githubcopilot.com", "github.com"]);
+    expect(def.client).toEqual({ clientId: "id", clientSecret: "secret" });
   });
 });
 

@@ -20,6 +20,8 @@ export interface MockMcpServerOptions {
   readonly issuesByIdentity: Readonly<Record<string, readonly MockIssue[]>>;
   /** Extra text appended to every search result (prompt-injection tests). */
   readonly injectText?: string;
+  /** Models a server with no client registration: only this app may connect, with its secret. */
+  readonly preRegisteredClient?: { readonly clientId: string; readonly clientSecret: string };
 }
 
 export interface MockMcpServer {
@@ -57,6 +59,7 @@ interface Grant {
 }
 
 export async function startMockMcpServer(options: MockMcpServerOptions): Promise<MockMcpServer> {
+  const preRegistered = options.preRegisteredClient;
   const clients = new Map<string, { redirectUris: string[] }>();
   const codes = new Map<string, { identity: string; challenge: string; redirectUri: string; clientId: string }>();
   const accessTokens = new Map<string, Grant>();
@@ -95,15 +98,17 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
         issuer: baseUrl,
         authorization_endpoint: `${baseUrl}/authorize`,
         token_endpoint: `${baseUrl}/token`,
-        registration_endpoint: `${baseUrl}/register`,
+        // GitHub's metadata lists neither registration nor token endpoint auth methods.
+        ...(preRegistered
+          ? {}
+          : { registration_endpoint: `${baseUrl}/register`, token_endpoint_auth_methods_supported: ["none"] }),
         revocation_endpoint: `${baseUrl}/revoke`,
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
         code_challenge_methods_supported: ["S256"],
-        token_endpoint_auth_methods_supported: ["none"],
       });
     }
-    if (path === "/register" && req.method === "POST") {
+    if (path === "/register" && req.method === "POST" && !preRegistered) {
       const body = JSON.parse(await readBody(req)) as { redirect_uris?: string[] };
       const clientId = `client-${randomBytes(8).toString("hex")}`;
       clients.set(clientId, { redirectUris: body.redirect_uris ?? [] });
@@ -114,7 +119,10 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
       const q = url.searchParams;
       const clientId = q.get("client_id") ?? "";
       const redirectUri = q.get("redirect_uri") ?? "";
-      if (!clients.get(clientId)?.redirectUris.includes(redirectUri)) {
+      const knownClient = preRegistered
+        ? clientId === preRegistered.clientId
+        : clients.get(clientId)?.redirectUris.includes(redirectUri);
+      if (!knownClient) {
         return json(res, 400, { error: "invalid_request" });
       }
       if (q.get("code_challenge_method") !== "S256" || !q.get("code_challenge")) {
@@ -130,6 +138,12 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
     }
     if (path === "/token" && req.method === "POST") {
       const form = new URLSearchParams(await readBody(req));
+      if (
+        preRegistered &&
+        (form.get("client_id") !== preRegistered.clientId || form.get("client_secret") !== preRegistered.clientSecret)
+      ) {
+        return json(res, 401, { error: "invalid_client" });
+      }
       if (form.get("grant_type") === "authorization_code") {
         const grant = codes.get(form.get("code") ?? "");
         codes.delete(form.get("code") ?? "");

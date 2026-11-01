@@ -3,6 +3,7 @@ export * from "./atlassian.js";
 export * from "./atlassian-writes.js";
 export * from "./extract.js";
 export * from "./federated.js";
+export * from "./github.js";
 export * from "./schema-search.js";
 export * from "./types.js";
 export * from "./write-policy.js";

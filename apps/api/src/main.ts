@@ -1,9 +1,9 @@
 import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
-import { atlassianSearch, atlassianWrites, type SearchAdapter, type WriteAdapter } from "@brain/connectors";
+import { atlassianSearch, atlassianWrites, githubSearch, type SearchAdapter, type WriteAdapter } from "@brain/connectors";
 import { assertRlsEnforced, createAppPool } from "@brain/db";
 import { createAnthropicGateway } from "@brain/llm-gateway";
-import { ATLASSIAN_SERVER, createRegistry, type McpServerDefinition } from "@brain/mcp-client";
+import { ATLASSIAN_SERVER, createGithubServer, createRegistry, type McpServerDefinition } from "@brain/mcp-client";
 import { createLogger, startTracing } from "@brain/telemetry";
 import { createRemoteJWKSet } from "jose";
 import { createApp } from "./app.js";
@@ -14,13 +14,29 @@ import { AnswersService } from "./answers/answers.service.js";
 import { ConnectionsService } from "./connections/connections.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
 
-/** Servers this build knows how to talk to. MCP_SERVERS selects which are enabled. */
-const KNOWN_SERVERS: ReadonlyMap<
-  string,
-  { def: McpServerDefinition; adapter: SearchAdapter; writes?: WriteAdapter }
-> = new Map([[ATLASSIAN_SERVER.id, { def: ATLASSIAN_SERVER, adapter: atlassianSearch, writes: atlassianWrites }]]);
+interface KnownServer {
+  readonly def: McpServerDefinition;
+  /** A server without one can connect, but is not searched. */
+  readonly adapter?: SearchAdapter;
+  readonly writes?: WriteAdapter;
+}
 
 const env = loadApiEnv();
+
+function githubServer(): KnownServer {
+  const { GITHUB_MCP_CLIENT_ID: clientId, GITHUB_MCP_CLIENT_SECRET: clientSecret } = env;
+  if (!clientId || !clientSecret) {
+    throw new AppError("CONFIG_INVALID", "MCP_SERVERS lists github, which needs GITHUB_MCP_CLIENT_ID and GITHUB_MCP_CLIENT_SECRET");
+  }
+  return { def: createGithubServer({ clientId, clientSecret }), adapter: githubSearch };
+}
+
+/** Servers this build knows how to talk to. MCP_SERVERS selects which are enabled. */
+const KNOWN_SERVERS: Readonly<Record<string, () => KnownServer>> = {
+  [ATLASSIAN_SERVER.id]: () => ({ def: ATLASSIAN_SERVER, adapter: atlassianSearch, writes: atlassianWrites }),
+  github: githubServer,
+};
+
 const tracing = startTracing("brain-api", env.OTEL_EXPORTER_OTLP_ENDPOINT);
 const logger = createLogger({ service: "brain-api", level: env.LOG_LEVEL });
 const pool = createAppPool({
@@ -32,16 +48,16 @@ const pool = createAppPool({
 await assertRlsEnforced(pool);
 
 const enabled = env.MCP_SERVERS.split(",").map((s) => s.trim()).filter(Boolean).map((id) => {
-  const known = KNOWN_SERVERS.get(id);
+  const known = Object.hasOwn(KNOWN_SERVERS, id) ? KNOWN_SERVERS[id] : undefined;
   if (!known) throw new AppError("CONFIG_INVALID", `MCP_SERVERS lists unknown server ${id}`);
-  return known;
+  return known();
 });
 
 const connections = new ConnectionsService({
   pool,
   box: createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY),
   registry: createRegistry(enabled.map((e) => e.def)),
-  adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
+  adapters: new Map(enabled.flatMap((e) => (e.adapter ? [[e.def.id, e.adapter] as const] : []))),
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
   onBackgroundError: (err) => logger.warn({ err }, "MCP session housekeeping failed"),
 });
