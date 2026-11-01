@@ -12,3 +12,7 @@ paths = [
   '''infra/postgres/init/.*''',
   '''pnpm-lock\.yaml''',
 ]
+# Public Atlassian MCP tool names that the 24-character atlassian-api-token rule matches.
+regexes = [
+  '''^(searchJiraIssuesUsingJql|searchConfluenceUsingCql)$''',
+]
