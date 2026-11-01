@@ -17,7 +17,9 @@ import type { ConnectionsApi } from "./connections/connections.service.js";
 import { AnswersController } from "./answers/answers.controller.js";
 import type { AnswersApi } from "./answers/answers.service.js";
 import { HealthController, MeController } from "./controllers.js";
-import { ANSWERS, CONNECTIONS, IDENTITY_VERIFIER, LOGGER, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { ProposalsController } from "./proposals/proposals.controller.js";
+import type { ProposalsApi } from "./proposals/proposals.service.js";
+import { ANSWERS, CONNECTIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -27,6 +29,7 @@ export interface AppDeps {
   readonly logger: Logger;
   readonly connections: ConnectionsApi;
   readonly answers: AnswersApi;
+  readonly proposals: ProposalsApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -43,6 +46,7 @@ class AppModule {
         SearchController,
         OAuthCallbackController,
         AnswersController,
+        ProposalsController,
       ],
       providers: [
         { provide: IDENTITY_VERIFIER, useValue: deps.verifier },
@@ -50,6 +54,7 @@ class AppModule {
         { provide: LOGGER, useValue: deps.logger },
         { provide: CONNECTIONS, useValue: deps.connections },
         { provide: ANSWERS, useValue: deps.answers },
+        { provide: PROPOSALS, useValue: deps.proposals },
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

@@ -8,13 +8,14 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      // Service + vault are covered (and threshold-gated) by the integration suite.
+      // Services, vault and the proposals API are covered (and threshold-gated) by the integration suite.
       exclude: [
         "src/**/*.test.ts",
         "src/main.ts",
         "src/test-support/**",
         "src/connections/connections.service.ts",
         "src/connections/vault-store.ts",
+        "src/proposals/**",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },

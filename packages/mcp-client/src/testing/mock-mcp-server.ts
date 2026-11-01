@@ -42,6 +42,8 @@ export interface MockMcpServer {
   revokeRefreshTokens(): void;
   /** Makes the next MCP request fail, as a session the server has dropped would. */
   failNextMcpRequest(): void;
+  /** Fails the next tool call with this name after receiving it, without running the tool. */
+  failMcpRequestMatching(toolName: string): void;
   /** Slows MCP requests, to hold a request in flight in race tests. */
   setMcpDelay(ms: number): void;
   close(): Promise<void>;
@@ -61,6 +63,7 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
   const refreshTokens = new Map<string, string>();
   const stats = { registrations: 0, codeGrants: 0, refreshGrants: 0, revocations: 0, initializes: 0, mcpCalls: 0 };
   let failNext = false;
+  let failToolName: string | null = null;
   let mcpDelayMs = 0;
   const createdIssues: Array<{ identity: string; summary: string }> = [];
   let nextIdentity = Object.keys(options.issuesByIdentity)[0] ?? "anonymous";
@@ -170,6 +173,10 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
         failNext = false;
         return json(res, 500, { error: "session_lost" });
       }
+      if (failToolName && raw.includes('"method":"tools/call"') && raw.includes(`"name":"${failToolName}"`)) {
+        failToolName = null;
+        return json(res, 500, { error: "connection_lost" });
+      }
       if (raw.includes('"method":"initialize"')) stats.initializes += 1;
       const mcp = buildMcpServer(grant.identity);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
@@ -214,6 +221,18 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
         return { content: [{ type: "text", text: JSON.stringify({ key: `NEW-${createdIssues.length}` }) }] };
       },
     );
+    mcp.registerTool(
+      "delete_issue",
+      {
+        description: "Delete an issue",
+        inputSchema: { summary: z.string() },
+        annotations: { readOnlyHint: false, destructiveHint: true },
+      },
+      async ({ summary }) => {
+        createdIssues.push({ identity, summary: `deleted ${summary}` });
+        return { content: [{ type: "text", text: "{}" }] };
+      },
+    );
     return mcp;
   }
 
@@ -241,6 +260,9 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
     revokeRefreshTokens: () => refreshTokens.clear(),
     failNextMcpRequest: () => {
       failNext = true;
+    },
+    failMcpRequestMatching: (toolName) => {
+      failToolName = toolName;
     },
     setMcpDelay: (ms) => {
       mcpDelayMs = ms;

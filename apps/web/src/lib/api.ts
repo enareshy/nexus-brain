@@ -42,6 +42,42 @@ export const MeSchema = z.object({
 });
 export type Me = z.infer<typeof MeSchema>;
 
+export const ProposalSchema = z.object({
+  id: z.string(),
+  serverId: z.string(),
+  action: z.string(),
+  toolName: z.string(),
+  toolClass: z.enum(["write", "external-effect"]),
+  args: z.record(z.string(), z.unknown()),
+  argsHash: z.string(),
+  status: z.enum(["pending", "executing", "succeeded", "failed", "unknown", "rejected", "expired"]),
+  externalId: z.string().nullable(),
+  url: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+});
+export type Proposal = z.infer<typeof ProposalSchema>;
+
+export const WriteTargetSchema = z.object({
+  siteId: z.string(),
+  siteOrigin: z.string(),
+  projects: z.array(z.object({ key: z.string(), name: z.string(), issueTypes: z.array(z.string()) })),
+});
+export type WriteTarget = z.infer<typeof WriteTargetSchema>;
+
+export type WriteRequest =
+  | {
+      action: "create_issue";
+      siteId: string;
+      projectKey: string;
+      issueType: string;
+      summary: string;
+      description?: string;
+    }
+  | { action: "update_issue"; siteId: string; issueKey: string; summary?: string; description?: string }
+  | { action: "add_comment"; siteId: string; issueKey: string; body: string };
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -69,6 +105,11 @@ export interface ApiClient {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
+  proposals(): Promise<Proposal[]>;
+  writeTargets(serverId: string): Promise<WriteTarget[]>;
+  propose(serverId: string, request: WriteRequest): Promise<Proposal>;
+  approveProposal(id: string, argsHash: string): Promise<Proposal>;
+  rejectProposal(id: string): Promise<Proposal>;
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -136,6 +177,19 @@ export function createApiClient(
       request(SearchResultSchema, `/search?q=${enc(query)}&limit=${options.limit ?? 10}`, {
         signal: options.signal,
       }),
+    proposals: () => request(z.array(ProposalSchema), "/proposals"),
+    writeTargets: (serverId) => request(z.array(WriteTargetSchema), `/proposals/targets/${enc(serverId)}`),
+    propose: (serverId, writeRequest) =>
+      request(ProposalSchema, "/proposals", {
+        method: "POST",
+        body: JSON.stringify({ serverId, request: writeRequest }),
+      }),
+    approveProposal: (id, argsHash) =>
+      request(ProposalSchema, `/proposals/${enc(id)}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ argsHash }),
+      }),
+    rejectProposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}/reject`, { method: "POST" }),
     async openAnswerStream(question, signal) {
       const token = getToken();
       if (!token) throw new ApiError("UNAUTHENTICATED", "Please sign in", 401);

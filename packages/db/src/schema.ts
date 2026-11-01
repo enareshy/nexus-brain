@@ -103,7 +103,31 @@ export const usageLedger = pgTable("usage_ledger", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const writeProposals = pgTable("write_proposals", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  serverId: text("server_id").notNull(),
+  action: text("action").notNull(),
+  toolName: text("tool_name").notNull(),
+  toolClass: text("tool_class").notNull().$type<"write" | "external-effect">(),
+  args: jsonb("args").notNull().$type<Record<string, unknown>>(),
+  argsHash: text("args_hash").notNull(),
+  siteOrigin: text("site_origin").notNull(),
+  status: text("status").notNull().$type<ProposalStatus>(),
+  externalId: text("external_id"),
+  resultUrl: text("result_url"),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | "unknown" | "rejected";
+
 export const schema = {
+  writeProposals,
   usageLedger,
   tenants,
   users,

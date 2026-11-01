@@ -16,6 +16,7 @@ import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConnectionsService } from "./connections.service.js";
+import { unusedProposals } from "../test-support/fake-proposals.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
@@ -55,6 +56,7 @@ beforeAll(async () => {
     directory: createDbUserDirectory(pool),
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
+    proposals: unusedProposals,
     answers: { answer: async () => {} },
     connections: new ConnectionsService({
       pool,
@@ -249,7 +251,7 @@ describe("connect Jira (mock) and search as that user", () => {
   it("lists live tools for the ADR capture", async () => {
     const pat = await as("patAcme");
     const res = await pat("GET", `/connections/${SERVER}/tools`);
-    expect(res.json().data.map((t: { name: string }) => t.name)).toEqual(["search_issues", "create_issue"]);
+    expect(res.json().data.map((t: { name: string }) => t.name)).toEqual(["search_issues", "create_issue", "delete_issue"]);
   });
 
   it("writes audit rows with a keyed query fingerprint, never the raw query", async () => {

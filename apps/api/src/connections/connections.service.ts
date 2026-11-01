@@ -187,11 +187,44 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async tools(scope: UserScope, serverId: string): Promise<readonly ToolInfo[]> {
-    const connection = (await listConnections(this.deps.pool, scope)).find((c) => c.serverId === serverId);
-    if (connection?.status !== "active") {
-      throw new AppError("RECONNECT_REQUIRED", "This connection needs to be reconnected");
-    }
+    await this.requireActive(scope, serverId);
     return this.withSession(scope, serverId, (session) => session.listTools());
+  }
+
+  /** Read-only work on the user's session. `work` may run twice, so it must not change anything. */
+  async readWithSession<T>(
+    scope: UserScope,
+    serverId: string,
+    work: (session: ToolSession) => Promise<T>,
+  ): Promise<T> {
+    await this.requireActive(scope, serverId);
+    return this.withSession(scope, serverId, work);
+  }
+
+  /**
+   * Runs a write once, on a new session, with no retry: repeating it could change data twice.
+   * Search results are dropped afterwards so the change shows up in the next search.
+   */
+  writeWithSession<T>(
+    scope: UserScope,
+    serverId: string,
+    work: (session: ToolSession) => Promise<T>,
+  ): Promise<T> {
+    const key = this.lockKey(scope, serverId);
+    return this.sessions.run(key, async () => {
+      await this.requireActive(scope, serverId);
+      this.idleSessions.evict(key);
+      const session = await this.openFresh(scope, serverId);
+      try {
+        return await work(session);
+      } finally {
+        this.hitCache.deleteByPrefix(`${key}|`);
+        session.close().catch((err: unknown) => this.deps.onBackgroundError?.(err));
+        await touchConnection(this.deps.pool, scope, serverId).catch((err: unknown) =>
+          this.deps.onBackgroundError?.(err),
+        );
+      }
+    });
   }
 
   async search(scope: UserScope, query: string, limit: number): Promise<FederatedResult> {
@@ -318,7 +351,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
    * One session at a time per (tenant, user, server): no refresh-token races.
    * Sessions are reused while idle. If a reused one fails it may simply have gone stale, so
    * `work` runs once more on a fresh session; `work` must therefore be safe to repeat, which
-   * holds today because everything here only reads. Write tools (FR-WR) must not use this path.
+   * holds because everything here only reads. Write tools (FR-WR) use writeWithSession instead.
    */
   private withSession<T>(
     scope: UserScope,
@@ -326,7 +359,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     work: (session: McpSession) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T> {
-    const def = this.deps.registry.get(serverId);
     const key = this.lockKey(scope, serverId);
     return this.sessions.run(key, async () => {
       if (signal?.aborted) throw new AppError("UNAVAILABLE", "Search budget exceeded");
@@ -340,21 +372,31 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
           if (signal?.aborted || !retryable) throw err;
         }
       }
-      const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
-      // Needing consent ends this account's access, so nothing cached for it may be reused.
-      const fresh = await openSession(
-        def,
-        {
-          ...store,
-          markNeedsReauth: async () => {
-            await store.markNeedsReauth();
-            this.forget(scope, serverId);
-          },
-        },
-        this.deps.client,
-      );
-      return this.useSession(key, scope, serverId, fresh, work, signal);
+      return this.useSession(key, scope, serverId, await this.openFresh(scope, serverId), work, signal);
     });
+  }
+
+  private openFresh(scope: UserScope, serverId: string): Promise<McpSession> {
+    const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
+    // Needing consent ends this account's access, so nothing cached for it may be reused.
+    return openSession(
+      this.deps.registry.get(serverId),
+      {
+        ...store,
+        markNeedsReauth: async () => {
+          await store.markNeedsReauth();
+          this.forget(scope, serverId);
+        },
+      },
+      this.deps.client,
+    );
+  }
+
+  private async requireActive(scope: UserScope, serverId: string): Promise<void> {
+    const connection = (await listConnections(this.deps.pool, scope)).find((c) => c.serverId === serverId);
+    if (connection?.status !== "active") {
+      throw new AppError("RECONNECT_REQUIRED", "This connection needs to be reconnected");
+    }
   }
 
   /** Returns the session to the pool only after success. Aborting closes it to free the lock. */

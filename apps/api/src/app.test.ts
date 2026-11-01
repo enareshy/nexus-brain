@@ -7,6 +7,7 @@ import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import type { DirectoryUser, UserDirectory } from "./auth/user-directory.js";
 import { createFakeConnections } from "./test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "./test-support/tokens.js";
+import { unusedProposals } from "./test-support/fake-proposals.js";
 
 const ACME = "0a000000-0000-4000-8000-000000000001";
 const GLOBEX = "0b000000-0000-4000-8000-000000000001";
@@ -46,6 +47,7 @@ beforeAll(async () => {
     logger: silentLogger,
     directory,
     connections: createFakeConnections(),
+    proposals: unusedProposals,
     answers: { answer: async () => {} },
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
