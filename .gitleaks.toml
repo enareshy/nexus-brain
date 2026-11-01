@@ -1,0 +1,14 @@
+title = "nexus-brain"
+
+[extend]
+useDefault = true
+
+# Keep this list short. Only files holding local-only test values belong here;
+# anything else gitleaks flags must be fixed, not allow-listed.
+[allowlist]
+description = "Local development values that work only on a developer's machine"
+paths = [
+  '''infra/keycloak/brain-realm\.json''',
+  '''infra/postgres/init/.*''',
+  '''pnpm-lock\.yaml''',
+]
