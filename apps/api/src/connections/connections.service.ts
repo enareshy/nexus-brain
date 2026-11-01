@@ -322,7 +322,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
           );
         },
       })),
-      { limit },
+      { limit, rerankQuery: query },
     );
 
     await this.audit(scope, "search", undefined, {
@@ -362,7 +362,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
             options.signal ? AbortSignal.any([signal, options.signal]) : signal,
           ),
       })),
-      { limit: options.limit },
+      { limit: options.limit, rerankQuery: query },
     );
     return { ...result, bodies };
   }

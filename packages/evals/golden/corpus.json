@@ -1,0 +1,1204 @@
+{
+  "version": 1,
+  "description": "SYNTHETIC. Invented documents and questions that test ranking mechanics and catch regressions; they say nothing about quality on real company data.",
+  "documents": [
+    {
+      "id": "jira:login",
+      "source": "jira",
+      "title": "SSO login failure",
+      "body": "SSO login failure. Details about login.",
+      "updated": "2026-01-01",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:login",
+      "source": "wiki",
+      "title": "SSO login troubleshooting guide",
+      "body": "SSO login troubleshooting guide. Details about login.",
+      "updated": "2026-02-02",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:login",
+      "source": "github",
+      "title": "Sessions drop after SAML redirect",
+      "body": "Sessions drop after SAML redirect. Details about login.",
+      "updated": "2026-03-03",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-login",
+      "source": "jira",
+      "title": "Weekly team update 1",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned login briefly.",
+      "updated": "2026-10-10",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-login",
+      "source": "wiki",
+      "title": "Weekly team update 1",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned login briefly.",
+      "updated": "2026-10-11",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-login",
+      "source": "github",
+      "title": "Weekly team update 1",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned login briefly.",
+      "updated": "2026-10-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:billing",
+      "source": "jira",
+      "title": "Billing export wrong totals",
+      "body": "Billing export wrong totals. Details about billing.",
+      "updated": "2026-02-02",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:billing",
+      "source": "wiki",
+      "title": "Billing export design",
+      "body": "Billing export design. Details about billing.",
+      "updated": "2026-03-03",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:billing",
+      "source": "github",
+      "title": "Invoice CSV rounding fix",
+      "body": "Invoice CSV rounding fix. Details about billing.",
+      "updated": "2026-04-04",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-billing",
+      "source": "jira",
+      "title": "Weekly team update 2",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned billing briefly.",
+      "updated": "2026-10-11",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-billing",
+      "source": "wiki",
+      "title": "Weekly team update 2",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned billing briefly.",
+      "updated": "2026-10-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-billing",
+      "source": "github",
+      "title": "Weekly team update 2",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned billing briefly.",
+      "updated": "2026-10-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:rotation",
+      "source": "jira",
+      "title": "Signing key rotation overdue",
+      "body": "Signing key rotation overdue. Details about rotation.",
+      "updated": "2026-03-03",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:rotation",
+      "source": "wiki",
+      "title": "Key rotation runbook",
+      "body": "Key rotation runbook. Details about rotation.",
+      "updated": "2026-04-04",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:rotation",
+      "source": "github",
+      "title": "Automate secret rotation job",
+      "body": "Automate secret rotation job. Details about rotation.",
+      "updated": "2026-05-05",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-rotation",
+      "source": "jira",
+      "title": "Weekly team update 3",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned rotation briefly.",
+      "updated": "2026-10-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-rotation",
+      "source": "wiki",
+      "title": "Weekly team update 3",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned rotation briefly.",
+      "updated": "2026-10-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-rotation",
+      "source": "github",
+      "title": "Weekly team update 3",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned rotation briefly.",
+      "updated": "2026-10-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:onboarding",
+      "source": "jira",
+      "title": "New hire onboarding checklist gaps",
+      "body": "New hire onboarding checklist gaps. Details about onboarding.",
+      "updated": "2026-04-04",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:onboarding",
+      "source": "wiki",
+      "title": "Onboarding handbook",
+      "body": "Onboarding handbook. Details about onboarding.",
+      "updated": "2026-05-05",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:onboarding",
+      "source": "github",
+      "title": "Seed accounts for onboarding",
+      "body": "Seed accounts for onboarding. Details about onboarding.",
+      "updated": "2026-06-06",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-onboarding",
+      "source": "jira",
+      "title": "Weekly team update 4",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned onboarding briefly.",
+      "updated": "2026-10-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-onboarding",
+      "source": "wiki",
+      "title": "Weekly team update 4",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned onboarding briefly.",
+      "updated": "2026-10-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-onboarding",
+      "source": "github",
+      "title": "Weekly team update 4",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned onboarding briefly.",
+      "updated": "2026-10-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:roadmap",
+      "source": "jira",
+      "title": "Roadmap review actions",
+      "body": "Roadmap review actions. Details about roadmap.",
+      "updated": "2026-05-05",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:roadmap",
+      "source": "wiki",
+      "title": "Product roadmap 2027",
+      "body": "Product roadmap 2027. Details about roadmap.",
+      "updated": "2026-06-06",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:roadmap",
+      "source": "github",
+      "title": "Roadmap page redesign",
+      "body": "Roadmap page redesign. Details about roadmap.",
+      "updated": "2026-07-07",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-roadmap",
+      "source": "jira",
+      "title": "Weekly team update 5",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned roadmap briefly.",
+      "updated": "2026-10-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-roadmap",
+      "source": "wiki",
+      "title": "Weekly team update 5",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned roadmap briefly.",
+      "updated": "2026-10-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-roadmap",
+      "source": "github",
+      "title": "Weekly team update 5",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned roadmap briefly.",
+      "updated": "2026-10-16",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:incident",
+      "source": "jira",
+      "title": "Incident follow ups from outage",
+      "body": "Incident follow ups from outage. Details about incident.",
+      "updated": "2026-06-06",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:incident",
+      "source": "wiki",
+      "title": "Incident response process",
+      "body": "Incident response process. Details about incident.",
+      "updated": "2026-07-07",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:incident",
+      "source": "github",
+      "title": "Add incident status banner",
+      "body": "Add incident status banner. Details about incident.",
+      "updated": "2026-08-08",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-incident",
+      "source": "jira",
+      "title": "Weekly team update 6",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned incident briefly.",
+      "updated": "2026-10-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-incident",
+      "source": "wiki",
+      "title": "Weekly team update 6",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned incident briefly.",
+      "updated": "2026-10-16",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-incident",
+      "source": "github",
+      "title": "Weekly team update 6",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned incident briefly.",
+      "updated": "2026-10-17",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:backup",
+      "source": "jira",
+      "title": "Nightly backup failing",
+      "body": "Nightly backup failing. Details about backup.",
+      "updated": "2026-07-07",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:backup",
+      "source": "wiki",
+      "title": "Backup and restore policy",
+      "body": "Backup and restore policy. Details about backup.",
+      "updated": "2026-08-08",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:backup",
+      "source": "github",
+      "title": "Verify backup checksums",
+      "body": "Verify backup checksums. Details about backup.",
+      "updated": "2026-09-09",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-backup",
+      "source": "jira",
+      "title": "Weekly team update 7",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned backup briefly.",
+      "updated": "2026-10-16",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-backup",
+      "source": "wiki",
+      "title": "Weekly team update 7",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned backup briefly.",
+      "updated": "2026-10-17",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-backup",
+      "source": "github",
+      "title": "Weekly team update 7",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned backup briefly.",
+      "updated": "2026-10-18",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:migration",
+      "source": "jira",
+      "title": "Database migration blocked",
+      "body": "Database migration blocked. Details about migration.",
+      "updated": "2026-08-08",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:migration",
+      "source": "wiki",
+      "title": "Postgres migration plan",
+      "body": "Postgres migration plan. Details about migration.",
+      "updated": "2026-09-09",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:migration",
+      "source": "github",
+      "title": "Forward only migration runner",
+      "body": "Forward only migration runner. Details about migration.",
+      "updated": "2026-01-10",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-migration",
+      "source": "jira",
+      "title": "Weekly team update 8",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned migration briefly.",
+      "updated": "2026-10-17",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-migration",
+      "source": "wiki",
+      "title": "Weekly team update 8",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned migration briefly.",
+      "updated": "2026-10-18",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-migration",
+      "source": "github",
+      "title": "Weekly team update 8",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned migration briefly.",
+      "updated": "2026-10-19",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:pricing",
+      "source": "jira",
+      "title": "Pricing page shows old plans",
+      "body": "Pricing page shows old plans. Details about pricing.",
+      "updated": "2026-09-09",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:pricing",
+      "source": "wiki",
+      "title": "Pricing strategy notes",
+      "body": "Pricing strategy notes. Details about pricing.",
+      "updated": "2026-01-10",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:pricing",
+      "source": "github",
+      "title": "Update pricing table",
+      "body": "Update pricing table. Details about pricing.",
+      "updated": "2026-02-11",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-pricing",
+      "source": "jira",
+      "title": "Weekly team update 9",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned pricing briefly.",
+      "updated": "2026-10-18",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-pricing",
+      "source": "wiki",
+      "title": "Weekly team update 9",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned pricing briefly.",
+      "updated": "2026-10-19",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-pricing",
+      "source": "github",
+      "title": "Weekly team update 9",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned pricing briefly.",
+      "updated": "2026-10-20",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:security",
+      "source": "jira",
+      "title": "Security review findings",
+      "body": "Security review findings. Details about security.",
+      "updated": "2026-01-10",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:security",
+      "source": "wiki",
+      "title": "Security policy",
+      "body": "Security policy. Details about security.",
+      "updated": "2026-02-11",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:security",
+      "source": "github",
+      "title": "Harden security headers",
+      "body": "Harden security headers. Details about security.",
+      "updated": "2026-03-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-security",
+      "source": "jira",
+      "title": "Weekly team update 10",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned security briefly.",
+      "updated": "2026-10-19",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-security",
+      "source": "wiki",
+      "title": "Weekly team update 10",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned security briefly.",
+      "updated": "2026-10-20",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-security",
+      "source": "github",
+      "title": "Weekly team update 10",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned security briefly.",
+      "updated": "2026-10-21",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:deployment",
+      "source": "jira",
+      "title": "Deployment pipeline flaky",
+      "body": "Deployment pipeline flaky. Details about deployment.",
+      "updated": "2026-02-11",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:deployment",
+      "source": "wiki",
+      "title": "Deployment guide",
+      "body": "Deployment guide. Details about deployment.",
+      "updated": "2026-03-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:deployment",
+      "source": "github",
+      "title": "Canary deployment support",
+      "body": "Canary deployment support. Details about deployment.",
+      "updated": "2026-04-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-deployment",
+      "source": "jira",
+      "title": "Weekly team update 11",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned deployment briefly.",
+      "updated": "2026-10-20",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-deployment",
+      "source": "wiki",
+      "title": "Weekly team update 11",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned deployment briefly.",
+      "updated": "2026-10-21",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-deployment",
+      "source": "github",
+      "title": "Weekly team update 11",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned deployment briefly.",
+      "updated": "2026-10-22",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:hiring",
+      "source": "jira",
+      "title": "Hiring plan approvals",
+      "body": "Hiring plan approvals. Details about hiring.",
+      "updated": "2026-03-12",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:hiring",
+      "source": "wiki",
+      "title": "Hiring process",
+      "body": "Hiring process. Details about hiring.",
+      "updated": "2026-04-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:hiring",
+      "source": "github",
+      "title": "Careers page openings",
+      "body": "Careers page openings. Details about hiring.",
+      "updated": "2026-05-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-hiring",
+      "source": "jira",
+      "title": "Weekly team update 12",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned hiring briefly.",
+      "updated": "2026-10-21",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-hiring",
+      "source": "wiki",
+      "title": "Weekly team update 12",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned hiring briefly.",
+      "updated": "2026-10-22",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-hiring",
+      "source": "github",
+      "title": "Weekly team update 12",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned hiring briefly.",
+      "updated": "2026-10-23",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:analytics",
+      "source": "jira",
+      "title": "Analytics dashboard stale",
+      "body": "Analytics dashboard stale. Details about analytics.",
+      "updated": "2026-04-13",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:analytics",
+      "source": "wiki",
+      "title": "Analytics event catalogue",
+      "body": "Analytics event catalogue. Details about analytics.",
+      "updated": "2026-05-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:analytics",
+      "source": "github",
+      "title": "Add analytics tracking",
+      "body": "Add analytics tracking. Details about analytics.",
+      "updated": "2026-06-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-analytics",
+      "source": "jira",
+      "title": "Weekly team update 13",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned analytics briefly.",
+      "updated": "2026-10-22",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-analytics",
+      "source": "wiki",
+      "title": "Weekly team update 13",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned analytics briefly.",
+      "updated": "2026-10-23",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-analytics",
+      "source": "github",
+      "title": "Weekly team update 13",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned analytics briefly.",
+      "updated": "2026-10-24",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:mobile",
+      "source": "jira",
+      "title": "Mobile app crash on start",
+      "body": "Mobile app crash on start. Details about mobile.",
+      "updated": "2026-05-14",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:mobile",
+      "source": "wiki",
+      "title": "Mobile release checklist",
+      "body": "Mobile release checklist. Details about mobile.",
+      "updated": "2026-06-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:mobile",
+      "source": "github",
+      "title": "Fix mobile push tokens",
+      "body": "Fix mobile push tokens. Details about mobile.",
+      "updated": "2026-07-16",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-mobile",
+      "source": "jira",
+      "title": "Weekly team update 14",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned mobile briefly.",
+      "updated": "2026-10-23",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-mobile",
+      "source": "wiki",
+      "title": "Weekly team update 14",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned mobile briefly.",
+      "updated": "2026-10-24",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-mobile",
+      "source": "github",
+      "title": "Weekly team update 14",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned mobile briefly.",
+      "updated": "2026-10-25",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:compliance",
+      "source": "jira",
+      "title": "Compliance audit evidence",
+      "body": "Compliance audit evidence. Details about compliance.",
+      "updated": "2026-06-15",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:compliance",
+      "source": "wiki",
+      "title": "Compliance controls",
+      "body": "Compliance controls. Details about compliance.",
+      "updated": "2026-07-16",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:compliance",
+      "source": "github",
+      "title": "Export compliance logs",
+      "body": "Export compliance logs. Details about compliance.",
+      "updated": "2026-08-17",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "jira:note-compliance",
+      "source": "jira",
+      "title": "Weekly team update 15",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned compliance briefly.",
+      "updated": "2026-10-24",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:note-compliance",
+      "source": "wiki",
+      "title": "Weekly team update 15",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned compliance briefly.",
+      "updated": "2026-10-25",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "github:note-compliance",
+      "source": "github",
+      "title": "Weekly team update 15",
+      "body": "Meeting notes, holiday cover, office move and lunch rota. Someone also mentioned compliance briefly.",
+      "updated": "2026-10-26",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme"
+      ]
+    },
+    {
+      "id": "wiki:exec-comp",
+      "source": "wiki",
+      "title": "Executive compensation review",
+      "body": "Executive compensation review. Restricted.",
+      "updated": "2026-10-30",
+      "visibleTo": [
+        "alice"
+      ]
+    },
+    {
+      "id": "wiki:layoff-plan",
+      "source": "wiki",
+      "title": "Restructuring plan draft",
+      "body": "Restructuring plan draft. Restricted.",
+      "updated": "2026-10-30",
+      "visibleTo": [
+        "alice"
+      ]
+    },
+    {
+      "id": "wiki:acquisition",
+      "source": "wiki",
+      "title": "Acquisition target shortlist",
+      "body": "Acquisition target shortlist. Restricted.",
+      "updated": "2026-10-30",
+      "visibleTo": [
+        "alice"
+      ]
+    },
+    {
+      "id": "wiki:board-notes",
+      "source": "wiki",
+      "title": "Board meeting notes",
+      "body": "Board meeting notes. Restricted.",
+      "updated": "2026-10-30",
+      "visibleTo": [
+        "alice"
+      ]
+    },
+    {
+      "id": "wiki:legal-dispute",
+      "source": "wiki",
+      "title": "Legal dispute summary",
+      "body": "Legal dispute summary. Restricted.",
+      "updated": "2026-10-30",
+      "visibleTo": [
+        "alice"
+      ]
+    },
+    {
+      "id": "globex:login",
+      "source": "wiki",
+      "title": "Globex login plan",
+      "body": "Globex notes about login.",
+      "updated": "2026-01-01",
+      "visibleTo": [
+        "patGlobex",
+        "gus"
+      ]
+    },
+    {
+      "id": "globex:billing",
+      "source": "wiki",
+      "title": "Globex billing plan",
+      "body": "Globex notes about billing.",
+      "updated": "2026-02-02",
+      "visibleTo": [
+        "patGlobex",
+        "gus"
+      ]
+    },
+    {
+      "id": "globex:rotation",
+      "source": "wiki",
+      "title": "Globex rotation plan",
+      "body": "Globex notes about rotation.",
+      "updated": "2026-03-03",
+      "visibleTo": [
+        "patGlobex",
+        "gus"
+      ]
+    },
+    {
+      "id": "globex:onboarding",
+      "source": "wiki",
+      "title": "Globex onboarding plan",
+      "body": "Globex notes about onboarding.",
+      "updated": "2026-04-04",
+      "visibleTo": [
+        "patGlobex",
+        "gus"
+      ]
+    },
+    {
+      "id": "globex:roadmap",
+      "source": "wiki",
+      "title": "Globex roadmap plan",
+      "body": "Globex notes about roadmap.",
+      "updated": "2026-05-05",
+      "visibleTo": [
+        "patGlobex",
+        "gus"
+      ]
+    },
+    {
+      "id": "wiki:public-faq",
+      "source": "wiki",
+      "title": "Company FAQ",
+      "body": "Office address and holidays.",
+      "updated": "2026-05-05",
+      "visibleTo": [
+        "alice",
+        "bob",
+        "patAcme",
+        "gina"
+      ]
+    }
+  ]
+}
