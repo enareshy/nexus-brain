@@ -2,10 +2,12 @@ import type { ToolInfo, ToolResult } from "@brain/mcp-client";
 import { describe, expect, it } from "vitest";
 import {
   atlassianSearch,
+  buildCql,
   buildJql,
   parseConfluenceResults,
   parseJiraIssues,
   parseSites,
+  toKeywords,
   toTextSearchTerm,
 } from "./atlassian.js";
 import type { ToolSession } from "./types.js";
@@ -135,8 +137,34 @@ describe("buildJql", () => {
   });
 
   it("uses a text search for everything else", () => {
-    expect(buildJql("login bug", "login bug")).toBe('text ~ "login bug" ORDER BY updated DESC');
-    expect(buildJql('ACME-1" OR x', "ACME 1 OR x")).toBe('text ~ "ACME 1 OR x" ORDER BY updated DESC');
+    expect(buildJql("login", "login")).toBe('text ~ "login" ORDER BY updated DESC');
+    expect(buildJql("login bug", "login bug")).toBe('(text ~ "login" OR text ~ "bug") ORDER BY updated DESC');
+    expect(buildJql('ACME-1" OR x', "ACME 1 OR x")).toBe('(text ~ "ACME" OR text ~ "1" OR text ~ "x") ORDER BY updated DESC');
+  });
+});
+
+describe("toKeywords and buildCql", () => {
+  it("turns a natural question into its meaningful words", () => {
+    expect(toKeywords("What is the project about")).toEqual(["project"]);
+    expect(toKeywords("How do we rotate the API signing keys")).toEqual(["rotate", "API", "signing", "keys"]);
+  });
+
+  it("keeps words when a query is only stop words, so it still searches", () => {
+    expect(toKeywords("what is this")).toEqual(["what", "is", "this"]);
+  });
+
+  it("dedupes case-insensitively and caps the number of keywords", () => {
+    expect(toKeywords("Login login LOGIN")).toEqual(["LOGIN"]);
+    expect(toKeywords("a1 b2 c3 d4 e5 f6 g7 h8 i9 j10")).toHaveLength(8);
+  });
+
+  it("groups keywords so they cannot escape the page filter", () => {
+    expect(buildCql("login")).toBe('type = page AND text ~ "login"');
+    expect(buildCql("login bug")).toBe('type = page AND (text ~ "login" OR text ~ "bug")');
+  });
+
+  it("removes query operators, including comparison operators", () => {
+    expect(toTextSearchTerm("a=b, c<d. e>f;")).toBe("a b c d e f");
   });
 });
 
@@ -218,8 +246,8 @@ describe("atlassianSearch", () => {
     const session = fakeSession(full);
     await atlassianSearch.search(session, 'x" OR project = SECRET OR text ~ "y', 5);
     const jira = session.calls.find(([name]) => name === "searchJiraIssuesUsingJql")?.[1];
-    // Quotes are gone, so everything stays inside one string literal.
-    expect(jira?.jql).toBe('text ~ "x OR project = SECRET OR text y" ORDER BY updated DESC');
+    // Quotes and operators are gone, and each word sits in its own literal.
+    expect(jira?.jql).toBe('(text ~ "x" OR text ~ "project" OR text ~ "SECRET" OR text ~ "text" OR text ~ "y") ORDER BY updated DESC');
   });
 
   it("only uses products the grant covers", async () => {

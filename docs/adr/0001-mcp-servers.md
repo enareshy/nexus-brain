@@ -15,7 +15,7 @@ Raw tool list: [`0001-atlassian-tools.json`](0001-atlassian-tools.json) (32 tool
 2. **Dedicated parser, not the generic extractor.** Confluence URLs are relative, and results embed people data (including email) that must not be copied.
 3. **Citations are built from the site URL** in `getAccessibleAtlassianResources` (https `*.atlassian.net` only), never from result payloads. Jira `self` links point at `api.atlassian.com`, so they are not browsable anyway.
 4. **Merge sites by id.** The server lists one entry per product for the same site. Use each entry's scopes to decide which product to search.
-5. **Text queries are reduced to plain words.** Operators are stripped so user input cannot change JQL/CQL meaning or cause syntax errors.
+5. **Text queries are reduced to plain keywords, matched with OR.** Operators are stripped so user input cannot change JQL/CQL meaning or cause syntax errors. A live test showed a `text ~` phrase of a whole question ("What is the project about") returns nothing while its keyword ("project") returns results, so stop words are removed (English only for now) and each keyword gets its own literal. OR matching favours recall; ranking quality still needs measuring with a golden set.
 
 ### Observed behaviour
 | Item | Result |

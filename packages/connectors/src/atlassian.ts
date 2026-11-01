@@ -16,7 +16,16 @@ const SNIPPET_CHARS = 300;
 const SITE_HOST = /^[a-z0-9-]+\.atlassian\.net$/i;
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 /** Characters with special meaning in Jira/Confluence text search (Lucene syntax). */
-const TEXT_SEARCH_OPERATORS = /[+\-&|!(){}[\]^~*?:\\/"']/g;
+const TEXT_SEARCH_OPERATORS = /[+\-&|!(){}[\]^~*?:\\/"'=<>,.;]/g;
+const MAX_KEYWORDS = 8;
+/** Words that carry no search meaning. English only for now. */
+const STOP_WORDS = new Set(
+  (
+    "a about after all also am an and any are as at be been but by can could did do does for from had has have how i if " +
+    "in into is it its me my no not of on or our should so tell that the their them there these this to us was we were " +
+    "what when where which who why will with would you your"
+  ).split(" "),
+);
 
 interface Site {
   readonly id: string;
@@ -138,11 +147,32 @@ function stripHighlights(text: string): string {
   return text.replace(/@@@(?:end)?hl@@@/g, "").replace(/\s+/g, " ").trim();
 }
 
-/** An exact issue key searches by key; anything else is a text search of plain words. */
+/**
+ * Meaningful words of a question, deduplicated. A `text ~` phrase of a whole sentence
+ * rarely matches anything, so questions search on their keywords instead.
+ */
+export function toKeywords(term: string): string[] {
+  const words = term.split(" ").filter(Boolean);
+  const meaningful = words.filter((word) => !STOP_WORDS.has(word.toLowerCase()));
+  const unique = new Map((meaningful.length > 0 ? meaningful : words).map((w) => [w.toLowerCase(), w]));
+  return [...unique.values()].slice(0, MAX_KEYWORDS);
+}
+
+/** Matches any keyword; each stays inside its own quoted literal. */
+function textClause(term: string): string {
+  const clauses = toKeywords(term).map((word) => `text ~ "${escapeJql(word)}"`);
+  return clauses.length > 1 ? `(${clauses.join(" OR ")})` : (clauses[0] ?? "");
+}
+
+/** An exact issue key searches by key; anything else is a keyword text search. */
 export function buildJql(query: string, term: string): string {
   const candidate = query.trim().toUpperCase();
   if (ISSUE_KEY.test(candidate)) return `key = "${candidate}"`;
-  return `text ~ "${escapeJql(term)}" ORDER BY updated DESC`;
+  return `${textClause(term)} ORDER BY updated DESC`;
+}
+
+export function buildCql(term: string): string {
+  return `type = page AND ${textClause(term)}`;
 }
 
 async function searchJira(
@@ -165,7 +195,7 @@ async function searchJira(
 async function searchConfluence(session: ToolSession, site: Site, term: string, limit: number): Promise<SearchHit[]> {
   const result = await session.callTool(CONFLUENCE_TOOL, {
     cloudId: site.id,
-    cql: `type = page AND text ~ "${escapeJql(term)}"`,
+    cql: buildCql(term),
     limit,
   });
   if (result.isError) throw new AppError("UNAVAILABLE", "Confluence search failed");
