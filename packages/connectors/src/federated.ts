@@ -1,4 +1,5 @@
 import { isAppError } from "@brain/core";
+import { rerankHits } from "./rerank.js";
 import type { SearchHit } from "./types.js";
 
 /** Reciprocal-rank-fusion constant (standard value). */
@@ -38,7 +39,12 @@ export interface FederatedResult {
  */
 export async function federatedSearch(
   sources: readonly FederatedSource[],
-  options: { readonly limit: number; readonly budgetMs?: number },
+  options: {
+    readonly limit: number;
+    readonly budgetMs?: number;
+    /** The user's question. When given, results are reranked against it before the limit applies. */
+    readonly rerankQuery?: string;
+  },
 ): Promise<FederatedResult> {
   const budget = options.budgetMs ?? DEFAULT_BUDGET_MS;
   const outcomes = await Promise.all(sources.map((s) => runWithBudget(s, budget)));
@@ -52,8 +58,9 @@ export async function federatedSearch(
     });
   }
 
-  const hits = [...merged.values()].sort((a, b) => b.score - a.score).slice(0, options.limit);
-  return { hits, sources: outcomes.map((o) => o.status) };
+  const fused = [...merged.values()].sort((a, b) => b.score - a.score);
+  const ordered = options.rerankQuery === undefined ? fused : rerankHits(options.rerankQuery, fused);
+  return { hits: ordered.slice(0, options.limit), sources: outcomes.map((o) => o.status) };
 }
 
 async function runWithBudget(

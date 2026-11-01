@@ -1,0 +1,3627 @@
+{
+  "version": 1,
+  "description": "SYNTHETIC. Invented documents and questions that test ranking mechanics and catch regressions; they say nothing about quality on real company data.",
+  "minRecallAtK": 0.8,
+  "cases": [
+    {
+      "id": "exact-title-1",
+      "asUser": "alice",
+      "query": "SSO login failure",
+      "expected": [
+        "jira:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-2",
+      "asUser": "bob",
+      "query": "Billing export wrong totals",
+      "expected": [
+        "jira:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-3",
+      "asUser": "patAcme",
+      "query": "Signing key rotation overdue",
+      "expected": [
+        "jira:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-4",
+      "asUser": "alice",
+      "query": "New hire onboarding checklist gaps",
+      "expected": [
+        "jira:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-5",
+      "asUser": "bob",
+      "query": "Roadmap review actions",
+      "expected": [
+        "jira:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-6",
+      "asUser": "patAcme",
+      "query": "Incident follow ups from outage",
+      "expected": [
+        "jira:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-7",
+      "asUser": "alice",
+      "query": "Nightly backup failing",
+      "expected": [
+        "jira:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-8",
+      "asUser": "bob",
+      "query": "Database migration blocked",
+      "expected": [
+        "jira:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-9",
+      "asUser": "patAcme",
+      "query": "Pricing page shows old plans",
+      "expected": [
+        "jira:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-10",
+      "asUser": "alice",
+      "query": "Security review findings",
+      "expected": [
+        "jira:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-11",
+      "asUser": "bob",
+      "query": "Deployment pipeline flaky",
+      "expected": [
+        "jira:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-12",
+      "asUser": "patAcme",
+      "query": "Hiring plan approvals",
+      "expected": [
+        "jira:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-13",
+      "asUser": "alice",
+      "query": "Analytics dashboard stale",
+      "expected": [
+        "jira:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-14",
+      "asUser": "bob",
+      "query": "Mobile app crash on start",
+      "expected": [
+        "jira:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-15",
+      "asUser": "patAcme",
+      "query": "Compliance audit evidence",
+      "expected": [
+        "jira:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-16",
+      "asUser": "alice",
+      "query": "SSO login troubleshooting guide",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-17",
+      "asUser": "bob",
+      "query": "Billing export design",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-18",
+      "asUser": "patAcme",
+      "query": "Key rotation runbook",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-19",
+      "asUser": "alice",
+      "query": "Onboarding handbook",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-20",
+      "asUser": "bob",
+      "query": "Product roadmap 2027",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-21",
+      "asUser": "patAcme",
+      "query": "Incident response process",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-22",
+      "asUser": "alice",
+      "query": "Backup and restore policy",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-23",
+      "asUser": "bob",
+      "query": "Postgres migration plan",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-24",
+      "asUser": "patAcme",
+      "query": "Pricing strategy notes",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-25",
+      "asUser": "alice",
+      "query": "Security policy",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-26",
+      "asUser": "bob",
+      "query": "Deployment guide",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-27",
+      "asUser": "patAcme",
+      "query": "Hiring process",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-28",
+      "asUser": "alice",
+      "query": "Analytics event catalogue",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-29",
+      "asUser": "bob",
+      "query": "Mobile release checklist",
+      "expected": [
+        "wiki:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-30",
+      "asUser": "patAcme",
+      "query": "Compliance controls",
+      "expected": [
+        "wiki:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-31",
+      "asUser": "alice",
+      "query": "Sessions drop after SAML redirect",
+      "expected": [
+        "github:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-32",
+      "asUser": "bob",
+      "query": "Invoice CSV rounding fix",
+      "expected": [
+        "github:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-33",
+      "asUser": "patAcme",
+      "query": "Automate secret rotation job",
+      "expected": [
+        "github:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-34",
+      "asUser": "alice",
+      "query": "Seed accounts for onboarding",
+      "expected": [
+        "github:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-35",
+      "asUser": "bob",
+      "query": "Roadmap page redesign",
+      "expected": [
+        "github:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-36",
+      "asUser": "patAcme",
+      "query": "Add incident status banner",
+      "expected": [
+        "github:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-37",
+      "asUser": "alice",
+      "query": "Verify backup checksums",
+      "expected": [
+        "github:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-38",
+      "asUser": "bob",
+      "query": "Forward only migration runner",
+      "expected": [
+        "github:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-39",
+      "asUser": "patAcme",
+      "query": "Update pricing table",
+      "expected": [
+        "github:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-40",
+      "asUser": "alice",
+      "query": "Harden security headers",
+      "expected": [
+        "github:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-41",
+      "asUser": "bob",
+      "query": "Canary deployment support",
+      "expected": [
+        "github:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-42",
+      "asUser": "patAcme",
+      "query": "Careers page openings",
+      "expected": [
+        "github:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-43",
+      "asUser": "alice",
+      "query": "Add analytics tracking",
+      "expected": [
+        "github:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-44",
+      "asUser": "bob",
+      "query": "Fix mobile push tokens",
+      "expected": [
+        "github:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-45",
+      "asUser": "patAcme",
+      "query": "Export compliance logs",
+      "expected": [
+        "github:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-46",
+      "asUser": "alice",
+      "query": "SSO login failure",
+      "expected": [
+        "jira:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-47",
+      "asUser": "bob",
+      "query": "Billing export wrong totals",
+      "expected": [
+        "jira:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-48",
+      "asUser": "patAcme",
+      "query": "Signing key rotation overdue",
+      "expected": [
+        "jira:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-49",
+      "asUser": "alice",
+      "query": "New hire onboarding checklist gaps",
+      "expected": [
+        "jira:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-50",
+      "asUser": "bob",
+      "query": "Roadmap review actions",
+      "expected": [
+        "jira:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-51",
+      "asUser": "patAcme",
+      "query": "Incident follow ups from outage",
+      "expected": [
+        "jira:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-52",
+      "asUser": "alice",
+      "query": "Nightly backup failing",
+      "expected": [
+        "jira:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-53",
+      "asUser": "bob",
+      "query": "Database migration blocked",
+      "expected": [
+        "jira:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-54",
+      "asUser": "patAcme",
+      "query": "Pricing page shows old plans",
+      "expected": [
+        "jira:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-55",
+      "asUser": "alice",
+      "query": "Security review findings",
+      "expected": [
+        "jira:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-56",
+      "asUser": "bob",
+      "query": "Deployment pipeline flaky",
+      "expected": [
+        "jira:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-57",
+      "asUser": "patAcme",
+      "query": "Hiring plan approvals",
+      "expected": [
+        "jira:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-58",
+      "asUser": "alice",
+      "query": "Analytics dashboard stale",
+      "expected": [
+        "jira:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-59",
+      "asUser": "bob",
+      "query": "Mobile app crash on start",
+      "expected": [
+        "jira:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "exact-title-60",
+      "asUser": "patAcme",
+      "query": "Compliance audit evidence",
+      "expected": [
+        "jira:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "exact-title"
+      ]
+    },
+    {
+      "id": "keyword-61",
+      "asUser": "alice",
+      "query": "what is the status of sso login failure",
+      "expected": [
+        "jira:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-62",
+      "asUser": "bob",
+      "query": "tell me about billing export design",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-63",
+      "asUser": "patAcme",
+      "query": "any news on automate secret rotation job?",
+      "expected": [
+        "github:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-64",
+      "asUser": "alice",
+      "query": "what is the status of new hire onboarding checklist gaps",
+      "expected": [
+        "jira:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-65",
+      "asUser": "bob",
+      "query": "tell me about product roadmap 2027",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-66",
+      "asUser": "patAcme",
+      "query": "any news on add incident status banner?",
+      "expected": [
+        "github:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-67",
+      "asUser": "alice",
+      "query": "what is the status of nightly backup failing",
+      "expected": [
+        "jira:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-68",
+      "asUser": "bob",
+      "query": "tell me about postgres migration plan",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-69",
+      "asUser": "patAcme",
+      "query": "any news on update pricing table?",
+      "expected": [
+        "github:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-70",
+      "asUser": "alice",
+      "query": "what is the status of security review findings",
+      "expected": [
+        "jira:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-71",
+      "asUser": "bob",
+      "query": "tell me about deployment guide",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-72",
+      "asUser": "patAcme",
+      "query": "any news on careers page openings?",
+      "expected": [
+        "github:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-73",
+      "asUser": "alice",
+      "query": "what is the status of analytics dashboard stale",
+      "expected": [
+        "jira:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-74",
+      "asUser": "bob",
+      "query": "tell me about mobile release checklist",
+      "expected": [
+        "wiki:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-75",
+      "asUser": "patAcme",
+      "query": "any news on export compliance logs?",
+      "expected": [
+        "github:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-76",
+      "asUser": "alice",
+      "query": "what is the status of sso login troubleshooting guide",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-77",
+      "asUser": "bob",
+      "query": "tell me about invoice csv rounding fix",
+      "expected": [
+        "github:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-78",
+      "asUser": "patAcme",
+      "query": "any news on signing key rotation overdue?",
+      "expected": [
+        "jira:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-79",
+      "asUser": "alice",
+      "query": "what is the status of onboarding handbook",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-80",
+      "asUser": "bob",
+      "query": "tell me about roadmap page redesign",
+      "expected": [
+        "github:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-81",
+      "asUser": "patAcme",
+      "query": "any news on incident follow ups from outage?",
+      "expected": [
+        "jira:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-82",
+      "asUser": "alice",
+      "query": "what is the status of backup and restore policy",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-83",
+      "asUser": "bob",
+      "query": "tell me about forward only migration runner",
+      "expected": [
+        "github:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-84",
+      "asUser": "patAcme",
+      "query": "any news on pricing page shows old plans?",
+      "expected": [
+        "jira:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-85",
+      "asUser": "alice",
+      "query": "what is the status of security policy",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-86",
+      "asUser": "bob",
+      "query": "tell me about canary deployment support",
+      "expected": [
+        "github:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-87",
+      "asUser": "patAcme",
+      "query": "any news on hiring plan approvals?",
+      "expected": [
+        "jira:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-88",
+      "asUser": "alice",
+      "query": "what is the status of analytics event catalogue",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-89",
+      "asUser": "bob",
+      "query": "tell me about fix mobile push tokens",
+      "expected": [
+        "github:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-90",
+      "asUser": "patAcme",
+      "query": "any news on compliance audit evidence?",
+      "expected": [
+        "jira:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-91",
+      "asUser": "alice",
+      "query": "what is the status of sessions drop after saml redirect",
+      "expected": [
+        "github:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-92",
+      "asUser": "bob",
+      "query": "tell me about billing export wrong totals",
+      "expected": [
+        "jira:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-93",
+      "asUser": "patAcme",
+      "query": "any news on key rotation runbook?",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-94",
+      "asUser": "alice",
+      "query": "what is the status of seed accounts for onboarding",
+      "expected": [
+        "github:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-95",
+      "asUser": "bob",
+      "query": "tell me about roadmap review actions",
+      "expected": [
+        "jira:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-96",
+      "asUser": "patAcme",
+      "query": "any news on incident response process?",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-97",
+      "asUser": "alice",
+      "query": "what is the status of verify backup checksums",
+      "expected": [
+        "github:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-98",
+      "asUser": "bob",
+      "query": "tell me about database migration blocked",
+      "expected": [
+        "jira:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-99",
+      "asUser": "patAcme",
+      "query": "any news on pricing strategy notes?",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-100",
+      "asUser": "alice",
+      "query": "what is the status of harden security headers",
+      "expected": [
+        "github:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-101",
+      "asUser": "bob",
+      "query": "tell me about deployment pipeline flaky",
+      "expected": [
+        "jira:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-102",
+      "asUser": "patAcme",
+      "query": "any news on hiring process?",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-103",
+      "asUser": "alice",
+      "query": "what is the status of add analytics tracking",
+      "expected": [
+        "github:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-104",
+      "asUser": "bob",
+      "query": "tell me about mobile app crash on start",
+      "expected": [
+        "jira:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-105",
+      "asUser": "patAcme",
+      "query": "any news on compliance controls?",
+      "expected": [
+        "wiki:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-106",
+      "asUser": "alice",
+      "query": "what is the status of sso login failure",
+      "expected": [
+        "jira:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-107",
+      "asUser": "bob",
+      "query": "tell me about billing export design",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-108",
+      "asUser": "patAcme",
+      "query": "any news on automate secret rotation job?",
+      "expected": [
+        "github:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-109",
+      "asUser": "alice",
+      "query": "what is the status of new hire onboarding checklist gaps",
+      "expected": [
+        "jira:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-110",
+      "asUser": "bob",
+      "query": "tell me about product roadmap 2027",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-111",
+      "asUser": "patAcme",
+      "query": "any news on add incident status banner?",
+      "expected": [
+        "github:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-112",
+      "asUser": "alice",
+      "query": "what is the status of nightly backup failing",
+      "expected": [
+        "jira:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-113",
+      "asUser": "bob",
+      "query": "tell me about postgres migration plan",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-114",
+      "asUser": "patAcme",
+      "query": "any news on update pricing table?",
+      "expected": [
+        "github:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-115",
+      "asUser": "alice",
+      "query": "what is the status of security review findings",
+      "expected": [
+        "jira:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-116",
+      "asUser": "bob",
+      "query": "tell me about deployment guide",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-117",
+      "asUser": "patAcme",
+      "query": "any news on careers page openings?",
+      "expected": [
+        "github:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-118",
+      "asUser": "alice",
+      "query": "what is the status of analytics dashboard stale",
+      "expected": [
+        "jira:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-119",
+      "asUser": "bob",
+      "query": "tell me about mobile release checklist",
+      "expected": [
+        "wiki:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-120",
+      "asUser": "patAcme",
+      "query": "any news on export compliance logs?",
+      "expected": [
+        "github:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-121",
+      "asUser": "alice",
+      "query": "what is the status of sso login troubleshooting guide",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-122",
+      "asUser": "bob",
+      "query": "tell me about invoice csv rounding fix",
+      "expected": [
+        "github:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-123",
+      "asUser": "patAcme",
+      "query": "any news on signing key rotation overdue?",
+      "expected": [
+        "jira:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-124",
+      "asUser": "alice",
+      "query": "what is the status of onboarding handbook",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-125",
+      "asUser": "bob",
+      "query": "tell me about roadmap page redesign",
+      "expected": [
+        "github:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-126",
+      "asUser": "patAcme",
+      "query": "any news on incident follow ups from outage?",
+      "expected": [
+        "jira:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-127",
+      "asUser": "alice",
+      "query": "what is the status of backup and restore policy",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-128",
+      "asUser": "bob",
+      "query": "tell me about forward only migration runner",
+      "expected": [
+        "github:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-129",
+      "asUser": "patAcme",
+      "query": "any news on pricing page shows old plans?",
+      "expected": [
+        "jira:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-130",
+      "asUser": "alice",
+      "query": "what is the status of security policy",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-131",
+      "asUser": "bob",
+      "query": "tell me about canary deployment support",
+      "expected": [
+        "github:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-132",
+      "asUser": "patAcme",
+      "query": "any news on hiring plan approvals?",
+      "expected": [
+        "jira:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-133",
+      "asUser": "alice",
+      "query": "what is the status of analytics event catalogue",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-134",
+      "asUser": "bob",
+      "query": "tell me about fix mobile push tokens",
+      "expected": [
+        "github:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-135",
+      "asUser": "patAcme",
+      "query": "any news on compliance audit evidence?",
+      "expected": [
+        "jira:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-136",
+      "asUser": "alice",
+      "query": "what is the status of sessions drop after saml redirect",
+      "expected": [
+        "github:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-137",
+      "asUser": "bob",
+      "query": "tell me about billing export wrong totals",
+      "expected": [
+        "jira:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-138",
+      "asUser": "patAcme",
+      "query": "any news on key rotation runbook?",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-139",
+      "asUser": "alice",
+      "query": "what is the status of seed accounts for onboarding",
+      "expected": [
+        "github:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-140",
+      "asUser": "bob",
+      "query": "tell me about roadmap review actions",
+      "expected": [
+        "jira:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-141",
+      "asUser": "patAcme",
+      "query": "any news on incident response process?",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-142",
+      "asUser": "alice",
+      "query": "what is the status of verify backup checksums",
+      "expected": [
+        "github:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-143",
+      "asUser": "bob",
+      "query": "tell me about database migration blocked",
+      "expected": [
+        "jira:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-144",
+      "asUser": "patAcme",
+      "query": "any news on pricing strategy notes?",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-145",
+      "asUser": "alice",
+      "query": "what is the status of harden security headers",
+      "expected": [
+        "github:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-146",
+      "asUser": "bob",
+      "query": "tell me about deployment pipeline flaky",
+      "expected": [
+        "jira:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-147",
+      "asUser": "patAcme",
+      "query": "any news on hiring process?",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-148",
+      "asUser": "alice",
+      "query": "what is the status of add analytics tracking",
+      "expected": [
+        "github:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-149",
+      "asUser": "bob",
+      "query": "tell me about mobile app crash on start",
+      "expected": [
+        "jira:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "keyword-150",
+      "asUser": "patAcme",
+      "query": "any news on compliance controls?",
+      "expected": [
+        "wiki:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "keyword"
+      ]
+    },
+    {
+      "id": "paraphrase-151",
+      "asUser": "alice",
+      "query": "why can't people get into the app",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-152",
+      "asUser": "bob",
+      "query": "users are locked out after single sign on",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-153",
+      "asUser": "patAcme",
+      "query": "authentication keeps kicking staff out",
+      "expected": [
+        "wiki:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-154",
+      "asUser": "alice",
+      "query": "the money figures in our download look off",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-155",
+      "asUser": "bob",
+      "query": "finance says the spreadsheet amounts disagree",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-156",
+      "asUser": "patAcme",
+      "query": "customer charges do not add up",
+      "expected": [
+        "wiki:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-157",
+      "asUser": "alice",
+      "query": "how often do we change credentials",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-158",
+      "asUser": "bob",
+      "query": "when do cryptographic secrets get replaced",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-159",
+      "asUser": "patAcme",
+      "query": "procedure for renewing tokens",
+      "expected": [
+        "wiki:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-160",
+      "asUser": "alice",
+      "query": "what should a new starter do on day one",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-161",
+      "asUser": "bob",
+      "query": "first week steps for joiners",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-162",
+      "asUser": "patAcme",
+      "query": "getting a recent recruit set up",
+      "expected": [
+        "wiki:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-163",
+      "asUser": "alice",
+      "query": "what are we shipping next year",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-164",
+      "asUser": "bob",
+      "query": "plans for upcoming quarters",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-165",
+      "asUser": "patAcme",
+      "query": "which big bets come after this release",
+      "expected": [
+        "wiki:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-166",
+      "asUser": "alice",
+      "query": "what do we do when production goes down",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-167",
+      "asUser": "bob",
+      "query": "who gets paged during an emergency",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-168",
+      "asUser": "patAcme",
+      "query": "steps for handling a service disruption",
+      "expected": [
+        "wiki:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-169",
+      "asUser": "alice",
+      "query": "how do we recover lost data",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-170",
+      "asUser": "bob",
+      "query": "where are database copies kept",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-171",
+      "asUser": "patAcme",
+      "query": "how long are archived snapshots retained",
+      "expected": [
+        "wiki:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-172",
+      "asUser": "alice",
+      "query": "moving to the new data store",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-173",
+      "asUser": "bob",
+      "query": "steps to upgrade our storage engine",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-174",
+      "asUser": "patAcme",
+      "query": "when does the schema move happen",
+      "expected": [
+        "wiki:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-175",
+      "asUser": "alice",
+      "query": "how much do we charge customers",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-176",
+      "asUser": "bob",
+      "query": "what does the enterprise tier cost",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-177",
+      "asUser": "patAcme",
+      "query": "discount rules for large deals",
+      "expected": [
+        "wiki:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-178",
+      "asUser": "alice",
+      "query": "rules for protecting customer information",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-179",
+      "asUser": "bob",
+      "query": "what did the penetration testers find",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-180",
+      "asUser": "patAcme",
+      "query": "requirements for handling vulnerabilities",
+      "expected": [
+        "wiki:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-181",
+      "asUser": "alice",
+      "query": "how do we ship code to production",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-182",
+      "asUser": "bob",
+      "query": "release steps for the web service",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-183",
+      "asUser": "patAcme",
+      "query": "why do our rollouts keep failing",
+      "expected": [
+        "wiki:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-184",
+      "asUser": "alice",
+      "query": "how many engineers are we recruiting",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-185",
+      "asUser": "bob",
+      "query": "interview stages for candidates",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-186",
+      "asUser": "patAcme",
+      "query": "who signs off on new headcount",
+      "expected": [
+        "wiki:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-187",
+      "asUser": "alice",
+      "query": "why are the usage charts out of date",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-188",
+      "asUser": "bob",
+      "query": "which product metrics do we record",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-189",
+      "asUser": "patAcme",
+      "query": "numbers on the reporting screen are old",
+      "expected": [
+        "wiki:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "paraphrase-190",
+      "asUser": "alice",
+      "query": "the phone application dies when opened",
+      "expected": [
+        "wiki:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "multi-source-191",
+      "asUser": "bob",
+      "query": "everything about login",
+      "expected": [
+        "jira:login",
+        "wiki:login",
+        "github:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-192",
+      "asUser": "patAcme",
+      "query": "everything about billing",
+      "expected": [
+        "jira:billing",
+        "wiki:billing",
+        "github:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-193",
+      "asUser": "alice",
+      "query": "everything about rotation",
+      "expected": [
+        "jira:rotation",
+        "wiki:rotation",
+        "github:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-194",
+      "asUser": "bob",
+      "query": "everything about onboarding",
+      "expected": [
+        "jira:onboarding",
+        "wiki:onboarding",
+        "github:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-195",
+      "asUser": "patAcme",
+      "query": "everything about roadmap",
+      "expected": [
+        "jira:roadmap",
+        "wiki:roadmap",
+        "github:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-196",
+      "asUser": "alice",
+      "query": "everything about incident",
+      "expected": [
+        "jira:incident",
+        "wiki:incident",
+        "github:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-197",
+      "asUser": "bob",
+      "query": "everything about backup",
+      "expected": [
+        "jira:backup",
+        "wiki:backup",
+        "github:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-198",
+      "asUser": "patAcme",
+      "query": "everything about migration",
+      "expected": [
+        "jira:migration",
+        "wiki:migration",
+        "github:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-199",
+      "asUser": "alice",
+      "query": "everything about pricing",
+      "expected": [
+        "jira:pricing",
+        "wiki:pricing",
+        "github:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-200",
+      "asUser": "bob",
+      "query": "everything about security",
+      "expected": [
+        "jira:security",
+        "wiki:security",
+        "github:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-201",
+      "asUser": "patAcme",
+      "query": "everything about deployment",
+      "expected": [
+        "jira:deployment",
+        "wiki:deployment",
+        "github:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-202",
+      "asUser": "alice",
+      "query": "everything about hiring",
+      "expected": [
+        "jira:hiring",
+        "wiki:hiring",
+        "github:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-203",
+      "asUser": "bob",
+      "query": "everything about analytics",
+      "expected": [
+        "jira:analytics",
+        "wiki:analytics",
+        "github:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-204",
+      "asUser": "patAcme",
+      "query": "everything about mobile",
+      "expected": [
+        "jira:mobile",
+        "wiki:mobile",
+        "github:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-205",
+      "asUser": "alice",
+      "query": "everything about compliance",
+      "expected": [
+        "jira:compliance",
+        "wiki:compliance",
+        "github:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-206",
+      "asUser": "bob",
+      "query": "login across all our tools",
+      "expected": [
+        "jira:login",
+        "wiki:login",
+        "github:login"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-207",
+      "asUser": "patAcme",
+      "query": "billing across all our tools",
+      "expected": [
+        "jira:billing",
+        "wiki:billing",
+        "github:billing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-208",
+      "asUser": "alice",
+      "query": "rotation across all our tools",
+      "expected": [
+        "jira:rotation",
+        "wiki:rotation",
+        "github:rotation"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-209",
+      "asUser": "bob",
+      "query": "onboarding across all our tools",
+      "expected": [
+        "jira:onboarding",
+        "wiki:onboarding",
+        "github:onboarding"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-210",
+      "asUser": "patAcme",
+      "query": "roadmap across all our tools",
+      "expected": [
+        "jira:roadmap",
+        "wiki:roadmap",
+        "github:roadmap"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-211",
+      "asUser": "alice",
+      "query": "incident across all our tools",
+      "expected": [
+        "jira:incident",
+        "wiki:incident",
+        "github:incident"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-212",
+      "asUser": "bob",
+      "query": "backup across all our tools",
+      "expected": [
+        "jira:backup",
+        "wiki:backup",
+        "github:backup"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-213",
+      "asUser": "patAcme",
+      "query": "migration across all our tools",
+      "expected": [
+        "jira:migration",
+        "wiki:migration",
+        "github:migration"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-214",
+      "asUser": "alice",
+      "query": "pricing across all our tools",
+      "expected": [
+        "jira:pricing",
+        "wiki:pricing",
+        "github:pricing"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-215",
+      "asUser": "bob",
+      "query": "security across all our tools",
+      "expected": [
+        "jira:security",
+        "wiki:security",
+        "github:security"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-216",
+      "asUser": "patAcme",
+      "query": "deployment across all our tools",
+      "expected": [
+        "jira:deployment",
+        "wiki:deployment",
+        "github:deployment"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-217",
+      "asUser": "alice",
+      "query": "hiring across all our tools",
+      "expected": [
+        "jira:hiring",
+        "wiki:hiring",
+        "github:hiring"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-218",
+      "asUser": "bob",
+      "query": "analytics across all our tools",
+      "expected": [
+        "jira:analytics",
+        "wiki:analytics",
+        "github:analytics"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-219",
+      "asUser": "patAcme",
+      "query": "mobile across all our tools",
+      "expected": [
+        "jira:mobile",
+        "wiki:mobile",
+        "github:mobile"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "multi-source-220",
+      "asUser": "alice",
+      "query": "compliance across all our tools",
+      "expected": [
+        "jira:compliance",
+        "wiki:compliance",
+        "github:compliance"
+      ],
+      "forbidden": [],
+      "tags": [
+        "multi-source"
+      ]
+    },
+    {
+      "id": "perm-other-company-221",
+      "asUser": "alice",
+      "query": "login plan",
+      "expected": [],
+      "forbidden": [
+        "globex:login"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-222",
+      "asUser": "patGlobex",
+      "query": "login status",
+      "expected": [],
+      "forbidden": [
+        "jira:login",
+        "wiki:login",
+        "github:login"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-223",
+      "asUser": "bob",
+      "query": "login plan",
+      "expected": [],
+      "forbidden": [
+        "globex:login"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-224",
+      "asUser": "gus",
+      "query": "login notes",
+      "expected": [],
+      "forbidden": [
+        "jira:login",
+        "wiki:login",
+        "github:login"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-225",
+      "asUser": "alice",
+      "query": "billing plan",
+      "expected": [],
+      "forbidden": [
+        "globex:billing"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-226",
+      "asUser": "patGlobex",
+      "query": "billing status",
+      "expected": [],
+      "forbidden": [
+        "jira:billing",
+        "wiki:billing",
+        "github:billing"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-227",
+      "asUser": "bob",
+      "query": "billing plan",
+      "expected": [],
+      "forbidden": [
+        "globex:billing"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-228",
+      "asUser": "gus",
+      "query": "billing notes",
+      "expected": [],
+      "forbidden": [
+        "jira:billing",
+        "wiki:billing",
+        "github:billing"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-229",
+      "asUser": "alice",
+      "query": "rotation plan",
+      "expected": [],
+      "forbidden": [
+        "globex:rotation"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-230",
+      "asUser": "patGlobex",
+      "query": "rotation status",
+      "expected": [],
+      "forbidden": [
+        "jira:rotation",
+        "wiki:rotation",
+        "github:rotation"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-231",
+      "asUser": "bob",
+      "query": "rotation plan",
+      "expected": [],
+      "forbidden": [
+        "globex:rotation"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-232",
+      "asUser": "gus",
+      "query": "rotation notes",
+      "expected": [],
+      "forbidden": [
+        "jira:rotation",
+        "wiki:rotation",
+        "github:rotation"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-233",
+      "asUser": "alice",
+      "query": "onboarding plan",
+      "expected": [],
+      "forbidden": [
+        "globex:onboarding"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-234",
+      "asUser": "patGlobex",
+      "query": "onboarding status",
+      "expected": [],
+      "forbidden": [
+        "jira:onboarding",
+        "wiki:onboarding",
+        "github:onboarding"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-235",
+      "asUser": "bob",
+      "query": "onboarding plan",
+      "expected": [],
+      "forbidden": [
+        "globex:onboarding"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-236",
+      "asUser": "gus",
+      "query": "onboarding notes",
+      "expected": [],
+      "forbidden": [
+        "jira:onboarding",
+        "wiki:onboarding",
+        "github:onboarding"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-237",
+      "asUser": "alice",
+      "query": "roadmap plan",
+      "expected": [],
+      "forbidden": [
+        "globex:roadmap"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-238",
+      "asUser": "patGlobex",
+      "query": "roadmap status",
+      "expected": [],
+      "forbidden": [
+        "jira:roadmap",
+        "wiki:roadmap",
+        "github:roadmap"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-239",
+      "asUser": "bob",
+      "query": "roadmap plan",
+      "expected": [],
+      "forbidden": [
+        "globex:roadmap"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-other-company-240",
+      "asUser": "gus",
+      "query": "roadmap notes",
+      "expected": [],
+      "forbidden": [
+        "jira:roadmap",
+        "wiki:roadmap",
+        "github:roadmap"
+      ],
+      "tags": [
+        "perm-other-company"
+      ]
+    },
+    {
+      "id": "perm-private-241",
+      "asUser": "bob",
+      "query": "Executive compensation review",
+      "expected": [],
+      "forbidden": [
+        "wiki:exec-comp"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-242",
+      "asUser": "patAcme",
+      "query": "Executive",
+      "expected": [],
+      "forbidden": [
+        "wiki:exec-comp"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-243",
+      "asUser": "bob",
+      "query": "Restructuring plan draft",
+      "expected": [],
+      "forbidden": [
+        "wiki:layoff-plan"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-244",
+      "asUser": "patAcme",
+      "query": "Restructuring",
+      "expected": [],
+      "forbidden": [
+        "wiki:layoff-plan"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-245",
+      "asUser": "bob",
+      "query": "Acquisition target shortlist",
+      "expected": [],
+      "forbidden": [
+        "wiki:acquisition"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-246",
+      "asUser": "patAcme",
+      "query": "Acquisition",
+      "expected": [],
+      "forbidden": [
+        "wiki:acquisition"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-247",
+      "asUser": "bob",
+      "query": "Board meeting notes",
+      "expected": [],
+      "forbidden": [
+        "wiki:board-notes"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-248",
+      "asUser": "patAcme",
+      "query": "Board",
+      "expected": [],
+      "forbidden": [
+        "wiki:board-notes"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-249",
+      "asUser": "bob",
+      "query": "Legal dispute summary",
+      "expected": [],
+      "forbidden": [
+        "wiki:legal-dispute"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-private-250",
+      "asUser": "patAcme",
+      "query": "Legal",
+      "expected": [],
+      "forbidden": [
+        "wiki:legal-dispute"
+      ],
+      "tags": [
+        "perm-private"
+      ]
+    },
+    {
+      "id": "perm-guest-251",
+      "asUser": "gina",
+      "query": "login update",
+      "expected": [],
+      "forbidden": [
+        "jira:login",
+        "wiki:login",
+        "github:login"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-252",
+      "asUser": "gina",
+      "query": "billing update",
+      "expected": [],
+      "forbidden": [
+        "jira:billing",
+        "wiki:billing",
+        "github:billing"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-253",
+      "asUser": "gina",
+      "query": "rotation update",
+      "expected": [],
+      "forbidden": [
+        "jira:rotation",
+        "wiki:rotation",
+        "github:rotation"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-254",
+      "asUser": "gina",
+      "query": "onboarding update",
+      "expected": [],
+      "forbidden": [
+        "jira:onboarding",
+        "wiki:onboarding",
+        "github:onboarding"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-255",
+      "asUser": "gina",
+      "query": "roadmap update",
+      "expected": [],
+      "forbidden": [
+        "jira:roadmap",
+        "wiki:roadmap",
+        "github:roadmap"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-256",
+      "asUser": "gina",
+      "query": "incident update",
+      "expected": [],
+      "forbidden": [
+        "jira:incident",
+        "wiki:incident",
+        "github:incident"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-257",
+      "asUser": "gina",
+      "query": "backup update",
+      "expected": [],
+      "forbidden": [
+        "jira:backup",
+        "wiki:backup",
+        "github:backup"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-258",
+      "asUser": "gina",
+      "query": "migration update",
+      "expected": [],
+      "forbidden": [
+        "jira:migration",
+        "wiki:migration",
+        "github:migration"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-259",
+      "asUser": "gina",
+      "query": "pricing update",
+      "expected": [],
+      "forbidden": [
+        "jira:pricing",
+        "wiki:pricing",
+        "github:pricing"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "perm-guest-260",
+      "asUser": "gina",
+      "query": "security update",
+      "expected": [],
+      "forbidden": [
+        "jira:security",
+        "wiki:security",
+        "github:security"
+      ],
+      "tags": [
+        "perm-guest"
+      ]
+    },
+    {
+      "id": "no-answer-261",
+      "asUser": "patAcme",
+      "query": "where do I find parking permits",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-262",
+      "asUser": "alice",
+      "query": "parking permits",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-263",
+      "asUser": "bob",
+      "query": "where do I find espresso machine",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-264",
+      "asUser": "patAcme",
+      "query": "espresso machine",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-265",
+      "asUser": "alice",
+      "query": "where do I find snowboard trip",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-266",
+      "asUser": "bob",
+      "query": "snowboard trip",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-267",
+      "asUser": "patAcme",
+      "query": "where do I find bicycle storage",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-268",
+      "asUser": "alice",
+      "query": "bicycle storage",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-269",
+      "asUser": "bob",
+      "query": "where do I find printer toner",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-270",
+      "asUser": "patAcme",
+      "query": "printer toner",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-271",
+      "asUser": "alice",
+      "query": "where do I find yoga classes",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-272",
+      "asUser": "bob",
+      "query": "yoga classes",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-273",
+      "asUser": "patAcme",
+      "query": "where do I find vending snacks",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-274",
+      "asUser": "alice",
+      "query": "vending snacks",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-275",
+      "asUser": "bob",
+      "query": "where do I find aquarium cleaning",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-276",
+      "asUser": "patAcme",
+      "query": "aquarium cleaning",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-277",
+      "asUser": "alice",
+      "query": "where do I find window blinds",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-278",
+      "asUser": "bob",
+      "query": "window blinds",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-279",
+      "asUser": "patAcme",
+      "query": "where do I find fire drill",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-280",
+      "asUser": "alice",
+      "query": "fire drill",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-281",
+      "asUser": "bob",
+      "query": "where do I find umbrella stand",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-282",
+      "asUser": "patAcme",
+      "query": "umbrella stand",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-283",
+      "asUser": "alice",
+      "query": "where do I find plant watering",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-284",
+      "asUser": "bob",
+      "query": "plant watering",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-285",
+      "asUser": "patAcme",
+      "query": "where do I find pizza order",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-286",
+      "asUser": "alice",
+      "query": "pizza order",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-287",
+      "asUser": "bob",
+      "query": "where do I find karaoke night",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-288",
+      "asUser": "patAcme",
+      "query": "karaoke night",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-289",
+      "asUser": "alice",
+      "query": "where do I find chess club",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-290",
+      "asUser": "bob",
+      "query": "chess club",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-291",
+      "asUser": "patAcme",
+      "query": "where do I find gym discount",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-292",
+      "asUser": "alice",
+      "query": "gym discount",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-293",
+      "asUser": "bob",
+      "query": "where do I find ferry timetable",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-294",
+      "asUser": "patAcme",
+      "query": "ferry timetable",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-295",
+      "asUser": "alice",
+      "query": "where do I find tram passes",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-296",
+      "asUser": "bob",
+      "query": "tram passes",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-297",
+      "asUser": "patAcme",
+      "query": "where do I find laundry service",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-298",
+      "asUser": "alice",
+      "query": "laundry service",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-299",
+      "asUser": "bob",
+      "query": "where do I find piano lessons",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    },
+    {
+      "id": "no-answer-300",
+      "asUser": "patAcme",
+      "query": "piano lessons",
+      "expected": [],
+      "forbidden": [],
+      "tags": [
+        "no-answer"
+      ]
+    }
+  ]
+}

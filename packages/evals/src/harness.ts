@@ -18,6 +18,8 @@ export type GoldenCase = z.infer<typeof GoldenCaseSchema>;
 export const GoldenSetSchema = z.object({
   version: z.number().int().positive(),
   description: z.string(),
+  /** Overrides the default recall floor, e.g. to catch regressions below a target not yet met. */
+  minRecallAtK: z.number().min(0).max(1).optional(),
   cases: z.array(GoldenCaseSchema).min(1),
 });
 export type GoldenSet = z.infer<typeof GoldenSetSchema>;
@@ -32,6 +34,14 @@ export interface CaseResult {
   readonly mrr: number;
   readonly ndcg: number;
   readonly leaked: readonly string[];
+  readonly returned: number;
+}
+
+export interface TagReport {
+  readonly cases: number;
+  readonly recallAtK: number;
+  readonly mrr: number;
+  readonly ndcgAtK: number;
 }
 
 export interface EvalReport {
@@ -41,6 +51,9 @@ export interface EvalReport {
   readonly mrr: number;
   readonly ndcgAtK: number;
   readonly leakCount: number;
+  /** Questions with nothing to find that still returned something. Reported, not a failure. */
+  readonly noAnswerWithResults: number;
+  readonly byTag: Readonly<Record<string, TagReport>>;
   readonly passed: boolean;
 }
 
@@ -66,20 +79,46 @@ export async function runEval(
       mrr: reciprocalRank(ranked, c.expected),
       ndcg: ndcgAtK(ranked, c.expected, k),
       leaked: leakedIds(ranked, c.forbidden),
+      returned: ranked.length,
     });
   }
 
-  const recall = mean(cases.map((c) => c.recall));
+  // A question with nothing to find scores a perfect 1, so it must not raise the averages.
+  const answerable = cases.filter((_, i) => golden.cases[i]!.expected.length > 0);
+  const quality = summarize(answerable);
   const leakCount = cases.reduce((n, c) => n + c.leaked.length, 0);
+  const floor = golden.minRecallAtK ?? thresholds.minRecallAtK;
   return {
     k,
     cases,
-    recallAtK: recall,
+    ...quality,
+    leakCount,
+    noAnswerWithResults: cases.filter((c, i) => {
+      const goldenCase = golden.cases[i]!;
+      return goldenCase.expected.length === 0 && goldenCase.forbidden.length === 0 && c.returned > 0;
+    }).length,
+    byTag: reportByTag(golden, cases),
+    passed: leakCount === 0 && quality.recallAtK >= floor,
+  };
+}
+
+function summarize(cases: readonly CaseResult[]): Omit<TagReport, "cases"> {
+  return {
+    recallAtK: mean(cases.map((c) => c.recall)),
     mrr: mean(cases.map((c) => c.mrr)),
     ndcgAtK: mean(cases.map((c) => c.ndcg)),
-    leakCount,
-    passed: leakCount === 0 && recall >= thresholds.minRecallAtK,
   };
+}
+
+function reportByTag(golden: GoldenSet, cases: readonly CaseResult[]): Record<string, TagReport> {
+  const groups = new Map<string, CaseResult[]>();
+  golden.cases.forEach((goldenCase, i) => {
+    if (goldenCase.expected.length === 0) return;
+    for (const tag of goldenCase.tags) groups.set(tag, [...(groups.get(tag) ?? []), cases[i]!]);
+  });
+  return Object.fromEntries(
+    [...groups].map(([tag, group]) => [tag, { cases: group.length, ...summarize(group) }]),
+  );
 }
 
 /** Returns each case's canned `fixtureResults`. Proves the harness, not retrieval quality. */

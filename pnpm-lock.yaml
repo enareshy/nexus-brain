@@ -182,6 +182,9 @@ importers:
 
   packages/evals:
     dependencies:
+      '@brain/connectors':
+        specifier: workspace:*
+        version: link:../connectors
       zod:
         specifier: ^3.24.1
         version: 3.25.76

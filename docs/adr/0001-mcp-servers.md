@@ -80,6 +80,7 @@ Raw tool list: [`0001-github-tools.json`](0001-github-tools.json) (28 tools, all
 4. **Links must be `https://github.com/<owner>/<repo>/(issues|pull)/<n>`.** Anything else is dropped.
 
 ### Not verified, and known gaps
+- Reliability (2026-11-01): a direct search took about 3 s including connecting. In the app, one search hit the 10 s budget just after a full test run; the cause is not proven. The budget also counts time waiting for the per-user lock, and identical searches arriving together wait for each other (seen at 4.5 s). In one of three direct runs, `search_issues` returned an error for two of three repositories; the reason was not captured, and the rest of the search still returned results.
 - Issue result shape: the test repository has no issues, so it follows the pull request shape from the same search API.
 - Code search returned nothing on the test repository, so it is left out. `get_file_contents` returned only 81 characters of text (not read, length only), and our client keeps only text parts, so reading files needs work too.
 - Organisation repositories are not searched, which pilot customers will need.
