@@ -10,10 +10,11 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
-    "eval": "node --import tsx src/cli.ts golden/synthetic.json golden/corpus.json"
+    "eval": "node --import tsx src/cli.ts golden/synthetic.json golden/corpus.json golden/rewrites.json"
   },
   "dependencies": {
     "@brain/connectors": "workspace:*",
+    "@brain/llm-gateway": "workspace:*",
     "zod": "^3.24.1"
   }
 }

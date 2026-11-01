@@ -11,6 +11,7 @@ import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import type { GatheredDocuments } from "../connections/connections.service.js";
 import { createFakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER } from "../test-support/tokens.js";
+import type { QueryExpander } from "./query-rewriter.js";
 import { AnswersService, type AnswersApi, type AnswerStreamEvent } from "./answers.service.js";
 import { unusedProposals } from "../test-support/fake-proposals.js";
 
@@ -52,7 +53,9 @@ function fakePool() {
   return { pool: { connect: async () => client } as unknown as PoolLike, queries };
 }
 
-function setup(opts: { hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike } = {}) {
+const noRewrite: LlmGateway["rewriteQuery"] = async () => [];
+
+function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike } = {}) {
   const gathered: GatheredDocuments = {
     hits: opts.hits ?? [hit(1), hit(2)],
     sources: [{ id: "atlassian", ok: true, hits: 2, ms: 10 }],
@@ -72,8 +75,9 @@ function setup(opts: { hits?: RankedHit[]; bodies?: Map<string, string>; gateway
     box: { fingerprint: () => "f".repeat(64) },
     logger: opts.logger ?? { error: vi.fn() },
     documents: { gatherDocuments },
-    gateway: opts.gateway === undefined ? { streamAnswer } : opts.gateway,
+    gateway: opts.gateway === undefined ? { streamAnswer, rewriteQuery: noRewrite } : opts.gateway,
     now: opts.now,
+    ...(opts.expander ? { expander: opts.expander } : {}),
   });
   const events: AnswerStreamEvent[] = [];
   return { service, events, emit: (e: AnswerStreamEvent) => events.push(e), streamAnswer, gatherDocuments, queries };
@@ -118,6 +122,7 @@ describe("AnswersService", () => {
 
   it("drops citations to documents it never sent and marks the answer ungrounded", async () => {
     const gateway: LlmGateway = {
+      rewriteQuery: noRewrite,
       streamAnswer: async (_i, onEvent) => {
         onEvent({ type: "text", text: "Made up." });
         onEvent({ type: "citation", documentIndex: 99, citedText: "x" });
@@ -150,6 +155,7 @@ describe("AnswersService", () => {
 
   it("records usage and audit when the stream fails, then rethrows", async () => {
     const gateway: LlmGateway = {
+      rewriteQuery: noRewrite,
       streamAnswer: async (_i, _e, _s, onUsage) => {
         onUsage({ ...OUTCOME, outputTokens: 3, estimated: true });
         throw new AppError("UNAVAILABLE", "The answer was cancelled");
@@ -185,6 +191,7 @@ describe("AnswersService", () => {
     let release = () => {};
     const gate = new Promise<void>((r) => { release = r; });
     const gateway: LlmGateway = {
+      rewriteQuery: noRewrite,
       streamAnswer: async () => {
         await gate;
         return OUTCOME;
@@ -296,5 +303,25 @@ describe("POST /answers", () => {
     const res = await post({ q: "x" });
     expect(res.body).toContain('"code":"INTERNAL"');
     expect(res.body).not.toContain("postgres://");
+  });
+});
+
+describe("finding documents worded differently from the question", () => {
+  it("searches with the suggested words but answers the question as asked", async () => {
+    const expand = vi.fn(async () => ["rotation", "credentials"]);
+    const { service, emit, gatherDocuments, streamAnswer } = setup({ expander: { expand } });
+    await service.answer(scope, "how do we change passwords", emit, new AbortController().signal);
+    expect(gatherDocuments.mock.calls[0] as unknown[]).toEqual([
+      scope,
+      "rotation credentials how do we change passwords",
+      expect.anything(),
+    ]);
+    expect(streamAnswer.mock.calls[0]?.[0].question).toBe("how do we change passwords");
+  });
+
+  it("searches as asked when no words come back", async () => {
+    const { service, emit, gatherDocuments } = setup({ expander: { expand: async () => [] } });
+    await service.answer(scope, "question", emit, new AbortController().signal);
+    expect((gatherDocuments.mock.calls[0] as unknown[])[1]).toBe("question");
   });
 });

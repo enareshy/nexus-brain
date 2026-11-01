@@ -1,0 +1,1410 @@
+{
+  "Acquisition": [
+    "acquisition",
+    "acquire",
+    "merger",
+    "buyout"
+  ],
+  "Acquisition target shortlist": [
+    "acquisition",
+    "target",
+    "shortlist",
+    "candidates"
+  ],
+  "Add analytics tracking": [
+    "analytics",
+    "tracking",
+    "telemetry",
+    "instrumentation"
+  ],
+  "Add incident status banner": [
+    "banner",
+    "incident",
+    "status",
+    "outage"
+  ],
+  "analytics across all our tools": [
+    "analytics",
+    "metrics",
+    "dashboard",
+    "reporting"
+  ],
+  "Analytics dashboard stale": [
+    "analytics",
+    "dashboard",
+    "stale",
+    "outdated"
+  ],
+  "Analytics event catalogue": [
+    "analytics",
+    "event",
+    "catalogue",
+    "tracking"
+  ],
+  "any news on add incident status banner?": [
+    "banner",
+    "incident",
+    "status",
+    "notification"
+  ],
+  "any news on automate secret rotation job?": [
+    "secret",
+    "rotation",
+    "automate",
+    "credentials"
+  ],
+  "any news on careers page openings?": [
+    "careers",
+    "jobs",
+    "hiring",
+    "openings"
+  ],
+  "any news on compliance audit evidence?": [
+    "compliance",
+    "audit",
+    "evidence",
+    "controls"
+  ],
+  "any news on compliance controls?": [
+    "compliance",
+    "controls",
+    "audit",
+    "policy"
+  ],
+  "any news on export compliance logs?": [
+    "export",
+    "compliance",
+    "logs",
+    "audit"
+  ],
+  "any news on hiring plan approvals?": [
+    "hiring",
+    "headcount",
+    "approval",
+    "requisition"
+  ],
+  "any news on hiring process?": [
+    "hiring",
+    "recruiting",
+    "recruitment",
+    "interview"
+  ],
+  "any news on incident follow ups from outage?": [
+    "incident",
+    "postmortem",
+    "outage",
+    "followup"
+  ],
+  "any news on incident response process?": [
+    "incident",
+    "response",
+    "runbook",
+    "postmortem"
+  ],
+  "any news on key rotation runbook?": [
+    "rotation",
+    "runbook",
+    "key",
+    "keys"
+  ],
+  "any news on pricing page shows old plans?": [
+    "pricing",
+    "plans",
+    "page",
+    "outdated"
+  ],
+  "any news on pricing strategy notes?": [
+    "pricing",
+    "strategy",
+    "notes"
+  ],
+  "any news on signing key rotation overdue?": [
+    "signing",
+    "key",
+    "rotation",
+    "certificate"
+  ],
+  "any news on update pricing table?": [
+    "pricing",
+    "price",
+    "table",
+    "update"
+  ],
+  "aquarium cleaning": [
+    "aquarium",
+    "tank",
+    "cleaning",
+    "maintenance"
+  ],
+  "authentication keeps kicking staff out": [
+    "authentication",
+    "login",
+    "session",
+    "timeout"
+  ],
+  "Automate secret rotation job": [
+    "secret",
+    "rotation",
+    "automate",
+    "credentials"
+  ],
+  "backup across all our tools": [
+    "backup",
+    "backups",
+    "restore",
+    "snapshot"
+  ],
+  "Backup and restore policy": [
+    "backup",
+    "restore",
+    "retention",
+    "recovery"
+  ],
+  "backup update": [
+    "backup",
+    "backups",
+    "update",
+    "restore"
+  ],
+  "bicycle storage": [
+    "bicycle",
+    "bike",
+    "storage",
+    "parking"
+  ],
+  "billing across all our tools": [
+    "billing",
+    "invoice",
+    "subscription",
+    "payment"
+  ],
+  "Billing export design": [
+    "billing",
+    "export",
+    "invoice",
+    "design"
+  ],
+  "Billing export wrong totals": [
+    "billing",
+    "export",
+    "totals",
+    "invoice"
+  ],
+  "billing notes": [
+    "billing",
+    "invoice",
+    "payment",
+    "charges"
+  ],
+  "billing plan": [
+    "billing",
+    "plan",
+    "pricing",
+    "subscription"
+  ],
+  "billing status": [
+    "billing",
+    "invoice",
+    "payment",
+    "subscription"
+  ],
+  "billing update": [
+    "billing",
+    "invoice",
+    "payment",
+    "subscription"
+  ],
+  "Board": [
+    "board",
+    "directors",
+    "meeting",
+    "governance"
+  ],
+  "Board meeting notes": [
+    "board",
+    "meeting",
+    "minutes",
+    "notes"
+  ],
+  "Canary deployment support": [
+    "canary",
+    "deployment",
+    "rollout",
+    "release"
+  ],
+  "Careers page openings": [
+    "careers",
+    "jobs",
+    "openings",
+    "hiring"
+  ],
+  "chess club": [
+    "chess",
+    "club",
+    "tournament",
+    "games"
+  ],
+  "compliance across all our tools": [
+    "compliance",
+    "policy",
+    "audit",
+    "regulation"
+  ],
+  "Compliance audit evidence": [
+    "compliance",
+    "audit",
+    "evidence",
+    "controls"
+  ],
+  "Compliance controls": [
+    "compliance",
+    "controls",
+    "audit",
+    "policy"
+  ],
+  "customer charges do not add up": [
+    "billing",
+    "invoice",
+    "charges",
+    "discrepancy"
+  ],
+  "Database migration blocked": [
+    "database",
+    "migration",
+    "blocked",
+    "blocker"
+  ],
+  "deployment across all our tools": [
+    "deployment",
+    "release",
+    "rollout",
+    "deploy"
+  ],
+  "Deployment guide": [
+    "deployment",
+    "deploy",
+    "release",
+    "rollout"
+  ],
+  "Deployment pipeline flaky": [
+    "deployment",
+    "pipeline",
+    "flaky",
+    "flakiness"
+  ],
+  "discount rules for large deals": [
+    "discount",
+    "pricing",
+    "deal",
+    "enterprise"
+  ],
+  "espresso machine": [
+    "espresso",
+    "coffee",
+    "machine",
+    "brewer"
+  ],
+  "everything about analytics": [
+    "analytics",
+    "metrics",
+    "dashboard",
+    "reporting"
+  ],
+  "everything about backup": [
+    "backup",
+    "backups",
+    "restore",
+    "snapshot"
+  ],
+  "everything about billing": [
+    "billing",
+    "invoice",
+    "invoices",
+    "payment"
+  ],
+  "everything about compliance": [
+    "compliance",
+    "policy",
+    "regulation",
+    "audit"
+  ],
+  "everything about deployment": [
+    "deployment",
+    "deploy",
+    "release",
+    "rollout"
+  ],
+  "everything about hiring": [
+    "hiring",
+    "recruiting",
+    "recruitment",
+    "interview"
+  ],
+  "everything about incident": [
+    "incident",
+    "outage",
+    "postmortem",
+    "alert"
+  ],
+  "everything about login": [
+    "login",
+    "signin",
+    "authentication",
+    "sso"
+  ],
+  "everything about migration": [
+    "migration",
+    "migrate",
+    "upgrade",
+    "transfer"
+  ],
+  "everything about mobile": [
+    "mobile",
+    "ios",
+    "android",
+    "app"
+  ],
+  "everything about onboarding": [
+    "onboarding",
+    "orientation",
+    "induction",
+    "newhire"
+  ],
+  "everything about pricing": [
+    "pricing",
+    "price",
+    "rates",
+    "cost"
+  ],
+  "everything about roadmap": [
+    "roadmap",
+    "plan",
+    "priorities",
+    "timeline"
+  ],
+  "everything about rotation": [
+    "rotation",
+    "rotate",
+    "schedule",
+    "oncall"
+  ],
+  "everything about security": [
+    "security",
+    "infosec",
+    "vulnerability",
+    "compliance"
+  ],
+  "Executive": [
+    "executive",
+    "leadership",
+    "management",
+    "officer"
+  ],
+  "Executive compensation review": [
+    "compensation",
+    "salary",
+    "pay",
+    "bonus"
+  ],
+  "Export compliance logs": [
+    "export",
+    "compliance",
+    "audit",
+    "log"
+  ],
+  "ferry timetable": [
+    "ferry",
+    "timetable",
+    "schedule",
+    "sailing"
+  ],
+  "finance says the spreadsheet amounts disagree": [
+    "spreadsheet",
+    "finance",
+    "discrepancy",
+    "reconciliation"
+  ],
+  "fire drill": [
+    "fire",
+    "drill",
+    "evacuation",
+    "emergency"
+  ],
+  "first week steps for joiners": [
+    "onboarding",
+    "newhire",
+    "orientation",
+    "joiner"
+  ],
+  "Fix mobile push tokens": [
+    "push",
+    "token",
+    "mobile",
+    "notification"
+  ],
+  "Forward only migration runner": [
+    "migration",
+    "forward",
+    "runner",
+    "schema"
+  ],
+  "getting a recent recruit set up": [
+    "onboarding",
+    "recruit",
+    "newhire",
+    "provisioning"
+  ],
+  "gym discount": [
+    "gym",
+    "discount",
+    "fitness",
+    "membership"
+  ],
+  "Harden security headers": [
+    "security",
+    "headers",
+    "hsts",
+    "csp"
+  ],
+  "hiring across all our tools": [
+    "hiring",
+    "recruiting",
+    "interview",
+    "candidate"
+  ],
+  "Hiring plan approvals": [
+    "hiring",
+    "headcount",
+    "requisition",
+    "approval"
+  ],
+  "Hiring process": [
+    "hiring",
+    "recruiting",
+    "interview",
+    "onboarding"
+  ],
+  "how do we recover lost data": [
+    "recovery",
+    "backup",
+    "restore",
+    "disaster"
+  ],
+  "how do we ship code to production": [
+    "deploy",
+    "release",
+    "production",
+    "pipeline"
+  ],
+  "how long are archived snapshots retained": [
+    "archive",
+    "snapshot",
+    "retention",
+    "backup"
+  ],
+  "how many engineers are we recruiting": [
+    "engineers",
+    "recruiting",
+    "hiring",
+    "headcount"
+  ],
+  "how much do we charge customers": [
+    "pricing",
+    "price",
+    "rates",
+    "fees"
+  ],
+  "how often do we change credentials": [
+    "credentials",
+    "rotation",
+    "password",
+    "secrets"
+  ],
+  "incident across all our tools": [
+    "incident",
+    "outage",
+    "postmortem",
+    "alert"
+  ],
+  "Incident follow ups from outage": [
+    "postmortem",
+    "incident",
+    "outage",
+    "retrospective"
+  ],
+  "Incident response process": [
+    "incident",
+    "response",
+    "runbook",
+    "postmortem"
+  ],
+  "incident update": [
+    "incident",
+    "outage",
+    "postmortem",
+    "status"
+  ],
+  "interview stages for candidates": [
+    "interview",
+    "stages",
+    "hiring",
+    "recruiting"
+  ],
+  "Invoice CSV rounding fix": [
+    "invoice",
+    "csv",
+    "rounding",
+    "decimal"
+  ],
+  "karaoke night": [
+    "karaoke",
+    "singing",
+    "party",
+    "social"
+  ],
+  "Key rotation runbook": [
+    "key",
+    "rotation",
+    "runbook",
+    "rotate"
+  ],
+  "laundry service": [
+    "laundry",
+    "cleaning",
+    "dry",
+    "linen"
+  ],
+  "Legal": [
+    "legal",
+    "law",
+    "counsel",
+    "compliance"
+  ],
+  "Legal dispute summary": [
+    "litigation",
+    "lawsuit",
+    "dispute",
+    "legal"
+  ],
+  "login across all our tools": [
+    "login",
+    "authentication",
+    "sso",
+    "signin"
+  ],
+  "login notes": [
+    "login",
+    "authentication",
+    "signin",
+    "credentials"
+  ],
+  "login plan": [
+    "login",
+    "plan",
+    "authentication",
+    "signin"
+  ],
+  "login status": [
+    "login",
+    "authentication",
+    "signin",
+    "status"
+  ],
+  "login update": [
+    "login",
+    "authentication",
+    "signin",
+    "update"
+  ],
+  "migration across all our tools": [
+    "migration",
+    "migrate",
+    "move",
+    "transition"
+  ],
+  "migration update": [
+    "migration",
+    "migrate",
+    "upgrade",
+    "status"
+  ],
+  "mobile across all our tools": [
+    "mobile",
+    "responsive",
+    "ios",
+    "android"
+  ],
+  "Mobile app crash on start": [
+    "crash",
+    "startup",
+    "mobile",
+    "launch"
+  ],
+  "Mobile release checklist": [
+    "mobile",
+    "release",
+    "checklist",
+    "deployment"
+  ],
+  "moving to the new data store": [
+    "migration",
+    "database",
+    "datastore",
+    "storage"
+  ],
+  "New hire onboarding checklist gaps": [
+    "onboarding",
+    "checklist",
+    "newhire",
+    "orientation"
+  ],
+  "Nightly backup failing": [
+    "backup",
+    "nightly",
+    "failure",
+    "restore"
+  ],
+  "numbers on the reporting screen are old": [
+    "reporting",
+    "stale",
+    "dashboard",
+    "refresh"
+  ],
+  "onboarding across all our tools": [
+    "onboarding",
+    "provisioning",
+    "accounts",
+    "setup"
+  ],
+  "Onboarding handbook": [
+    "onboarding",
+    "handbook",
+    "orientation",
+    "guide"
+  ],
+  "onboarding notes": [
+    "onboarding",
+    "orientation",
+    "newhire",
+    "training"
+  ],
+  "onboarding plan": [
+    "onboarding",
+    "orientation",
+    "induction",
+    "newhire"
+  ],
+  "onboarding status": [
+    "onboarding",
+    "onboard",
+    "status",
+    "checklist"
+  ],
+  "onboarding update": [
+    "onboarding",
+    "orientation",
+    "induction",
+    "newhire"
+  ],
+  "parking permits": [
+    "parking",
+    "permit",
+    "garage",
+    "pass"
+  ],
+  "piano lessons": [
+    "piano",
+    "lessons",
+    "music",
+    "instruction"
+  ],
+  "pizza order": [
+    "pizza",
+    "order",
+    "food",
+    "lunch"
+  ],
+  "plans for upcoming quarters": [
+    "roadmap",
+    "quarterly",
+    "planning",
+    "forecast"
+  ],
+  "plant watering": [
+    "plant",
+    "watering",
+    "irrigation",
+    "garden"
+  ],
+  "Postgres migration plan": [
+    "postgres",
+    "postgresql",
+    "migration",
+    "database"
+  ],
+  "pricing across all our tools": [
+    "pricing",
+    "price",
+    "cost",
+    "licensing"
+  ],
+  "Pricing page shows old plans": [
+    "pricing",
+    "plans",
+    "outdated",
+    "tiers"
+  ],
+  "Pricing strategy notes": [
+    "pricing",
+    "strategy",
+    "notes"
+  ],
+  "pricing update": [
+    "pricing",
+    "price",
+    "rates",
+    "update"
+  ],
+  "printer toner": [
+    "printer",
+    "toner",
+    "cartridge",
+    "print"
+  ],
+  "procedure for renewing tokens": [
+    "renewing",
+    "token",
+    "refresh",
+    "rotation"
+  ],
+  "Product roadmap 2027": [
+    "roadmap",
+    "plan",
+    "2027",
+    "strategy"
+  ],
+  "release steps for the web service": [
+    "release",
+    "deployment",
+    "deploy",
+    "webservice"
+  ],
+  "requirements for handling vulnerabilities": [
+    "vulnerability",
+    "security",
+    "patch",
+    "remediation"
+  ],
+  "Restructuring": [
+    "restructuring",
+    "reorganization",
+    "layoffs",
+    "reorg"
+  ],
+  "Restructuring plan draft": [
+    "restructuring",
+    "reorganization",
+    "reorg",
+    "plan"
+  ],
+  "roadmap across all our tools": [
+    "roadmap",
+    "plan",
+    "timeline",
+    "milestones"
+  ],
+  "roadmap notes": [
+    "roadmap",
+    "plan",
+    "timeline",
+    "priorities"
+  ],
+  "Roadmap page redesign": [
+    "roadmap",
+    "redesign",
+    "mockup",
+    "layout"
+  ],
+  "roadmap plan": [
+    "roadmap",
+    "plan",
+    "timeline",
+    "strategy"
+  ],
+  "Roadmap review actions": [
+    "roadmap",
+    "review",
+    "actions",
+    "action"
+  ],
+  "roadmap status": [
+    "roadmap",
+    "plan",
+    "timeline",
+    "milestones"
+  ],
+  "roadmap update": [
+    "roadmap",
+    "plan",
+    "timeline",
+    "milestones"
+  ],
+  "rotation across all our tools": [
+    "rotation",
+    "rotate",
+    "credentials",
+    "secrets"
+  ],
+  "rotation notes": [
+    "rotation",
+    "notes",
+    "rotations",
+    "schedule"
+  ],
+  "rotation plan": [
+    "rotation",
+    "schedule",
+    "oncall",
+    "shift"
+  ],
+  "rotation status": [
+    "rotation",
+    "status",
+    "schedule",
+    "shift"
+  ],
+  "rotation update": [
+    "rotation",
+    "update",
+    "schedule",
+    "shift"
+  ],
+  "rules for protecting customer information": [
+    "policy",
+    "security",
+    "privacy",
+    "confidential"
+  ],
+  "security across all our tools": [
+    "security",
+    "access",
+    "compliance",
+    "vulnerability"
+  ],
+  "Security policy": [
+    "security",
+    "policy",
+    "policies",
+    "compliance"
+  ],
+  "Security review findings": [
+    "security",
+    "review",
+    "findings",
+    "vulnerability"
+  ],
+  "security update": [
+    "security",
+    "update",
+    "patch",
+    "vulnerability"
+  ],
+  "Seed accounts for onboarding": [
+    "seed",
+    "accounts",
+    "onboarding",
+    "provisioning"
+  ],
+  "Sessions drop after SAML redirect": [
+    "saml",
+    "session",
+    "login",
+    "timeout"
+  ],
+  "Signing key rotation overdue": [
+    "signing",
+    "key",
+    "rotation",
+    "certificate"
+  ],
+  "snowboard trip": [
+    "snowboard",
+    "snowboarding",
+    "ski",
+    "trip"
+  ],
+  "SSO login failure": [
+    "sso",
+    "authentication",
+    "login",
+    "saml"
+  ],
+  "SSO login troubleshooting guide": [
+    "sso",
+    "login",
+    "authentication",
+    "troubleshooting"
+  ],
+  "steps for handling a service disruption": [
+    "outage",
+    "incident",
+    "disruption",
+    "runbook"
+  ],
+  "steps to upgrade our storage engine": [
+    "upgrade",
+    "storage",
+    "engine",
+    "migration"
+  ],
+  "tell me about billing export design": [
+    "billing",
+    "export",
+    "design",
+    "invoice"
+  ],
+  "tell me about billing export wrong totals": [
+    "billing",
+    "export",
+    "totals",
+    "invoice"
+  ],
+  "tell me about canary deployment support": [
+    "canary",
+    "deployment",
+    "rollout",
+    "release"
+  ],
+  "tell me about database migration blocked": [
+    "migration",
+    "database",
+    "blocked",
+    "blocker"
+  ],
+  "tell me about deployment guide": [
+    "deployment",
+    "deploy",
+    "guide",
+    "release"
+  ],
+  "tell me about deployment pipeline flaky": [
+    "deployment",
+    "pipeline",
+    "flaky",
+    "flakiness"
+  ],
+  "tell me about fix mobile push tokens": [
+    "push",
+    "token",
+    "mobile",
+    "notification"
+  ],
+  "tell me about forward only migration runner": [
+    "migration",
+    "runner",
+    "forward",
+    "schema"
+  ],
+  "tell me about invoice csv rounding fix": [
+    "invoice",
+    "csv",
+    "rounding",
+    "fix"
+  ],
+  "tell me about mobile app crash on start": [
+    "crash",
+    "startup",
+    "launch",
+    "mobile"
+  ],
+  "tell me about mobile release checklist": [
+    "mobile",
+    "release",
+    "checklist",
+    "rollout"
+  ],
+  "tell me about postgres migration plan": [
+    "postgres",
+    "migration",
+    "plan",
+    "database"
+  ],
+  "tell me about product roadmap 2027": [
+    "roadmap",
+    "2027",
+    "product",
+    "plan"
+  ],
+  "tell me about roadmap page redesign": [
+    "roadmap",
+    "redesign",
+    "wireframe",
+    "layout"
+  ],
+  "tell me about roadmap review actions": [
+    "roadmap",
+    "review",
+    "actions",
+    "followup"
+  ],
+  "the money figures in our download look off": [
+    "revenue",
+    "billing",
+    "invoice",
+    "export"
+  ],
+  "the phone application dies when opened": [
+    "crash",
+    "mobile",
+    "app",
+    "ios"
+  ],
+  "tram passes": [
+    "tram",
+    "pass",
+    "ticket",
+    "transit"
+  ],
+  "umbrella stand": [
+    "umbrella",
+    "stand",
+    "rack",
+    "entryway"
+  ],
+  "Update pricing table": [
+    "pricing",
+    "table",
+    "price",
+    "rates"
+  ],
+  "users are locked out after single sign on": [
+    "sso",
+    "login",
+    "lockout",
+    "authentication"
+  ],
+  "vending snacks": [
+    "vending",
+    "snacks",
+    "snack",
+    "kitchen"
+  ],
+  "Verify backup checksums": [
+    "backup",
+    "checksum",
+    "verify",
+    "integrity"
+  ],
+  "what are we shipping next year": [
+    "roadmap",
+    "shipping",
+    "release",
+    "plan"
+  ],
+  "what did the penetration testers find": [
+    "penetration",
+    "pentest",
+    "vulnerabilities",
+    "findings"
+  ],
+  "what do we do when production goes down": [
+    "incident",
+    "outage",
+    "runbook",
+    "production"
+  ],
+  "what does the enterprise tier cost": [
+    "enterprise",
+    "pricing",
+    "cost",
+    "tier"
+  ],
+  "what is the status of add analytics tracking": [
+    "analytics",
+    "tracking",
+    "instrumentation",
+    "telemetry"
+  ],
+  "what is the status of analytics dashboard stale": [
+    "analytics",
+    "dashboard",
+    "stale",
+    "refresh"
+  ],
+  "what is the status of analytics event catalogue": [
+    "analytics",
+    "event",
+    "catalogue",
+    "catalog"
+  ],
+  "what is the status of backup and restore policy": [
+    "backup",
+    "restore",
+    "retention",
+    "recovery"
+  ],
+  "what is the status of harden security headers": [
+    "security",
+    "headers",
+    "hardening",
+    "csp"
+  ],
+  "what is the status of new hire onboarding checklist gaps": [
+    "onboarding",
+    "checklist",
+    "gaps",
+    "hire"
+  ],
+  "what is the status of nightly backup failing": [
+    "backup",
+    "nightly",
+    "failure",
+    "job"
+  ],
+  "what is the status of onboarding handbook": [
+    "onboarding",
+    "handbook",
+    "orientation",
+    "new-hire"
+  ],
+  "what is the status of security policy": [
+    "security",
+    "policy",
+    "policies",
+    "compliance"
+  ],
+  "what is the status of security review findings": [
+    "security",
+    "review",
+    "findings",
+    "audit"
+  ],
+  "what is the status of seed accounts for onboarding": [
+    "seed",
+    "onboarding",
+    "provisioning",
+    "accounts"
+  ],
+  "what is the status of sessions drop after saml redirect": [
+    "sessions",
+    "saml",
+    "redirect",
+    "logout"
+  ],
+  "what is the status of sso login failure": [
+    "sso",
+    "login",
+    "authentication",
+    "outage"
+  ],
+  "what is the status of sso login troubleshooting guide": [
+    "sso",
+    "login",
+    "troubleshooting",
+    "authentication"
+  ],
+  "what is the status of verify backup checksums": [
+    "checksum",
+    "backup",
+    "verify",
+    "integrity"
+  ],
+  "what should a new starter do on day one": [
+    "onboarding",
+    "orientation",
+    "newhire",
+    "checklist"
+  ],
+  "when do cryptographic secrets get replaced": [
+    "rotation",
+    "secret",
+    "key",
+    "rotate"
+  ],
+  "when does the schema move happen": [
+    "schema",
+    "migration",
+    "database",
+    "rollout"
+  ],
+  "where are database copies kept": [
+    "database",
+    "backup",
+    "backups",
+    "snapshot"
+  ],
+  "where do I find aquarium cleaning": [
+    "aquarium",
+    "cleaning",
+    "tank",
+    "maintenance"
+  ],
+  "where do I find bicycle storage": [
+    "bicycle",
+    "bike",
+    "storage",
+    "parking"
+  ],
+  "where do I find chess club": [
+    "chess",
+    "club",
+    "games",
+    "clubs"
+  ],
+  "where do I find espresso machine": [
+    "espresso",
+    "coffee",
+    "machine",
+    "kitchen"
+  ],
+  "where do I find ferry timetable": [
+    "ferry",
+    "timetable",
+    "schedule",
+    "sailings"
+  ],
+  "where do I find fire drill": [
+    "fire",
+    "drill",
+    "evacuation",
+    "emergency"
+  ],
+  "where do I find gym discount": [
+    "gym",
+    "discount",
+    "fitness",
+    "wellness"
+  ],
+  "where do I find karaoke night": [
+    "karaoke",
+    "events",
+    "calendar",
+    "social"
+  ],
+  "where do I find laundry service": [
+    "laundry",
+    "dry",
+    "cleaning",
+    "linen"
+  ],
+  "where do I find parking permits": [
+    "parking",
+    "permit",
+    "permits",
+    "garage"
+  ],
+  "where do I find piano lessons": [
+    "piano",
+    "lessons",
+    "music",
+    "instruction"
+  ],
+  "where do I find pizza order": [
+    "pizza",
+    "order",
+    "food",
+    "lunch"
+  ],
+  "where do I find plant watering": [
+    "watering",
+    "plant",
+    "plants",
+    "irrigation"
+  ],
+  "where do I find printer toner": [
+    "toner",
+    "printer",
+    "supplies",
+    "cartridge"
+  ],
+  "where do I find snowboard trip": [
+    "snowboard",
+    "snowboarding",
+    "trip",
+    "offsite"
+  ],
+  "where do I find tram passes": [
+    "tram",
+    "pass",
+    "transit",
+    "commute"
+  ],
+  "where do I find umbrella stand": [
+    "umbrella",
+    "stand",
+    "rack",
+    "storage"
+  ],
+  "where do I find vending snacks": [
+    "vending",
+    "snacks",
+    "snack",
+    "kitchen"
+  ],
+  "where do I find window blinds": [
+    "blinds",
+    "window",
+    "blind",
+    "facilities"
+  ],
+  "where do I find yoga classes": [
+    "yoga",
+    "fitness",
+    "wellness",
+    "classes"
+  ],
+  "which big bets come after this release": [
+    "roadmap",
+    "bets",
+    "initiatives",
+    "strategy"
+  ],
+  "which product metrics do we record": [
+    "metrics",
+    "analytics",
+    "kpi",
+    "dashboard"
+  ],
+  "who gets paged during an emergency": [
+    "oncall",
+    "escalation",
+    "pager",
+    "rotation"
+  ],
+  "who signs off on new headcount": [
+    "headcount",
+    "approval",
+    "hiring",
+    "budget"
+  ],
+  "why are the usage charts out of date": [
+    "usage",
+    "charts",
+    "stale",
+    "dashboard"
+  ],
+  "why can't people get into the app": [
+    "login",
+    "access",
+    "authentication",
+    "signin"
+  ],
+  "why do our rollouts keep failing": [
+    "rollout",
+    "deployment",
+    "failure",
+    "release"
+  ],
+  "window blinds": [
+    "window",
+    "blinds",
+    "shades",
+    "curtains"
+  ],
+  "yoga classes": [
+    "yoga",
+    "fitness",
+    "wellness",
+    "classes"
+  ]
+}

@@ -33,6 +33,7 @@ export type SourceStatus = z.infer<typeof SourceStatusSchema>;
 export const SearchResultSchema = z.object({
   hits: z.array(HitSchema),
   sources: z.array(SourceStatusSchema),
+  expandedTerms: z.array(z.string()).optional(),
 });
 export type SearchResult = z.infer<typeof SearchResultSchema>;
 

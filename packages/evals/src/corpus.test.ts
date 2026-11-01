@@ -109,6 +109,28 @@ describe("compareRanking", () => {
     expect(result.passed).toBe(true);
   });
 
+  it("replays recorded rewrites, which find a differently worded question", async () => {
+    const reworded = GoldenSetSchema.parse({
+      version: 1,
+      description: "t",
+      minRecallAtK: 0,
+      cases: [{ id: "a", asUser: "bob", query: "change credentials", expected: ["jira:2"] }],
+    });
+    const result = await compareRanking(reworded, corpus, 10, { "change credentials": ["runbook"] });
+    expect(result.reranked.recallAtK).toBe(0);
+    expect(result.rewritten?.recallAtK).toBe(1);
+    expect(result.passed).toBe(true);
+  });
+
+  it("fails if rewriting finds less than searching as asked", async () => {
+    // Enough unrelated words to push the question's own words past the keyword limit.
+    const unrelated = ["payroll", "invoice", "lunch", "garage", "parking", "pension", "holiday", "travel"];
+    const result = await compareRanking(golden, corpus, 10, { "key rotation runbook": unrelated });
+    expect(result.reranked.recallAtK).toBe(1);
+    expect(result.rewritten?.recallAtK).toBe(0);
+    expect(result.passed).toBe(false);
+  });
+
   it("fails on any leak", async () => {
     const leaky = GoldenSetSchema.parse({
       ...golden,

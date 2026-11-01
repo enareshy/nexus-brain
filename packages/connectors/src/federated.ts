@@ -30,6 +30,8 @@ export interface RankedHit extends SearchHit {
 export interface FederatedResult {
   readonly hits: readonly RankedHit[];
   readonly sources: readonly SourceStatus[];
+  /** Extra words searched for after the question alone found nothing. */
+  readonly expandedTerms?: readonly string[];
 }
 
 /**
