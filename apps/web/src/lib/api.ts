@@ -183,6 +183,27 @@ export const NotificationSchema = z.object({
 });
 export type Notification = z.infer<typeof NotificationSchema>;
 
+export const PersonSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  role: z.enum(["owner", "admin", "member", "guest"]),
+  active: z.boolean(),
+  deactivatedAt: z.string().nullable(),
+});
+export type Person = z.infer<typeof PersonSchema>;
+
+export const DeactivationSchema = z.object({
+  changed: z.boolean(),
+  connectionsRemoved: z.number(),
+  connectionsRevoked: z.number(),
+  triggersPaused: z.number(),
+  runsCancelled: z.number(),
+  proposalsRejected: z.number(),
+  changesInProgress: z.number(),
+});
+export type Deactivation = z.infer<typeof DeactivationSchema>;
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -221,6 +242,9 @@ export interface ApiClient {
     feedback: { rating: "up" | "down"; reason?: string },
   ): Promise<{ saved: true }>;
   audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
+  people(): Promise<Person[]>;
+  deactivatePerson(id: string): Promise<Deactivation>;
+  reactivatePerson(id: string): Promise<{ changed: boolean }>;
   agentTriggers(): Promise<AgentTrigger[]>;
   createAgentTrigger(trigger: NewAgentTrigger): Promise<AgentTrigger>;
   deleteAgentTrigger(id: string): Promise<{ deleted: true }>;
@@ -318,6 +342,10 @@ export function createApiClient(
         z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().nullable() }),
         before === undefined ? "/admin/audit" : `/admin/audit?before=${before}`,
       ),
+    people: () => request(z.array(PersonSchema), "/admin/people"),
+    deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
+    reactivatePerson: (id) =>
+      request(z.object({ changed: z.boolean() }), `/admin/people/${enc(id)}/reactivate`, { method: "POST" }),
     agentTriggers: () => request(z.array(AgentTriggerSchema), "/agent-triggers"),
     createAgentTrigger: (trigger) =>
       request(AgentTriggerSchema, "/agent-triggers", { method: "POST", body: JSON.stringify(trigger) }),

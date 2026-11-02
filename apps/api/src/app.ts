@@ -23,12 +23,14 @@ import { TriggersController } from "./agents/triggers.controller.js";
 import type { TriggersApi } from "./agents/triggers.service.js";
 import { AuditController } from "./admin/audit.controller.js";
 import type { AuditApi } from "./admin/audit.service.js";
+import { PeopleController } from "./admin/people.controller.js";
+import type { PeopleApi } from "./admin/people.service.js";
 import { ConversationsController } from "./conversations/conversations.controller.js";
 import type { ConversationsApi } from "./conversations/conversations.service.js";
 import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, PROPOSALS, TRIGGERS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, PEOPLE, PROPOSALS, TRIGGERS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -46,6 +48,8 @@ export interface AppDeps {
   readonly mcp?: McpEndpointDeps;
   /** Without this, there are no automatic agents or notifications. */
   readonly triggers?: TriggersApi;
+  /** Without this, admins cannot turn people off. */
+  readonly people?: PeopleApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -58,6 +62,7 @@ class AppModule {
       controllers: [
         ...(deps.mcp ? [McpController] : []),
         ...(deps.triggers ? [TriggersController] : []),
+        ...(deps.people ? [PeopleController] : []),
         HealthController,
         MeController,
         ConnectionsController,
@@ -81,6 +86,7 @@ class AppModule {
         { provide: AGENTS, useValue: deps.agents },
         ...(deps.mcp ? [{ provide: MCP, useValue: deps.mcp }] : []),
         ...(deps.triggers ? [{ provide: TRIGGERS, useValue: deps.triggers }] : []),
+        ...(deps.people ? [{ provide: PEOPLE, useValue: deps.people }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

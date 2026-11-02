@@ -14,6 +14,7 @@ const NAV = [
   { href: "/changes", label: "Changes" },
   { href: "/connections", label: "Connections" },
   { href: "/activity", label: "Activity" },
+  { href: "/people", label: "People" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -34,7 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="text-xl font-bold tracking-tight">Nexus</span>
             <span className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Brain</span>
           </Link>
-          <nav aria-label="Main navigation" className="order-last flex w-full items-center gap-1 sm:order-none sm:w-auto">
+          <nav aria-label="Main navigation" className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto px-1 sm:order-none sm:mx-0 sm:w-auto sm:px-0">
             {NAV.map((item) => {
               const isCurrent = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (

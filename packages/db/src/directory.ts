@@ -1,5 +1,5 @@
 import type { Role } from "@brain/core";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { groupMembers, users } from "./schema.js";
 import { withTenant, type PoolLike } from "./tenant.js";
 
@@ -12,7 +12,7 @@ export interface DirectoryUser {
 
 /**
  * Resolves an identity-provider subject to a user inside one tenant, with fresh
- * group memberships. A subject from another tenant resolves to null.
+ * group memberships. A subject from another tenant, or someone an admin has turned off, resolves to null.
  */
 export async function findUserBySubject(
   pool: PoolLike,
@@ -24,7 +24,7 @@ export async function findUserBySubject(
       .select({ id: users.id, role: users.role })
       .from(users)
       // RLS already scopes to the tenant; the explicit filter is defence in depth.
-      .where(and(eq(users.tenantId, tenantId), eq(users.externalSubject, subject)))
+      .where(and(eq(users.tenantId, tenantId), eq(users.externalSubject, subject), isNull(users.deactivatedAt)))
       .limit(1);
     if (!user) return null;
 

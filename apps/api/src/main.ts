@@ -29,6 +29,7 @@ import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
 import { createDbAuditApi } from "./admin/audit.service.js";
+import { createPeopleService } from "./admin/people.service.js";
 import { AgentsService } from "./agents/agents.service.js";
 import { TriggersService } from "./agents/triggers.service.js";
 import { AnswersService } from "./answers/answers.service.js";
@@ -154,6 +155,7 @@ const keySet = createRemoteJWKSet(jwksUrl(env));
 const app = await createApp({
   agents,
   triggers,
+  people: createPeopleService({ pool, logger, connections }),
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
     tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),
