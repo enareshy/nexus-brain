@@ -79,6 +79,15 @@ Tasks
 Exit criteria
 - 0 leaks across suite; drift alert latency within SLA; audit rows verified.
 
+### Phase 2 status (2026-11-02, branch `phase-2-permissions`)
+Decisions: sources are searched live with each user's own token, so the source enforces access inside each query. That meets FR-RET-02 for federated search; there is no index, so an ACL filter and the drift detector (task 2) do not apply until a connector uses `indexed` mode.
+Done:
+- FR-RET-03: search results are no longer cached, because the leak suite showed a document with removed access reaching the model and a revoked account still getting results. Each search now asks the service, so a repeated search takes about as long as a new one.
+- Red-team suite in `pnpm test:leak` (`apps/api/src/leak.int.test.ts`), on the real API, RLS, vault and OAuth with a mock service and model: between people and companies, forged tokens and parameters, removed access, revoked grants, role change and deleted users on a still-valid token, planted instructions, audit access.
+- FR-ADM-01: audit rows now list everything an answer retrieved, and empty or cancelled ones too. Admin-only `GET /admin/audit` and an Activity page, with filters and paging; viewing is itself recorded.
+Limits of this evidence: planted instructions are tested against a fake model, so the suite shows no tool can be reached (no tools are offered), not how the real model behaves. Access enforcement by real services is trusted, not tested, beyond Atlassian and GitHub working live as one user. Memory-bleed cases wait for memory (Phase 4).
+Known gaps: if a source times out after reading documents, those reads are dropped and not listed in the trail, though they never reach the person or the model; the per-user lists of Atlassian sites and GitHub repositories stay cached for 5 minutes, so a removed site or repository can stay in the search scope that long, while the service still refuses the search itself; someone disabled only in Keycloak keeps access until their token expires, because the check reads our user table; a search-time result can go stale in the moments before its text is read; the audit trail shows admins document IDs across the company, which customers should be told; the Activity page has no filter controls yet, though the API has them; the Activity link shows to everyone, and non-admins get a message.
+
 ## Phase 3 — Gateway, chat, agents, MCP (6–8 wks)  [FR-LLM, FR-AST-01..04, FR-AGT, FR-MCP, FR-MET-01]
 Tasks
 1. `llm-gateway`: adapters, tiers/router, retries/fallback/circuit breaker, caching, metering hook, zero-retention config, lint ban on direct vendor imports.

@@ -13,7 +13,7 @@ import { createFakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER } from "../test-support/tokens.js";
 import type { QueryExpander } from "./query-rewriter.js";
 import { AnswersService, type AnswersApi, type AnswerStreamEvent } from "./answers.service.js";
-import { unusedProposals } from "../test-support/fake-proposals.js";
+import { unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
 
 const scope = { tenantId: "0a000000-0000-4000-8000-000000000001", userId: "0a000000-0000-4000-8000-0000000000a4" };
 const signal = new AbortController().signal;
@@ -239,6 +239,7 @@ describe("POST /answers", () => {
       },
       connections: createFakeConnections(),
       proposals: unusedProposals,
+    audit: unusedAudit,
       answers: { answer: (...args) => behaviour(...args) },
       webAppUrl: "http://localhost:3000",
       verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
@@ -303,6 +304,27 @@ describe("POST /answers", () => {
     const res = await post({ q: "x" });
     expect(res.body).toContain('"code":"INTERNAL"');
     expect(res.body).not.toContain("postgres://");
+  });
+});
+
+describe("the audit trail", () => {
+  it("records an answer whose search failed, then reports the failure", async () => {
+    const { pool, queries } = fakePool();
+    const service = new AnswersService({
+      pool,
+      box: { fingerprint: () => "f".repeat(64) },
+      logger: { error: vi.fn() },
+      gateway: { streamAnswer: vi.fn(), rewriteQuery: noRewrite },
+      documents: {
+        gatherDocuments: async () => {
+          throw new AppError("UNAVAILABLE", "lookup failed");
+        },
+      },
+    });
+    await expect(service.answer(scope, "q", () => {}, new AbortController().signal)).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
+    expect(queries.some((text) => /audit_log/.test(text))).toBe(true);
   });
 });
 

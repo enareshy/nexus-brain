@@ -44,9 +44,6 @@ const STATE_PATTERN = /^[A-Za-z0-9_-]{43,128}$/;
 const CODE_MAX_CHARS = 2048;
 const SESSION_IDLE_MS = 60_000;
 const MAX_IDLE_SESSIONS = 200;
-/** Lets "Answer with AI" reuse the search just shown, and bounds how stale results can be. */
-const HITS_TTL_MS = 60_000;
-const MAX_CACHED_SEARCHES = 500;
 const MAX_CACHED_TOOL_RESULTS = 500;
 const EXPAND_TIMEOUT_MS = 8_000;
 
@@ -119,7 +116,6 @@ export function hashState(state: string): string {
 export class ConnectionsService implements ConnectionsApi, DocumentSource {
   private readonly sessions = new KeyedMutex();
   private readonly idleSessions: SessionPool;
-  private readonly hitCache = new TtlCache<readonly SearchHit[]>(MAX_CACHED_SEARCHES);
   private readonly toolCache = new TtlCache<ToolResult>(MAX_CACHED_TOOL_RESULTS);
 
   constructor(private readonly deps: ConnectionsDeps) {
@@ -166,7 +162,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     this.idleSessions.evictWhere(
       (key) => key.startsWith(tenantPrefix) && sharing.some((d) => key.endsWith(`|${d.id}`)),
     );
-    this.hitCache.deleteByPrefix(tenantPrefix);
     this.toolCache.deleteByPrefix(tenantPrefix);
     await this.audit(scope, "connection.app_saved", serverId);
     return { saved: true };
@@ -283,7 +278,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
 
   /**
    * Runs a write once, on a new session, with no retry: repeating it could change data twice.
-   * Search results are dropped afterwards so the change shows up in the next search.
    */
   writeWithSession<T>(
     scope: UserScope,
@@ -298,7 +292,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       try {
         return await work(session);
       } finally {
-        this.hitCache.deleteByPrefix(`${key}|`);
         session.close().catch((err: unknown) => this.deps.onBackgroundError?.(err));
         await touchConnection(this.deps.pool, scope, serverId).catch((err: unknown) =>
           this.deps.onBackgroundError?.(err),
@@ -342,17 +335,8 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     return federatedSearch(
       active.map((c) => ({
         id: c.serverId,
-        run: async (signal) => {
-          // A repeated search within the TTL needs no session at all.
-          const cached = this.hitCache.get(this.hitKey(scope, c.serverId, query, limit));
-          if (cached) return cached;
-          return this.withSession(
-            scope,
-            c.serverId,
-            (session) => this.searchHits(scope, c.serverId, session, query, limit),
-            signal,
-          );
-        },
+        run: (signal) =>
+          this.withSession(scope, c.serverId, (session) => this.searchHits(c.serverId, session, query, limit, scope), signal),
       })),
       { limit, rerankQuery: query },
     );
@@ -377,8 +361,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
             c.serverId,
             async (session) => {
               const adapter = this.deps.adapters.get(c.serverId)!;
-              const hits = await this.searchHits(scope, c.serverId, session, query, options.limit);
-              // Never cached: reading with the user's token is what re-checks their access.
+              const hits = await this.searchHits(c.serverId, session, query, options.limit, scope);
               const read = await adapter.readDocuments?.(session, hits.slice(0, options.maxDocuments));
               read?.forEach((text, url) => bodies.set(url, text));
               return hits;
@@ -396,26 +379,19 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     return `${scope.tenantId}|${scope.userId}|${serverId}`;
   }
 
-  /** Every cache key starts with the user's lock key, so entries are never shared. */
-  private hitKey(scope: UserScope, serverId: string, query: string, limit: number): string {
-    return `${this.lockKey(scope, serverId)}|${limit}|${query.trim()}`;
-  }
-
-  /** Empty results are not cached, so newly created content shows up immediately. */
-  private async searchHits(
-    scope: UserScope,
+  /**
+   * Results are never cached (FR-RET-03): asking the service with the user's own token each time
+   * is what checks their access, so removed access and revoked accounts take effect at once.
+   */
+  private searchHits(
     serverId: string,
     session: McpSession,
     query: string,
     limit: number,
+    scope: UserScope,
   ): Promise<readonly SearchHit[]> {
-    const key = this.hitKey(scope, serverId, query, limit);
-    const cached = this.hitCache.get(key);
-    if (cached) return cached;
     const adapter = this.deps.adapters.get(serverId)!;
-    const hits = await adapter.search(this.withToolCache(scope, serverId, adapter, session), query, limit);
-    if (hits.length > 0) this.hitCache.set(key, hits, HITS_TTL_MS);
-    return hits;
+    return adapter.search(this.withToolCache(scope, serverId, adapter, session), query, limit);
   }
 
   /** Serves tools the adapter marks as slow-changing from a per-user cache. Errors are not cached. */
@@ -444,7 +420,6 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   private forget(scope: UserScope, serverId: string): void {
     const key = this.lockKey(scope, serverId);
     this.idleSessions.evict(key);
-    this.hitCache.deleteByPrefix(`${key}|`);
     this.toolCache.deleteByPrefix(`${key}|`);
   }
 

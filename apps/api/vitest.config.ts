@@ -16,6 +16,7 @@ export default defineConfig({
         "src/connections/connections.service.ts",
         "src/connections/vault-store.ts",
         "src/proposals/**",
+        "src/admin/**",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },

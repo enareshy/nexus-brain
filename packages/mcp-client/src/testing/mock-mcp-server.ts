@@ -38,6 +38,8 @@ export interface MockMcpServer {
     mcpCalls: number;
   };
   readonly createdIssues: Array<{ identity: string; summary: string }>;
+  /** Names of every tool called, in order. */
+  readonly calledTools: string[];
   /** Identity the next /authorize call "logs in" as (simulates the user's consent). */
   setNextIdentity(identity: string): void;
   expireAccessTokens(): void;
@@ -69,6 +71,7 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
   let failToolName: string | null = null;
   let mcpDelayMs = 0;
   const createdIssues: Array<{ identity: string; summary: string }> = [];
+  const calledTools: string[] = [];
   let nextIdentity = Object.keys(options.issuesByIdentity)[0] ?? "anonymous";
   let baseUrl = "";
 
@@ -192,6 +195,8 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
         return json(res, 500, { error: "connection_lost" });
       }
       if (raw.includes('"method":"initialize"')) stats.initializes += 1;
+      const call = raw ? (JSON.parse(raw) as { method?: string; params?: { name?: string } }) : {};
+      if (call.method === "tools/call" && call.params?.name) calledTools.push(call.params.name);
       const mcp = buildMcpServer(grant.identity);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => {
@@ -265,6 +270,7 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
     },
     stats,
     createdIssues,
+    calledTools,
     setNextIdentity: (identity) => {
       nextIdentity = identity;
     },

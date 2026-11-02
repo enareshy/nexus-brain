@@ -27,6 +27,7 @@ import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
+import { createDbAuditApi } from "./admin/audit.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -114,6 +115,7 @@ const app = await createApp({
   connections,
   answers,
   proposals,
+  audit: createDbAuditApi(pool),
   webAppUrl: env.WEB_APP_URL,
   verifier: createJwtVerifier({
     issuer: env.OIDC_ISSUER,
