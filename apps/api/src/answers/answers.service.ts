@@ -168,7 +168,12 @@ export class AnswersService implements AnswersApi {
     let saved = false;
     try {
       outcome = await gateway.streamAnswer(
-        { question, documents, ...(conversation?.history.length ? { history: conversation.history } : {}) },
+        {
+          question,
+          documents,
+          cacheScope: scope.tenantId,
+          ...(conversation?.history.length ? { history: conversation.history } : {}),
+        },
         (event) => {
           if (event.type === "text") {
             parts = appendText(parts, event.text);
@@ -253,6 +258,8 @@ export class AnswersService implements AnswersApi {
         retrieved: retrieved.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
         documents: cited.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
         model: outcome?.model ?? null,
+        // A replay of a recent identical answer, so the model was not called.
+        cached: outcome?.cached === true,
         stopReason: endedEarly ?? outcome?.stopReason ?? "not_completed",
         citations,
       },

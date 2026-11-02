@@ -97,6 +97,8 @@ export interface AnswerOutcome extends TokenCounts {
   /** end_turn, max_tokens, refusal, ... */
   readonly stopReason: string | null;
   readonly costUsd: number | null;
+  /** True when a recent identical answer was replayed, so nothing was billed. */
+  readonly cached?: boolean;
 }
 
 /** What a call used. `estimated` means the stream did not finish, so counts are partial or inferred. */
@@ -117,6 +119,8 @@ export interface LlmGateway {
       readonly documents: readonly AnswerDocument[];
       /** Earlier turns, alternating and starting with the user. Context only, never a source. */
       readonly history?: readonly HistoryTurn[];
+      /** The company. Without it, the answer is never reused from or kept in a cache. */
+      readonly cacheScope?: string;
     },
     onEvent: (event: AnswerEvent) => void,
     signal: AbortSignal,

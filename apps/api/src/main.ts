@@ -12,7 +12,7 @@ import {
   type WriteAdapter,
 } from "@brain/connectors";
 import { assertRlsEnforced, createAppPool } from "@brain/db";
-import { createAnthropicGateway } from "@brain/llm-gateway";
+import { createAnthropicGateway, withAnswerCache, withCircuitBreaker } from "@brain/llm-gateway";
 import {
   ATLASSIAN_SERVER,
   createGithubServer,
@@ -85,7 +85,21 @@ const enabled = env.MCP_SERVERS.split(",").map((s) => s.trim()).filter(Boolean).
   return known();
 });
 
-const gateway = env.ANTHROPIC_API_KEY ? createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }) : null;
+// The cache sits outside the breaker, so a recent answer can still be replayed while the provider is down.
+const gateway = env.ANTHROPIC_API_KEY
+  ? withAnswerCache(
+      withCircuitBreaker(createAnthropicGateway({ apiKey: env.ANTHROPIC_API_KEY }), {
+        failureThreshold: 5,
+        openMs: 30_000,
+        onStateChange: (task, state) =>
+          state === "open"
+            ? logger.warn({ task }, "AI provider failing; calls paused for 30 s")
+            : logger.info({ task }, "AI provider calls resumed"),
+      }),
+      // Bounded to roughly 20 MB of text in all.
+      { ttlMs: 10 * 60_000, maxEntries: 500, maxEventChars: 20_000 },
+    )
+  : null;
 const expander = new QueryRewriter({ pool, gateway, logger });
 
 const connections = new ConnectionsService({
