@@ -100,6 +100,11 @@ Exit criteria
 - MCP passes auth review (no token passthrough, audience validation, SSRF guard).
 - Every LLM call visible in ledger.
 
+### Phase 3 status (2026-11-02)
+Chat slice done (FR-AST-01..04): a Chat page with streaming, citations and follow-up questions; private history that the database keeps per person, so admins cannot read it through the app; text encrypted at rest and bound to its owner and conversation; delete; thumbs up or down with a reason. Follow-ups give the model earlier turns as context and give the search step only the person's own earlier questions; only documents read for the latest question count as sources. Answers started from the Search page are saved too.
+Earlier turns reach the model as one block labelled untrusted, not as its own turns; that lowers injection risk but cannot rule it out. Limits: 500 conversations per person and 400 messages per conversation. Found live: browsers were blocked from every DELETE by the CORS settings, so Disconnect had also never worked from the page since Phase 1; fixed, with a test. There are still no browser end-to-end tests, which is why it stayed hidden. Known gaps: saved answers keep their text, titles, links and snippets, and earlier answers are still sent as context, even if access to their sources has since been removed or the connection removed, until the person deletes the conversation; there is no retention policy yet; two questions sent at once in one conversation can drop those turns from later context; the web sends one at a time; the gateway still has one provider, with no tiers, second vendor, circuit breaker or response cache (FR-LLM-02..05); saved answers keep their links, which are checked when saved and again by the page.
+Not started: agent runtime, tool registry and triggers (task 3), Brain's own MCP server (task 4), agent evals (task 5).
+
 ## Phase 4 — Memory, graph, metering, plans (6–8 wks)  [FR-AST-05..08, FR-RET-07..09, FR-MET-02..04, FR-WS-05..07]
 Tasks
 1. Memory (view/edit/delete), skills, @Brain mentions, summaries.

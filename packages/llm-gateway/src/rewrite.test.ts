@@ -34,6 +34,14 @@ describe("rewriteQuery", () => {
     expect(JSON.stringify(params.messages)).toContain("how do we change passwords");
   });
 
+  it("gives the model earlier questions, so a follow-up can be understood", async () => {
+    const { gateway, create } = gatewayReplying(reply('{"keywords":["a1"]}'));
+    await gateway.rewriteQuery("who owns it", signal, () => {}, ["status of the login bug"]);
+    const sent = JSON.stringify(create.mock.calls[0]![0].messages);
+    expect(sent).toContain("status of the login bug");
+    expect(sent).toContain("who owns it");
+  });
+
   it("reports usage and cost", async () => {
     const { gateway } = gatewayReplying(reply('{"keywords":["a1"]}'));
     const reports: UsageReport[] = [];

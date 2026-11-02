@@ -31,6 +31,7 @@ import { createDbAuditApi } from "./admin/audit.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
+import { ConversationsService } from "./conversations/conversations.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
 
 interface KnownServer {
@@ -94,7 +95,9 @@ const connections = new ConnectionsService({
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
+const conversations = new ConversationsService({ pool, box });
 const answers = new AnswersService({
+  conversations,
   pool,
   box,
   logger,
@@ -116,6 +119,7 @@ const app = await createApp({
   answers,
   proposals,
   audit: createDbAuditApi(pool),
+  conversations,
   webAppUrl: env.WEB_APP_URL,
   verifier: createJwtVerifier({
     issuer: env.OIDC_ISSUER,

@@ -2,7 +2,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Proposal, WriteTarget } from "@/lib/api";
+import { answerStateFromSaved, INITIAL_ANSWER, reduceAnswer } from "@/lib/answer";
 import { ActivityList } from "./ActivityList";
+import { ChatThread, type ChatTurn } from "./ChatThread";
 import { ChangeForm } from "./ChangeForm";
 import { ProposalCard } from "./ProposalCard";
 
@@ -40,6 +42,53 @@ function renderCard(overrides: Partial<Proposal> = {}, isBusy = false) {
   render(<ProposalCard proposal={item} isBusy={isBusy} onApprove={onApprove} onReject={onReject} />);
   return { onApprove, onReject, item };
 }
+
+describe("ChatThread", () => {
+  const saved = answerStateFromSaved({
+    parts: [{ kind: "text", text: "It launches in May." }, { kind: "cite", source: 1 }],
+    hits: [{ serverId: "a", externalId: "1", title: "Launch plan", url: "https://x.example/1", snippet: "", updatedAt: null, score: 1 }],
+    outcome: "answered",
+    grounded: true,
+    truncatedDocuments: 0,
+  });
+  const turns: ChatTurn[] = [
+    { kind: "question", id: "q1", text: "<b>when</b> is launch?" },
+    { kind: "answer", id: "a1", state: saved, messageId: "m1", rating: null },
+  ];
+
+  it("shows the question as text and a saved answer with its sources", () => {
+    render(<ChatThread turns={turns} onFeedback={vi.fn()} />);
+    expect(screen.getByText("<b>when</b> is launch?")).toBeInTheDocument();
+    expect(screen.getByText("It launches in May.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Launch plan" })).toBeInTheDocument();
+  });
+
+  it("records a rating, and asks why when an answer was not helpful", async () => {
+    const user = userEvent.setup();
+    const onFeedback = vi.fn();
+    render(<ChatThread turns={turns} onFeedback={onFeedback} />);
+    await user.click(screen.getByRole("button", { name: "Helpful" }));
+    expect(onFeedback).toHaveBeenLastCalledWith("m1", "up", undefined);
+    await user.click(screen.getByRole("button", { name: "Not helpful" }));
+    expect(onFeedback).toHaveBeenLastCalledWith("m1", "down", undefined);
+    await user.type(screen.getByLabelText("What was wrong?"), "wrong date");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onFeedback).toHaveBeenLastCalledWith("m1", "down", "wrong date");
+    expect(screen.queryByLabelText("What was wrong?")).not.toBeInTheDocument();
+  });
+
+  it("shows the current rating, and offers none until an answer is saved and finished", () => {
+    const { unmount } = render(<ChatThread turns={[{ ...turns[1]!, rating: "down" } as ChatTurn]} onFeedback={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Not helpful" })).toHaveAttribute("aria-pressed", "true");
+    unmount();
+    render(<ChatThread turns={[{ kind: "answer", id: "a2", state: INITIAL_ANSWER, messageId: null, rating: null }]} onFeedback={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Helpful" })).not.toBeInTheDocument();
+  });
+
+  it("ignores the conversation event when building an answer", () => {
+    expect(reduceAnswer(INITIAL_ANSWER, { type: "conversation", conversationId: "c1" })).toBe(INITIAL_ANSWER);
+  });
+});
 
 describe("ActivityList", () => {
   const entry = {

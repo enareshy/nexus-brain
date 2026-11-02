@@ -42,6 +42,14 @@ describe("QueryRewriter", () => {
     expect(gateway.rewriteQuery).toHaveBeenCalledTimes(3);
   });
 
+  it("treats the same follow-up after different questions as different", async () => {
+    const { rewriter, gateway } = setup();
+    await rewriter.expand(SCOPE, "who owns it", signal, ["login bug"]);
+    await rewriter.expand(SCOPE, "who owns it", signal, ["billing export"]);
+    await rewriter.expand(SCOPE, "who owns it", signal, ["login bug"]);
+    expect(gateway.rewriteQuery).toHaveBeenCalledTimes(2);
+  });
+
   it("counts repeats of one question towards the limit, because each repeat can search again", async () => {
     const { rewriter, gateway } = setup();
     for (let i = 0; i < 30; i += 1) expect(await rewriter.expand(SCOPE, "same", signal)).toHaveLength(2);

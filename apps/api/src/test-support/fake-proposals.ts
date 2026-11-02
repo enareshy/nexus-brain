@@ -1,9 +1,13 @@
 import type { AuditApi } from "../admin/audit.service.js";
+import type { ConversationsApi } from "../conversations/conversations.service.js";
 import type { ProposalsApi } from "../proposals/proposals.service.js";
 
 function unused(): never {
   throw new Error("Proposals are not used in this test");
 }
+
+/** For tests that build the whole app but do not exercise conversations. */
+export const unusedConversations: ConversationsApi = { list: unused, get: unused, remove: unused, feedback: unused };
 
 /** For tests that build the whole app but do not exercise the audit trail. */
 export const unusedAudit: AuditApi = { list: unused };

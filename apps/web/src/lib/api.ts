@@ -92,6 +92,41 @@ export const AuditEntrySchema = z.object({
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 
+export const SavedAnswerSchema = z.object({
+  parts: z.array(
+    z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("text"), text: z.string() }),
+      z.object({ kind: z.literal("cite"), source: z.number() }),
+    ]),
+  ),
+  hits: z.array(HitSchema),
+  outcome: z.enum(["answered", "no_documents", "refused", "incomplete"]),
+  grounded: z.boolean(),
+  truncatedDocuments: z.number(),
+});
+export type SavedAnswer = z.infer<typeof SavedAnswerSchema>;
+
+export const ConversationSummarySchema = z.object({ id: z.string(), title: z.string(), updatedAt: z.string() });
+export type ConversationSummary = z.infer<typeof ConversationSummarySchema>;
+
+export const ConversationDetailSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  messages: z.array(
+    z.discriminatedUnion("role", [
+      z.object({ id: z.string(), role: z.literal("user"), createdAt: z.string(), text: z.string() }),
+      z.object({
+        id: z.string(),
+        role: z.literal("assistant"),
+        createdAt: z.string(),
+        answer: SavedAnswerSchema,
+        rating: z.enum(["up", "down"]).nullable(),
+      }),
+    ]),
+  ),
+});
+export type ConversationDetail = z.infer<typeof ConversationDetailSchema>;
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -119,7 +154,15 @@ export interface ApiClient {
   saveServerApp(serverId: string, app: { clientId: string; clientSecret: string }): Promise<{ saved: true }>;
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
-  openAnswerStream(question: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
+  openAnswerStream(question: string, signal: AbortSignal, conversationId?: string): Promise<ReadableStream<Uint8Array>>;
+  conversations(): Promise<ConversationSummary[]>;
+  conversation(id: string): Promise<ConversationDetail>;
+  deleteConversation(id: string): Promise<{ deleted: true }>;
+  sendFeedback(
+    conversationId: string,
+    messageId: string,
+    feedback: { rating: "up" | "down"; reason?: string },
+  ): Promise<{ saved: true }>;
   audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
   proposals(): Promise<Proposal[]>;
   writeTargets(serverId: string): Promise<WriteTarget[]>;
@@ -216,7 +259,16 @@ export function createApiClient(
         body: JSON.stringify({ argsHash }),
       }),
     rejectProposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}/reject`, { method: "POST" }),
-    async openAnswerStream(question, signal) {
+    conversations: () => request(z.array(ConversationSummarySchema), "/conversations"),
+    conversation: (id) => request(ConversationDetailSchema, `/conversations/${enc(id)}`),
+    deleteConversation: (id) =>
+      request(z.object({ deleted: z.literal(true) }), `/conversations/${enc(id)}`, { method: "DELETE" }),
+    sendFeedback: (conversationId, messageId, feedback) =>
+      request(z.object({ saved: z.literal(true) }), `/conversations/${enc(conversationId)}/messages/${enc(messageId)}/feedback`, {
+        method: "POST",
+        body: JSON.stringify(feedback),
+      }),
+    async openAnswerStream(question, signal, conversationId) {
       const token = getToken();
       if (!token) throw new ApiError("UNAUTHENTICATED", "Please sign in", 401);
       let res: Response;
@@ -225,7 +277,7 @@ export function createApiClient(
         res = await fetchImpl(joinUrl(baseUrl, "/answers"), {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ q: question }),
+          body: JSON.stringify({ q: question, ...(conversationId ? { conversationId } : {}) }),
           signal,
         });
       } catch {

@@ -8,6 +8,7 @@ import { useAuth } from "./AuthProvider";
 
 const NAV = [
   { href: "/", label: "Search" },
+  { href: "/chat", label: "Chat" },
   { href: "/changes", label: "Changes" },
   { href: "/connections", label: "Connections" },
   { href: "/activity", label: "Activity" },
