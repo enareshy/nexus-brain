@@ -96,18 +96,27 @@ export class AnswersService implements AnswersApi {
   ): Promise<void> {
     const terms = (await this.deps.expander?.expand(scope, question, signal)) ?? [];
     // The answer itself still responds to the question exactly as asked.
-    const gathered = await this.deps.documents.gatherDocuments(scope, withExpandedTerms(question, terms), {
-      limit: SEARCH_LIMIT,
-      maxDocuments: MAX_DOCUMENTS,
-      signal,
-    });
+    const gathered = await this.deps.documents
+      .gatherDocuments(scope, withExpandedTerms(question, terms), {
+        limit: SEARCH_LIMIT,
+        maxDocuments: MAX_DOCUMENTS,
+        signal,
+      })
+      .catch(async (err: unknown) => {
+        await this.record(scope, question, [], [], null, null, 0, "search_failed");
+        throw err;
+      });
     // The caller left during the search: do not spend money on an answer nobody will read.
-    if (signal.aborted) return;
+    if (signal.aborted) {
+      await this.record(scope, question, gathered.hits, [], null, null, 0, "cancelled");
+      return;
+    }
     emit({ type: "sources", hits: gathered.hits, sources: gathered.sources });
 
     const cited = gathered.hits.slice(0, MAX_DOCUMENTS);
     if (cited.length === 0) {
       emit({ type: "done", outcome: "no_documents", grounded: false, truncatedDocuments: 0 });
+      await this.record(scope, question, gathered.hits, [], null, null, 0, "no_documents");
       return;
     }
 
@@ -152,7 +161,7 @@ export class AnswersService implements AnswersApi {
       });
     } finally {
       // Runs on failure and abort too, because the provider may have billed for those calls.
-      await this.record(scope, question, cited, usage, outcome, citationCount);
+      await this.record(scope, question, gathered.hits, cited, usage, outcome, citationCount);
     }
   }
 
@@ -160,10 +169,12 @@ export class AnswersService implements AnswersApi {
   private async record(
     scope: UserScope,
     question: string,
+    retrieved: readonly RankedHit[],
     cited: readonly RankedHit[],
     usage: UsageReport | null,
     outcome: AnswerOutcome | null,
     citations: number,
+    endedEarly?: "cancelled" | "no_documents" | "search_failed",
   ): Promise<void> {
     if (usage) {
       const { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, estimated } = usage;
@@ -183,9 +194,11 @@ export class AnswersService implements AnswersApi {
       action: "answer",
       meta: {
         queryFingerprint: this.deps.box.fingerprint(question),
+        // FR-ADM-01: everything returned to this person, and what of it went to the model.
+        retrieved: retrieved.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
         documents: cited.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
         model: outcome?.model ?? null,
-        stopReason: outcome?.stopReason ?? "not_completed",
+        stopReason: endedEarly ?? outcome?.stopReason ?? "not_completed",
         citations,
       },
     }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Audit write failed"));

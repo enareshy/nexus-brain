@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
-import { unusedProposals } from "../test-support/fake-proposals.js";
+import { unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConnectionsService } from "./connections.service.js";
 
@@ -73,6 +73,7 @@ beforeAll(async () => {
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
     answers: { answer: async () => {} },
     proposals: unusedProposals,
+    audit: unusedAudit,
     connections: new ConnectionsService({
       pool,
       box: createSecretBox(randomBytes(32).toString("base64")),

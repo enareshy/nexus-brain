@@ -15,6 +15,7 @@ import { createApp } from "../app.js";
 import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
 import { ConnectionsService } from "../connections/connections.service.js";
+import { unusedAudit } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ProposalsService } from "./proposals.service.js";
 
@@ -106,6 +107,7 @@ beforeAll(async () => {
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
     answers: { answer: async () => {} },
     connections,
+    audit: unusedAudit,
     proposals: new ProposalsService({ pool, logger, sessions: connections, adapters: new Map([[SERVER, mockWrites]]) }),
   });
   await app.init();

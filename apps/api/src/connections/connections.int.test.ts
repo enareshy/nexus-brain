@@ -16,7 +16,7 @@ import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConnectionsService } from "./connections.service.js";
-import { unusedProposals } from "../test-support/fake-proposals.js";
+import { unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
@@ -57,6 +57,7 @@ beforeAll(async () => {
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
     proposals: unusedProposals,
+    audit: unusedAudit,
     answers: { answer: async () => {} },
     connections: new ConnectionsService({
       pool,
@@ -180,28 +181,17 @@ describe("connect Jira (mock) and search as that user", () => {
     expect(mock.stats.initializes).toBe(before);
   });
 
-  it("answers a repeated search from the per-user cache, for that user only", async () => {
+  it("asks the service every time, so nothing can come from a cached copy", async () => {
     const pat = await as("patAcme");
-    const first = await pat("GET", "/search?q=login");
-    expect(first.json().data.hits).toHaveLength(1);
+    expect((await pat("GET", "/search?q=login")).json().data.hits).toHaveLength(1);
     await mock.close();
     try {
-      // The server is down, so this can only come from the cache.
-      const again = await pat("GET", "/search?q=login");
-      expect(again.json().data.hits).toHaveLength(1);
-      const bob = await as("bob");
-      expect((await bob("GET", "/search?q=login")).json().data.hits).toEqual([]);
+      const again = (await pat("GET", "/search?q=login")).json().data;
+      expect(again.hits).toEqual([]);
+      expect(again.sources[0].ok).toBe(false);
     } finally {
       await mock.listen();
     }
-  });
-
-  it("does not cache empty results", async () => {
-    const pat = await as("patAcme");
-    const before = mock.stats.mcpCalls;
-    await pat("GET", "/search?q=nothing-matches-this");
-    await pat("GET", "/search?q=nothing-matches-this");
-    expect(mock.stats.mcpCalls - before).toBeGreaterThan(2);
   });
 
   it("replaces a reused session that has gone stale", async () => {
@@ -232,7 +222,7 @@ describe("connect Jira (mock) and search as that user", () => {
     await inFlight;
     expect(reconnect.statusCode).toBe(200);
 
-    // The new account sees none of Pat's issues: not from the cache, and not via an old session.
+    // The new account sees none of Pat's issues, including through an old session.
     expect((await pat("GET", query)).json().data.hits).toEqual([]);
     expect((await pat("GET", "/search?q=login+bug")).json().data.hits).toEqual([]);
 

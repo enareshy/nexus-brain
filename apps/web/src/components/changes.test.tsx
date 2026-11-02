@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Proposal, WriteTarget } from "@/lib/api";
+import { ActivityList } from "./ActivityList";
 import { ChangeForm } from "./ChangeForm";
 import { ProposalCard } from "./ProposalCard";
 
@@ -39,6 +40,39 @@ function renderCard(overrides: Partial<Proposal> = {}, isBusy = false) {
   render(<ProposalCard proposal={item} isBusy={isBusy} onApprove={onApprove} onReject={onReject} />);
   return { onApprove, onReject, item };
 }
+
+describe("ActivityList", () => {
+  const entry = {
+    id: 1,
+    userId: "u1",
+    userEmail: "pat@example.com",
+    action: "search",
+    resource: null,
+    meta: { results: [{ serverId: "a", externalId: "1" }, { serverId: "a", externalId: "2" }] },
+    createdAt: "2026-11-01T10:00:00.000Z",
+  };
+
+  it("says who did what and how many documents they were shown", () => {
+    render(<ActivityList entries={[entry]} />);
+    expect(screen.getByText(/Searched · 2 documents returned/)).toBeInTheDocument();
+    expect(screen.getByText("pat@example.com")).toBeInTheDocument();
+  });
+
+  it("names an unfamiliar action as text, and falls back when there is no user", () => {
+    render(
+      <ActivityList
+        entries={[{ ...entry, action: "<b>x</b>", userEmail: null, userId: null, meta: { retrieved: [{}] }, resource: "gmail" }]}
+      />,
+    );
+    expect(screen.getByText(/<b>x<\/b> · gmail · 1 document returned/)).toBeInTheDocument();
+    expect(screen.getByText("system")).toBeInTheDocument();
+  });
+
+  it("explains an empty list", () => {
+    render(<ActivityList entries={[]} />);
+    expect(screen.getByText("No activity matches.")).toBeInTheDocument();
+  });
+});
 
 describe("ProposalCard", () => {
   it("shows the server, the tool and the exact arguments before approval", () => {

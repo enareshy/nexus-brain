@@ -27,7 +27,7 @@ Raw tool list: [`0001-atlassian-tools.json`](0001-atlassian-tools.json) (32 tool
 | Tool annotations | Read tools have `readOnlyHint: true`; write tools have `destructiveHint: false`. No delete tools are listed |
 
 ### Speed work (measured live, 2026-11-01)
-Reused MCP sessions per user (60 s idle), per-user site list cache (5 min) and per-user search cache (60 s, non-empty only). Document reads stay uncached because they re-check access.
+Reused MCP sessions per user (60 s idle) and a per-user site list cache (5 min). A per-user search cache (60 s) was also measured below, then removed on 2026-11-02 (FR-RET-03): the leak suite showed a document with removed access still reaching the model, and a revoked account still getting results. Every search now asks the service with the user's token, so the "repeat search" row below no longer applies and a repeat costs about the same as a new search.
 
 | Step | Before | After |
 |---|---|---|
@@ -37,9 +37,9 @@ Reused MCP sessions per user (60 s idle), per-user site list cache (5 min) and p
 | First answer text, after searching | 5.7 s | 3.5 s |
 | First answer text, new question, warm session | 5.7 s | 3.8 s |
 
-The 2.5 s first-text target is still not met: about 1.6 s is document reads and 1.1-1.9 s is the model. One run each on a small site, so treat these as indicative. Search results can be up to 60 s stale.
+The 2.5 s first-text target is still not met: about 1.6 s is document reads and 1.1-1.9 s is the model. One run each on a small site, so treat these as indicative.
 
-Isolation rules for this code: every cache and pool key starts with tenant, user and server; reconnecting takes the same per-user lock as session work, so a request on the old account cannot refill the caches afterwards (a mutation-checked integration test covers this); needing re-auth, disconnecting and connecting all clear that user's entries. Known gaps: one heavy user can push out others' cache entries (shared size bound), audit rows do not mark cached results, and caches and the pool are per API instance.
+Isolation rules for this code: every cache and pool key starts with tenant, user and server; reconnecting takes the same per-user lock as session work, so a request on the old account cannot refill the site cache or session pool afterwards (a mutation-checked integration test covers this); needing re-auth, disconnecting and connecting all clear that user's entries. Known gaps: one heavy user can push out others' cache entries (shared size bound), audit rows do not mark cached results, and caches and the pool are per API instance.
 
 ### Write path (FR-WR-01..05, FR-WS-J04)
 Only `createJiraIssue` and `editJiraIssue` (write) and `addCommentToJiraIssue` (external-effect) can be called. Everything else, including transitions, worklogs, links and Confluence writes, is unknown to the manifest and so treated as destructive. `editJiraIssue` is limited to summary and description; `commentId` is never sent, because it would overwrite an existing comment.

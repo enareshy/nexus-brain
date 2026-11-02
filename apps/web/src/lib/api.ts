@@ -81,6 +81,17 @@ export type WriteRequest =
   | { action: "update_issue"; siteId: string; issueKey: string; summary?: string; description?: string }
   | { action: "add_comment"; siteId: string; issueKey: string; body: string };
 
+export const AuditEntrySchema = z.object({
+  id: z.number(),
+  userId: z.string().nullable(),
+  userEmail: z.string().nullable(),
+  action: z.string(),
+  resource: z.string().nullable(),
+  meta: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+});
+export type AuditEntry = z.infer<typeof AuditEntrySchema>;
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -109,6 +120,7 @@ export interface ApiClient {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
+  audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
   proposals(): Promise<Proposal[]>;
   writeTargets(serverId: string): Promise<WriteTarget[]>;
   propose(serverId: string, request: WriteRequest): Promise<Proposal>;
@@ -186,6 +198,11 @@ export function createApiClient(
       request(SearchResultSchema, `/search?q=${enc(query)}&limit=${options.limit ?? 10}`, {
         signal: options.signal,
       }),
+    audit: (before) =>
+      request(
+        z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().nullable() }),
+        before === undefined ? "/admin/audit" : `/admin/audit?before=${before}`,
+      ),
     proposals: () => request(z.array(ProposalSchema), "/proposals"),
     writeTargets: (serverId) => request(z.array(WriteTargetSchema), `/proposals/targets/${enc(serverId)}`),
     propose: (serverId, writeRequest) =>
