@@ -85,6 +85,21 @@ function ConnectionsPage() {
     await handleConnect(serverId);
   }
 
+  async function handleSetAllowed(serverId: string, allowed: boolean) {
+    setBusyServerId(serverId);
+    setMessage(null);
+    try {
+      await api.setServerAllowed(serverId, allowed);
+      const name = connections?.find((c) => c.serverId === serverId)?.displayName ?? "This service";
+      setMessage({ tone: "ok", text: allowed ? `${name} is allowed again.` : `${name} is turned off for everyone.` });
+      await load();
+    } catch (e) {
+      setMessage({ tone: "error", text: describeError(e) });
+    } finally {
+      setBusyServerId(null);
+    }
+  }
+
   async function handleDisconnect(serverId: string) {
     setBusyServerId(serverId);
     setMessage(null);
@@ -143,6 +158,7 @@ function ConnectionsPage() {
             onDisconnect={(id) => void handleDisconnect(id)}
             canSetUp={canSetUp}
             onSaveApp={(id, app) => void handleSaveApp(id, app)}
+            onSetAllowed={(id, allowed) => void handleSetAllowed(id, allowed)}
           />
         )}
       </div>

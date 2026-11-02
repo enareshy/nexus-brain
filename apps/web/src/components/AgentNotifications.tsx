@@ -10,7 +10,7 @@ const KIND_LABELS: Readonly<Record<string, string>> = {
   run_needs_decision: "Needs your decision",
   run_finished: "Finished",
   run_stopped: "Stopped",
-  trigger_paused: "Paused: reconnect Jira to resume, then set it up again",
+  trigger_paused: "Paused: Jira needs reconnecting, or your admin turned it off",
   trigger_skipped: "Skipped: reached today's limit on automatic runs",
 };
 

@@ -32,6 +32,8 @@ const CompleteBodySchema = z.object({
   state: z.string().min(1).max(128),
 });
 
+const AllowedSchema = z.strictObject({ allowed: z.boolean() });
+
 const ServerAppSchema = z.strictObject({
   clientId: z.string().trim().regex(/^[\w.-]{1,200}$/),
   clientSecret: z.string().trim().regex(/^\S{1,500}$/),
@@ -91,6 +93,20 @@ export class ConnectionsController {
     const id = parse(ServerIdSchema, serverId);
     const app = parse(ServerAppSchema, body);
     return ok(await this.connections.saveApp(scopeOf(ctx), id, app), { requestId: ctx.requestId });
+  }
+
+  /** Allows or turns off a service for everyone in the company. Admins only. Takes effect immediately. */
+  @Post(":serverId/allowed")
+  @HttpCode(200)
+  async setAllowed(
+    @Ctx() ctx: RequestContext,
+    @Param("serverId") serverId: string,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<{ allowed: boolean }>> {
+    if (!ADMIN_ROLES.has(ctx.role)) throw new AppError("FORBIDDEN", "Only an admin can change which services are allowed");
+    const id = parse(ServerIdSchema, serverId);
+    const { allowed } = parse(AllowedSchema, body);
+    return ok(await this.connections.setAllowed(scopeOf(ctx), id, allowed), { requestId: ctx.requestId });
   }
 
   @Delete(":serverId")

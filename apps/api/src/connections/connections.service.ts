@@ -14,8 +14,10 @@ import {
   getServerApp,
   listConnections,
   listServerApps,
+  listTurnedOffServers,
   savePendingAuthorization,
   saveServerApp,
+  setServerAllowed,
   touchConnection,
   type PoolLike,
   type UserScope,
@@ -61,6 +63,8 @@ export interface ConnectionView {
   readonly setup: "ready" | "needs_app" | "configured";
   /** The redirect address an admin gives the provider during setup. */
   readonly redirectUrl: string;
+  /** False when the company's admin has turned this service off for everyone. */
+  readonly allowed: boolean;
 }
 
 export interface ServerAppInput {
@@ -76,6 +80,8 @@ export interface ConnectionsApi {
   disconnect(scope: UserScope, serverId: string): Promise<{ disconnected: boolean; revoked: boolean }>;
   /** Saves this company's sign-in app. Callers must have checked the user is an admin. */
   saveApp(scope: UserScope, serverId: string, app: ServerAppInput): Promise<{ saved: true }>;
+  /** Allows or turns off a service for the whole company. Callers must have checked the user is an admin. */
+  setAllowed(scope: UserScope, serverId: string, allowed: boolean): Promise<{ allowed: boolean }>;
   tools(scope: UserScope, serverId: string): Promise<readonly ToolInfo[]>;
   search(scope: UserScope, query: string, limit: number): Promise<FederatedResult>;
   /** Full text of one search result, read with the person's own connection, or null if it cannot be read. */
@@ -141,20 +147,38 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async list(scope: UserScope): Promise<readonly ConnectionView[]> {
-    const rows = new Map((await this.currentConnections(scope)).map((r) => [r.serverId, r]));
+    // Turned-off services still show their connection, so the person can remove it.
+    const rows = new Map((await listConnections(this.deps.pool, scope)).map((r) => [r.serverId, r]));
+    const current = new Map((await this.currentConnections(scope)).map((r) => [r.serverId, r]));
     const apps = new Set((await listServerApps(this.deps.pool, scope.tenantId)).map((a) => a.serverId));
+    const turnedOff = await listTurnedOffServers(this.deps.pool, scope.tenantId);
     const appKeyOf = (def: McpServerDefinition) => def.appKey ?? def.id;
     return this.deps.registry.list().map((def) => {
       const row = rows.get(def.id);
       return {
         serverId: def.id,
         displayName: def.displayName,
-        status: row?.status ?? "not_connected",
+        status: current.get(def.id)?.status ?? row?.status ?? "not_connected",
         lastUsedAt: row?.lastUsedAt?.toISOString() ?? null,
         setup: !def.needsApp || def.client ? "ready" : apps.has(appKeyOf(def)) ? "configured" : "needs_app",
         redirectUrl: this.deps.client.redirectUrl,
+        allowed: !turnedOff.has(def.id),
       };
     });
+  }
+
+  async setAllowed(scope: UserScope, serverId: string, allowed: boolean): Promise<{ allowed: boolean }> {
+    const def = this.deps.registry.get(serverId);
+    // Recorded first: a change nobody can trace is worse than one that did not happen.
+    await this.audit(scope, allowed ? "connection.service_allowed" : "connection.service_turned_off", def.id);
+    await setServerAllowed(this.deps.pool, scope, def.id, allowed);
+    if (!allowed) {
+      // Sessions kept open for reuse stop now. Work already running finishes; nothing new starts.
+      const tenantPrefix = `${scope.tenantId}|`;
+      this.idleSessions.evictWhere((key) => key.startsWith(tenantPrefix) && key.endsWith(`|${def.id}`));
+      this.toolCache.deleteByPrefix(tenantPrefix);
+    }
+    return { allowed };
   }
 
   async saveApp(scope: UserScope, serverId: string, app: ServerAppInput): Promise<{ saved: true }> {
@@ -180,12 +204,15 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
    * The user's connections. One made before the company's app last changed belongs to the old
    * app and cannot refresh with the new one, so it needs reconnecting. RLS keeps each user's
    * rows private, so this is worked out when read rather than updated for everyone at once.
+   * A service the company has turned off is left out, so nothing reads through it (FR-MCP-02).
    */
   private async currentConnections(scope: UserScope): Promise<ConnectionSummary[]> {
-    const [rows, apps] = await Promise.all([
+    const [all, apps, turnedOff] = await Promise.all([
       listConnections(this.deps.pool, scope),
       listServerApps(this.deps.pool, scope.tenantId),
+      listTurnedOffServers(this.deps.pool, scope.tenantId),
     ]);
+    const rows = all.filter((row) => !turnedOff.has(row.serverId));
     const changedAt = new Map(apps.map((app) => [app.serverId, app.updatedAt.getTime()]));
     const appKeys = new Map(this.deps.registry.list().map((d) => [d.id, d.appKey ?? d.id]));
     return rows.map((row) => {
@@ -206,6 +233,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   async authorize(scope: UserScope, serverId: string): Promise<{ authorizationUrl: string }> {
+    await this.requireAllowed(scope, serverId);
     const def = await this.definitionFor(scope, serverId);
     const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
     const start = await beginAuthorization(def, store, this.deps.client);
@@ -237,6 +265,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       throw new AppError("VALIDATION", "Authorization expired, was already used, or belongs to another user");
     }
 
+    await this.requireAllowed(scope, pending.serverId);
     const def = await this.definitionFor(scope, pending.serverId);
     // Same lock as all session work: a request still using the previous account finishes
     // first, so it cannot re-populate the caches or pool after this reset.
@@ -458,6 +487,8 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     const key = this.lockKey(scope, serverId);
     return this.sessions.run(key, async () => {
       if (signal?.aborted) throw new AppError("UNAVAILABLE", "Search budget exceeded");
+      // Checked again here, since an admin may have turned the service off while this waited its turn.
+      await this.requireAllowed(scope, serverId);
       const reused = this.idleSessions.take(key);
       if (reused) {
         try {
@@ -488,7 +519,14 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     );
   }
 
+  private async requireAllowed(scope: UserScope, serverId: string): Promise<void> {
+    if ((await listTurnedOffServers(this.deps.pool, scope.tenantId)).has(serverId)) {
+      throw new AppError("FORBIDDEN", "Your admin has turned this service off", { reason: "service_turned_off" });
+    }
+  }
+
   private async requireActive(scope: UserScope, serverId: string): Promise<void> {
+    await this.requireAllowed(scope, serverId);
     const connection = (await this.currentConnections(scope)).find((c) => c.serverId === serverId);
     if (connection?.status !== "active") {
       throw new AppError("RECONNECT_REQUIRED", "This connection needs to be reconnected");

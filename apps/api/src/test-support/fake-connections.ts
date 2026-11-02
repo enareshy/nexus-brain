@@ -12,9 +12,10 @@ export function createFakeConnections(): FakeConnections {
   return {
     calls,
     readItem: async () => null,
+    setAllowed: async (_scope, _serverId, allowed) => ({ allowed }),
     list: async (...args) => {
       record("list", args);
-      return [{ serverId: "atlassian", displayName: "Atlassian", status: "not_connected", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" }];
+      return [{ serverId: "atlassian", displayName: "Atlassian", status: "not_connected", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback", allowed: true }];
     },
     authorize: async (...args) => {
       record("authorize", args);

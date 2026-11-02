@@ -96,7 +96,7 @@ describe("notifications", () => {
     api.markNotificationsRead.mockResolvedValue({ read: true });
     render(<AgentNotifications onOpenRun={onOpenRun} />);
     expect(await screen.findByText("Needs your decision")).toBeInTheDocument();
-    expect(screen.getByText(/reconnect Jira/)).toBeInTheDocument();
+    expect(screen.getByText(/Jira needs reconnecting, or your admin turned it off/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Comment on ENG-7" }));
     expect(onOpenRun).toHaveBeenCalledWith("r1");
     await user.click(screen.getByRole("button", { name: "Mark all read" }));

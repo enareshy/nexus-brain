@@ -132,7 +132,11 @@ export function AgentTriggers() {
                 <p className="font-medium">{triggerWhen(trigger)}</p>
                 <p className="mt-0.5 break-words text-slate-600 dark:text-slate-400">{trigger.goal}</p>
                 {!trigger.enabled && (
-                  <p className="mt-0.5 text-red-800 dark:text-red-300">Paused because Jira needs reconnecting. Reconnect it, then add this again.</p>
+                  <p className="mt-0.5 text-red-800 dark:text-red-300">
+                    {trigger.pausedReason === "service_turned_off"
+                      ? "Paused because your admin turned Jira off."
+                      : "Paused because Jira needs reconnecting. Reconnect it, then add this again."}
+                  </p>
                 )}
               </div>
               <button

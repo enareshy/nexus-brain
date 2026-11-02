@@ -57,6 +57,7 @@ Requirements that follow (all added to REQUIREMENTS.md):
 3. **Token vault**: access/refresh tokens encrypted with envelope encryption (AWS KMS, per-tenant data key), scoped to (tenant, user, server), refreshed proactively, revoked on Disconnect, on user removal, and on repeated 401. Tokens never appear in logs, prompts, traces or the browser.
 4. **Audience validation / no token passthrough**: a token minted for server A is only ever sent to server A (MCP security best practices).
 5. **Custom server URLs**: if users may paste arbitrary MCP URLs, that is an SSRF and data-exfiltration risk. Default policy: **admin-allow-listed servers only** (FR-MCP-02); user-added URLs disabled unless an admin enables them per tenant. Block private IP ranges and non-HTTPS.
+   - As built (2026-11-02): users cannot add URLs at all. Two allow-lists apply. The deployment's `MCP_SERVERS` lists the vetted servers this build can reach, and each company's admin can turn any of them off for everyone. A server the admin has not touched is **allowed**, so existing companies kept working. This departs from a strict default-deny; flip it to default-off for new companies before onboarding customers who expect that.
 6. **Org-level consent**: Microsoft 365 and some Slack/Google scopes need tenant-admin approval; add an admin "approve integration" step and document it for pilot customers.
 
 ## 4. Write access (decided: yes, in v1)
