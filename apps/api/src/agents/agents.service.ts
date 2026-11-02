@@ -10,6 +10,7 @@ import {
   getAgentRun,
   listAgentRuns,
   listAgentSteps,
+  markRunNotificationsRead,
   saveAgentRun,
   type PoolLike,
   type StoredAgentRun,
@@ -29,6 +30,9 @@ const RUN_DEADLINE_MS = 24 * 60 * 60 * 1000;
 // Per person, to bound spending.
 const MAX_WORKING_RUNS = 2;
 const MAX_RUNS_PER_HOUR = 20;
+/** Automatic runs spend money with nobody watching, so they have a tighter limit of their own. */
+const MAX_TRIGGERED_RUNS_PER_DAY = 10;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const LIST_LIMIT = 50;
 /** Longer than a model call can take, so a live run is never taken over. */
@@ -65,6 +69,7 @@ export interface AgentRunSummary {
   readonly goal: string;
   readonly status: StoredAgentRun["status"];
   readonly errorCode: string | null;
+  readonly automatic: boolean;
   readonly createdAt: string;
 }
 
@@ -76,8 +81,17 @@ export interface AgentRunView extends AgentRunSummary {
   readonly steps: readonly StepView[];
 }
 
+export interface AgentNotification {
+  readonly kind: "run_needs_decision" | "run_finished" | "run_stopped" | "trigger_paused" | "trigger_skipped";
+  readonly dedupeKey: string;
+  readonly title: string;
+  readonly runId?: string;
+}
+
 export interface AgentsApi {
-  start(scope: UserScope, goal: string): Promise<AgentRunSummary>;
+  start(scope: UserScope, goal: string, origin?: { readonly triggerId: string }): Promise<AgentRunSummary>;
+  /** Moves a run on if nothing is already working on it. */
+  resume(scope: UserScope, id: string): void;
   list(scope: UserScope): Promise<readonly AgentRunSummary[]>;
   /** Also picks up a run left behind by a restart, or waiting on a decision already made. */
   get(scope: UserScope, id: string): Promise<AgentRunView>;
@@ -93,6 +107,7 @@ export interface AgentsDeps {
     proposeForAgent(scope: UserScope, serverId: string, request: Parameters<ProposalsApi["propose"]>[2], origin: { id: string; agentRunId: string }): Promise<ProposalView>;
   };
   readonly logger: Pick<Logger, "error">;
+  readonly notify?: (scope: UserScope, notification: AgentNotification) => Promise<void>;
 }
 
 /** Stable, so running the same tool call again after a restart finds the same proposal. */
@@ -142,7 +157,11 @@ export class AgentsService implements AgentsApi {
     return JSON.parse(this.deps.box.open(ciphertext, this.context(scope, runId))) as T;
   }
 
-  async start(scope: UserScope, goal: string): Promise<AgentRunSummary> {
+  resume(scope: UserScope, id: string): void {
+    this.advanceInBackground(scope, id);
+  }
+
+  async start(scope: UserScope, goal: string, origin?: { readonly triggerId: string }): Promise<AgentRunSummary> {
     if (!this.deps.gateway) throw new AppError("UNAVAILABLE", "Agents are not configured yet");
     const id = randomUUID();
     const state: RunState = { messages: [{ role: "user", content: goal }] };
@@ -154,14 +173,25 @@ export class AgentsService implements AgentsApi {
         goalCiphertext: this.seal(scope, id, goal),
         stateCiphertext: this.seal(scope, id, state),
         deadlineAt: new Date(Date.now() + RUN_DEADLINE_MS),
+        triggerId: origin?.triggerId,
       },
-      { maxWorking: MAX_WORKING_RUNS, maxRecent: MAX_RUNS_PER_HOUR, recentSince: new Date(Date.now() - HOUR_MS) },
+      {
+        maxWorking: MAX_WORKING_RUNS,
+        maxRecent: MAX_RUNS_PER_HOUR,
+        recentSince: new Date(Date.now() - HOUR_MS),
+        maxTriggeredRecent: MAX_TRIGGERED_RUNS_PER_DAY,
+        maxTriggeredWorking: MAX_WORKING_RUNS - 1,
+        triggeredSince: new Date(Date.now() - DAY_MS),
+      },
     );
+    if (created === "too_many_triggered") {
+      throw new AppError("RATE_LIMITED", "Too many automatic runs today", { limit: "triggered" });
+    }
     if (created === "too_many_working") throw new AppError("RATE_LIMITED", "Wait for a running agent to finish first");
     if (created === "too_many_recent") throw new AppError("RATE_LIMITED", "Too many agent runs this hour. Try again later");
     await this.audit(scope, "agent.started", id);
     this.advanceInBackground(scope, id);
-    return { id, goal, status: "running", errorCode: null, createdAt: new Date().toISOString() };
+    return { id, goal, status: "running", errorCode: null, automatic: Boolean(origin), createdAt: new Date().toISOString() };
   }
 
   async list(scope: UserScope): Promise<readonly AgentRunSummary[]> {
@@ -176,6 +206,7 @@ export class AgentsService implements AgentsApi {
     const row = await getAgentRun(this.deps.pool, scope, id);
     if (!row) throw new AppError("NOT_FOUND", "Agent run not found");
     if (row.status === "running" || row.status === "waiting_approval") this.advanceInBackground(scope, id);
+    await markRunNotificationsRead(this.deps.pool, scope, id);
     const steps = await listAgentSteps(this.deps.pool, scope, id);
     return {
       ...this.summary(scope, row),
@@ -208,6 +239,7 @@ export class AgentsService implements AgentsApi {
       goal: this.open<string>(scope, row.id, row.goalCiphertext),
       status: row.status,
       errorCode: row.errorCode,
+      automatic: row.triggerId !== null,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -249,7 +281,12 @@ export class AgentsService implements AgentsApi {
     const fail = async (errorCode: string) => {
       if (await save("failed", { errorCode, waitingProposalId: null, leaseMs: null })) {
         await this.audit(scope, "agent.failed", id, { errorCode });
+        if (claimed.triggerId) await tell("run_stopped", `run:${id}:done`);
       }
+    };
+
+    const tell = async (kind: AgentNotification["kind"], dedupeKey: string) => {
+      await this.deps.notify?.(scope, { kind, dedupeKey, title: this.open<string>(scope, id, claimed.goalCiphertext), runId: id });
     };
 
     if (claimed.status === "waiting_approval") {
@@ -270,6 +307,7 @@ export class AgentsService implements AgentsApi {
         const outcome = await this.runTool(scope, id, seq, call);
         if (outcome.proposalId && outcome.pause) {
           await save("waiting_approval", { waitingProposalId: outcome.proposalId, leaseMs: null });
+          await tell("run_needs_decision", `run:${id}:decision:${outcome.proposalId}`);
           return;
         }
         const { pendingCall: _done, ...rest } = state;
@@ -307,7 +345,10 @@ export class AgentsService implements AgentsApi {
         waitingProposalId: null,
         leaseMs: null,
       });
-      if (saved) await this.audit(scope, "agent.completed", id, { turns, costUsd: cost });
+      if (saved) {
+        await this.audit(scope, "agent.completed", id, { turns, costUsd: cost });
+        if (claimed.triggerId) await tell("run_finished", `run:${id}:done`);
+      }
       return;
     }
   }

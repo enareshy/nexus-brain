@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AgentRunDetail } from "@/components/AgentRunDetail";
+import { AgentTriggers } from "@/components/AgentTriggers";
+import { AgentNotifications } from "@/components/AgentNotifications";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { describeError, type AgentRun, type AgentRunSummary, type Proposal } from "@/lib/api";
@@ -167,6 +169,10 @@ function AgentsPage() {
         </div>
       )}
 
+      <AgentNotifications onOpenRun={select} />
+
+      <AgentTriggers />
+
       <section aria-labelledby="runs-heading" className="mt-12">
         <h2 id="runs-heading" className="text-xl font-bold tracking-tight">
           Your runs
@@ -187,7 +193,10 @@ function AgentsPage() {
                   onClick={() => select(item.id)}
                   className="flex w-full items-baseline justify-between gap-4 py-3 text-left hover:text-brand focus-visible:outline-2 focus-visible:outline-brand aria-[current=true]:font-semibold"
                 >
-                  <span className="min-w-0 truncate">{item.goal}</span>
+                  <span className="min-w-0 truncate">
+                    {item.automatic && <span className="mr-2 font-mono text-xs uppercase tracking-wider text-brand">Auto</span>}
+                    {item.goal}
+                  </span>
                   <span className="shrink-0 text-sm text-slate-500">{STATUS_LABELS[item.status]}</span>
                 </button>
               </li>

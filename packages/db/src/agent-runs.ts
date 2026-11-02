@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { agentRuns, agentSteps } from "./schema.js";
 import { withUser, type PoolLike, type UserScope } from "./tenant.js";
@@ -11,6 +11,11 @@ export interface AgentRunLimits {
   readonly maxWorking: number;
   readonly maxRecent: number;
   readonly recentSince: Date;
+  /** Applies only to runs started by a trigger, which spend money with nobody watching. */
+  readonly maxTriggeredRecent?: number;
+  readonly triggeredSince?: Date;
+  /** Working runs a trigger may hold, so a person always has a slot for their own. */
+  readonly maxTriggeredWorking?: number;
 }
 
 /** The limits are checked under a per-user lock, so parallel starts cannot pass them together. */
@@ -22,15 +27,30 @@ export function createAgentRun(
     readonly goalCiphertext: string;
     readonly stateCiphertext: string;
     readonly deadlineAt: Date;
+    readonly triggerId?: string | undefined;
   },
   limits: AgentRunLimits,
-): Promise<"created" | "too_many_working" | "too_many_recent"> {
+): Promise<"created" | "too_many_working" | "too_many_recent" | "too_many_triggered"> {
   return withUser(pool, scope, async (db) => {
     await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`agent|${scope.tenantId}|${scope.userId}`}, 0))`);
     const [working] = await db.select({ value: count() }).from(agentRuns).where(eq(agentRuns.status, "running"));
     if ((working?.value ?? 0) >= limits.maxWorking) return "too_many_working";
     const [recent] = await db.select({ value: count() }).from(agentRuns).where(gt(agentRuns.createdAt, limits.recentSince));
     if ((recent?.value ?? 0) >= limits.maxRecent) return "too_many_recent";
+    if (run.triggerId && limits.maxTriggeredWorking !== undefined) {
+      const [busy] = await db
+        .select({ value: count() })
+        .from(agentRuns)
+        .where(and(isNotNull(agentRuns.triggerId), eq(agentRuns.status, "running")));
+      if ((busy?.value ?? 0) >= limits.maxTriggeredWorking) return "too_many_working";
+    }
+    if (run.triggerId && limits.maxTriggeredRecent !== undefined && limits.triggeredSince) {
+      const [triggered] = await db
+        .select({ value: count() })
+        .from(agentRuns)
+        .where(and(isNotNull(agentRuns.triggerId), gt(agentRuns.createdAt, limits.triggeredSince)));
+      if ((triggered?.value ?? 0) >= limits.maxTriggeredRecent) return "too_many_triggered";
+    }
     await db.insert(agentRuns).values({ ...run, status: "running", tenantId: scope.tenantId, userId: scope.userId });
     return "created";
   });

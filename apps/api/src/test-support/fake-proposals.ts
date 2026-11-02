@@ -8,7 +8,7 @@ function unused(): never {
 }
 
 /** For tests that build the whole app but do not exercise agents. */
-export const unusedAgents: AgentsApi = { start: unused, list: unused, get: unused, cancel: unused };
+export const unusedAgents: AgentsApi = { start: unused, resume: unused, list: unused, get: unused, cancel: unused };
 
 /** For tests that build the whole app but do not exercise conversations. */
 export const unusedConversations: ConversationsApi = { list: unused, get: unused, remove: unused, feedback: unused };

@@ -1,4 +1,5 @@
 import {
+  boolean,
   bigserial,
   integer,
   jsonb,
@@ -118,6 +119,7 @@ export const agentRuns = pgTable("agent_runs", {
   waitingProposalId: uuid("waiting_proposal_id"),
   leaseUntil: timestamp("lease_until", { withTimezone: true }),
   leaseToken: uuid("lease_token"),
+  triggerId: uuid("trigger_id"),
   deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -138,6 +140,44 @@ export const agentSteps = pgTable(
   },
   (table) => [primaryKey({ columns: [table.runId, table.seq] })],
 );
+
+export const agentTriggers = pgTable("agent_triggers", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  kind: text("kind").notNull().$type<"schedule" | "jira_assigned">(),
+  goalCiphertext: text("goal_ciphertext").notNull(),
+  intervalMinutes: integer("interval_minutes").notNull(),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  pausedReason: text("paused_reason"),
+  baselinedAt: timestamp("baselined_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const agentTriggerEvents = pgTable(
+  "agent_trigger_events",
+  {
+    triggerId: uuid("trigger_id").notNull(),
+    eventHash: text("event_hash").notNull(),
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.triggerId, table.eventHash] })],
+);
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  kind: text("kind").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  titleCiphertext: text("title_ciphertext").notNull(),
+  agentRunId: uuid("agent_run_id"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey(),
@@ -207,6 +247,9 @@ export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | 
 export const schema = {
   agentRuns,
   agentSteps,
+  agentTriggers,
+  agentTriggerEvents,
+  notifications,
   conversations,
   conversationMessages,
   messageFeedback,

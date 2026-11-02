@@ -10,4 +10,5 @@ export const AUDIT = Symbol("AUDIT");
 export const CONVERSATIONS = Symbol("CONVERSATIONS");
 export const AGENTS = Symbol("AGENTS");
 export const MCP = Symbol("MCP");
+export const TRIGGERS = Symbol("TRIGGERS");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");
