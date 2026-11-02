@@ -4,6 +4,7 @@ import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/
 import type { AnswerDocument, AnswerOutcome, LlmGateway, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import type { DocumentSource } from "../connections/connections.service.js";
+import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 
 const SEARCH_LIMIT = 10;
@@ -15,6 +16,7 @@ const MAX_ANSWERS_PER_WINDOW = 10;
 const MAX_CONCURRENT_ANSWERS = 2;
 
 export type AnswerStreamEvent =
+  | { readonly type: "conversation"; readonly conversationId: string }
   | { readonly type: "sources"; readonly hits: readonly RankedHit[]; readonly sources: readonly SourceStatus[] }
   | { readonly type: "text"; readonly text: string }
   /** `source` is the 1-based position in `hits`. */
@@ -27,6 +29,8 @@ export type AnswerStreamEvent =
       readonly grounded: boolean;
       /** Documents shortened to fit, so the answer may have missed later text. */
       readonly truncatedDocuments: number;
+      /** For feedback. Null if the answer could not be saved. */
+      readonly messageId: string | null;
     }
   | { readonly type: "error"; readonly code: string; readonly message: string };
 
@@ -36,6 +40,8 @@ export interface AnswersApi {
     question: string,
     emit: (event: AnswerStreamEvent) => void,
     signal: AbortSignal,
+    /** Continues this conversation. Without it, a new one is started. */
+    conversationId?: string,
   ): Promise<void>;
 }
 
@@ -49,6 +55,21 @@ export interface AnswersDeps {
   readonly now?: () => number;
   /** Finds documents worded differently from the question. Without one, it searches as asked. */
   readonly expander?: QueryExpander;
+  /** Keeps the person's private history. Without one, nothing is saved. */
+  readonly conversations?: ConversationStore;
+}
+
+function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
+  const last = parts.at(-1);
+  return last?.kind === "text"
+    ? [...parts.slice(0, -1), { kind: "text", text: last.text + text }]
+    : [...parts, { kind: "text", text }];
+}
+
+/** Repeated citations of one source in a row read better as a single marker. */
+function appendCitation(parts: readonly AnswerPart[], source: number): readonly AnswerPart[] {
+  const last = parts.at(-1);
+  return last?.kind === "cite" && last.source === source ? parts : [...parts, { kind: "cite", source }];
 }
 
 function userKey(scope: UserScope): string {
@@ -66,6 +87,7 @@ export class AnswersService implements AnswersApi {
     question: string,
     emit: (event: AnswerStreamEvent) => void,
     signal: AbortSignal,
+    conversationId?: string,
   ): Promise<void> {
     const gateway = this.deps.gateway;
     if (!gateway) {
@@ -79,7 +101,7 @@ export class AnswersService implements AnswersApi {
     }
     this.inFlight.set(key, running + 1);
     try {
-      await this.run(gateway, scope, question, emit, signal);
+      await this.run(gateway, scope, question, emit, signal, conversationId);
     } finally {
       const left = (this.inFlight.get(key) ?? 1) - 1;
       if (left > 0) this.inFlight.set(key, left);
@@ -93,8 +115,13 @@ export class AnswersService implements AnswersApi {
     question: string,
     emit: (event: AnswerStreamEvent) => void,
     signal: AbortSignal,
+    conversationId?: string,
   ): Promise<void> {
-    const terms = (await this.deps.expander?.expand(scope, question, signal)) ?? [];
+    // First, so nothing is spent on a conversation that is not this person's.
+    const conversation = await this.deps.conversations?.begin(scope, conversationId, question);
+    if (conversation) emit({ type: "conversation", conversationId: conversation.conversationId });
+
+    const terms = (await this.deps.expander?.expand(scope, question, signal, conversation?.previousQuestions)) ?? [];
     // The answer itself still responds to the question exactly as asked.
     const gathered = await this.deps.documents
       .gatherDocuments(scope, withExpandedTerms(question, terms), {
@@ -115,7 +142,14 @@ export class AnswersService implements AnswersApi {
 
     const cited = gathered.hits.slice(0, MAX_DOCUMENTS);
     if (cited.length === 0) {
-      emit({ type: "done", outcome: "no_documents", grounded: false, truncatedDocuments: 0 });
+      const messageId = await this.saveAnswer(scope, conversation, {
+        parts: [],
+        hits: gathered.hits,
+        outcome: "no_documents",
+        grounded: false,
+        truncatedDocuments: 0,
+      });
+      emit({ type: "done", outcome: "no_documents", grounded: false, truncatedDocuments: 0, messageId });
       await this.record(scope, question, gathered.hits, [], null, null, 0, "no_documents");
       return;
     }
@@ -128,17 +162,21 @@ export class AnswersService implements AnswersApi {
     });
 
     let citationCount = 0;
+    let parts: readonly AnswerPart[] = [];
     let usage: UsageReport | null = null;
     let outcome: AnswerOutcome | null = null;
+    let saved = false;
     try {
       outcome = await gateway.streamAnswer(
-        { question, documents },
+        { question, documents, ...(conversation?.history.length ? { history: conversation.history } : {}) },
         (event) => {
           if (event.type === "text") {
+            parts = appendText(parts, event.text);
             emit(event);
           } else if (event.documentIndex >= 0 && event.documentIndex < cited.length) {
             // Only documents we actually sent can be cited.
             citationCount += 1;
+            parts = appendCitation(parts, event.documentIndex + 1);
             emit({ type: "citation", source: event.documentIndex + 1, citedText: event.citedText });
           }
         },
@@ -147,22 +185,39 @@ export class AnswersService implements AnswersApi {
           usage = report;
         },
       );
-      // Tell the user first: a bookkeeping failure must not turn a good answer into an error.
-      emit({
-        type: "done",
-        outcome:
-          outcome.stopReason === "refusal"
-            ? "refused"
-            : outcome.stopReason === "end_turn"
-              ? "answered"
-              : "incomplete",
-        grounded: citationCount > 0,
-        truncatedDocuments,
-      });
+      const ended =
+        outcome.stopReason === "refusal" ? "refused" : outcome.stopReason === "end_turn" ? "answered" : "incomplete";
+      const summary = { outcome: ended, grounded: citationCount > 0, truncatedDocuments } as const;
+      const messageId = await this.saveAnswer(scope, conversation, { parts, hits: gathered.hits, ...summary });
+      saved = true;
+      emit({ type: "done", ...summary, messageId });
     } finally {
+      // A stream that broke or was cancelled: keep what was said, marked as incomplete.
+      if (!saved && parts.length > 0) {
+        await this.saveAnswer(scope, conversation, {
+          parts,
+          hits: gathered.hits,
+          outcome: "incomplete",
+          grounded: citationCount > 0,
+          truncatedDocuments,
+        });
+      }
       // Runs on failure and abort too, because the provider may have billed for those calls.
       await this.record(scope, question, gathered.hits, cited, usage, outcome, citationCount);
     }
+  }
+
+  /** History is bookkeeping: failing to save must not turn a good answer into an error. */
+  private async saveAnswer(
+    scope: UserScope,
+    conversation: ConversationStart | undefined,
+    answer: Parameters<ConversationStore["saveAnswer"]>[2],
+  ): Promise<string | null> {
+    if (!conversation) return null;
+    return this.deps.conversations!.saveAnswer(scope, conversation.conversationId, answer).catch((err: unknown) => {
+      this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, tenant_id: scope.tenantId }, "Saving an answer failed");
+      return null;
+    });
   }
 
   /** Each write is independent, so losing one row never loses the other or hides the answer. */

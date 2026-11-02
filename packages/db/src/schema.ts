@@ -9,6 +9,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Mirrors migrations/*.sql. SQL migrations are the source of truth (RLS needs raw SQL).
 
@@ -103,6 +104,34 @@ export const usageLedger = pgTable("usage_ledger", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  titleCiphertext: text("title_ciphertext").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const conversationMessages = pgTable("conversation_messages", {
+  id: uuid("id").primaryKey(),
+  conversationId: uuid("conversation_id").notNull(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull().$type<"user" | "assistant">(),
+  payloadCiphertext: text("payload_ciphertext").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+});
+
+export const messageFeedback = pgTable("message_feedback", {
+  messageId: uuid("message_id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  rating: text("rating").notNull().$type<"up" | "down">(),
+  reasonCiphertext: text("reason_ciphertext"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const mcpServerApps = pgTable(
   "mcp_server_apps",
   {
@@ -140,6 +169,9 @@ export const writeProposals = pgTable("write_proposals", {
 export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | "unknown" | "rejected";
 
 export const schema = {
+  conversations,
+  conversationMessages,
+  messageFeedback,
   mcpServerApps,
   writeProposals,
   usageLedger,

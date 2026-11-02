@@ -13,7 +13,7 @@ import { createFakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER } from "../test-support/tokens.js";
 import type { QueryExpander } from "./query-rewriter.js";
 import { AnswersService, type AnswersApi, type AnswerStreamEvent } from "./answers.service.js";
-import { unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
+import { unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
 
 const scope = { tenantId: "0a000000-0000-4000-8000-000000000001", userId: "0a000000-0000-4000-8000-0000000000a4" };
 const signal = new AbortController().signal;
@@ -89,7 +89,7 @@ describe("AnswersService", () => {
     await service.answer(scope, "q", emit, signal);
     expect(events.map((e) => e.type)).toEqual(["sources", "text", "citation", "done"]);
     expect(events[2]).toEqual({ type: "citation", source: 1, citedText: "full text one" });
-    expect(events[3]).toEqual({ type: "done", outcome: "answered", grounded: true, truncatedDocuments: 0 });
+    expect(events[3]).toEqual({ type: "done", outcome: "answered", grounded: true, truncatedDocuments: 0, messageId: null });
   });
 
   it("prefers full text, falling back to snippet then title", async () => {
@@ -107,7 +107,7 @@ describe("AnswersService", () => {
     await service.answer(scope, "q", emit, signal);
     expect(streamAnswer).not.toHaveBeenCalled();
     expect(queries.some((q) => q.includes("usage_ledger"))).toBe(false);
-    expect(events.at(-1)).toEqual({ type: "done", outcome: "no_documents", grounded: false, truncatedDocuments: 0 });
+    expect(events.at(-1)).toEqual({ type: "done", outcome: "no_documents", grounded: false, truncatedDocuments: 0, messageId: null });
   });
 
   it("limits documents and reports truncation", async () => {
@@ -240,6 +240,7 @@ describe("POST /answers", () => {
       connections: createFakeConnections(),
       proposals: unusedProposals,
     audit: unusedAudit,
+    conversations: unusedConversations,
       answers: { answer: (...args) => behaviour(...args) },
       webAppUrl: "http://localhost:3000",
       verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
@@ -277,7 +278,7 @@ describe("POST /answers", () => {
     behaviour = async (s, _q, emit) => {
       expect(s).toEqual(scope);
       emit({ type: "text", text: "Hi" });
-      emit({ type: "done", outcome: "answered", grounded: true, truncatedDocuments: 0 });
+      emit({ type: "done", outcome: "answered", grounded: true, truncatedDocuments: 0, messageId: null });
     };
     const res = await post({ q: " hello " }, true, { origin: "http://localhost:3000" });
     expect(res.statusCode).toBe(200);

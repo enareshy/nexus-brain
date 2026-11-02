@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { HitSchema, SourceStatusSchema, type Hit, type SourceStatus } from "./api";
+import { HitSchema, SourceStatusSchema, type Hit, type SavedAnswer, type SourceStatus } from "./api";
 
 export const AnswerEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("conversation"), conversationId: z.string() }),
   z.object({ type: z.literal("sources"), hits: z.array(HitSchema), sources: z.array(SourceStatusSchema) }),
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("citation"), source: z.number().int().positive(), citedText: z.string() }),
@@ -10,6 +11,7 @@ export const AnswerEventSchema = z.discriminatedUnion("type", [
     outcome: z.enum(["answered", "no_documents", "refused", "incomplete"]),
     grounded: z.boolean(),
     truncatedDocuments: z.number().int().nonnegative(),
+    messageId: z.string().nullable().optional(),
   }),
   z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
 ]);
@@ -44,6 +46,8 @@ export const INITIAL_ANSWER: AnswerState = Object.freeze({
 /** Pure state transition, so streaming behaviour can be tested without a network. */
 export function reduceAnswer(state: AnswerState, event: AnswerEvent): AnswerState {
   switch (event.type) {
+    case "conversation":
+      return state;
     case "sources":
       return { ...state, hits: event.hits, sources: event.sources };
     case "text": {
@@ -69,6 +73,20 @@ export function reduceAnswer(state: AnswerState, event: AnswerEvent): AnswerStat
     case "error":
       return { ...state, status: "error", error: event.message };
   }
+}
+
+/** Shows a saved answer through the same panel as a live one. */
+export function answerStateFromSaved(answer: SavedAnswer): AnswerState {
+  return {
+    status: "done",
+    parts: answer.parts,
+    hits: answer.hits,
+    sources: [],
+    outcome: answer.outcome,
+    grounded: answer.grounded,
+    truncatedDocuments: answer.truncatedDocuments,
+    error: null,
+  };
 }
 
 /**

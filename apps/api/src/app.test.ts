@@ -7,7 +7,7 @@ import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import type { DirectoryUser, UserDirectory } from "./auth/user-directory.js";
 import { createFakeConnections } from "./test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "./test-support/tokens.js";
-import { unusedAudit, unusedProposals } from "./test-support/fake-proposals.js";
+import { unusedAudit, unusedProposals, unusedConversations } from "./test-support/fake-proposals.js";
 
 const ACME = "0a000000-0000-4000-8000-000000000001";
 const GLOBEX = "0b000000-0000-4000-8000-000000000001";
@@ -49,6 +49,7 @@ beforeAll(async () => {
     connections: createFakeConnections(),
     proposals: unusedProposals,
     audit: unusedAudit,
+    conversations: unusedConversations,
     answers: { answer: async () => {} },
     webAppUrl: "http://localhost:3000",
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
@@ -136,5 +137,27 @@ describe("unknown routes", () => {
     const res = await inject("/nope");
     expect(res.statusCode).toBe(404);
     expect(res.json()).toMatchObject({ success: false, error: { code: "NOT_FOUND" } });
+  });
+});
+
+describe("browser access (CORS)", () => {
+  const preflight = (method: string, origin = "http://localhost:3000") =>
+    app.getHttpAdapter().getInstance().inject({
+      method: "OPTIONS",
+      url: "/connections/atlassian",
+      headers: { origin, "access-control-request-method": method, "access-control-request-headers": "authorization" },
+    });
+
+  it.each(["GET", "POST", "DELETE"])("lets the web app send %s, which its buttons rely on", async (method) => {
+    const res = await preflight(method);
+    expect(res.statusCode).toBe(204);
+    const allowed = String(res.headers["access-control-allow-methods"]).split(",").map((name) => name.trim());
+    expect(allowed).toContain(method);
+    expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
+  });
+
+  it("does not allow other sites", async () => {
+    const res = await preflight("DELETE", "https://evil.example");
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });

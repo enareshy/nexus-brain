@@ -19,7 +19,7 @@ import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { ConnectionsService } from "./connections/connections.service.js";
-import { unusedProposals } from "./test-support/fake-proposals.js";
+import { unusedConversations, unusedProposals } from "./test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "./test-support/tokens.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
@@ -151,6 +151,7 @@ beforeAll(async () => {
     connections,
     proposals: unusedProposals,
     audit: createDbAuditApi(pool),
+    conversations: unusedConversations,
     answers: new AnswersService({ pool, box, logger, documents: connections, gateway }),
   });
   await app.init();

@@ -1,6 +1,6 @@
 import { isAppError } from "@brain/core";
 import { appendUsage, type PoolLike, type UserScope } from "@brain/db";
-import type { LlmGateway } from "@brain/llm-gateway";
+import type { LlmGateway, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import { TtlCache } from "../connections/ttl-cache.js";
 
@@ -12,7 +12,12 @@ const MAX_REWRITES_PER_WINDOW = 30;
 
 export interface QueryExpander {
   /** Extra search words for a question. Empty means search with the question alone. */
-  expand(scope: UserScope, question: string, signal: AbortSignal): Promise<readonly string[]>;
+  expand(
+    scope: UserScope,
+    question: string,
+    signal: AbortSignal,
+    previousQuestions?: readonly string[],
+  ): Promise<readonly string[]>;
 }
 
 /** New words go first, because searches keep only the first few keywords. */
@@ -39,18 +44,24 @@ export class QueryRewriter implements QueryExpander {
     this.cache = new TtlCache(MAX_CACHED, this.now);
   }
 
-  async expand(scope: UserScope, question: string, signal: AbortSignal): Promise<readonly string[]> {
+  async expand(
+    scope: UserScope,
+    question: string,
+    signal: AbortSignal,
+    previousQuestions: readonly string[] = [],
+  ): Promise<readonly string[]> {
     const gateway = this.deps.gateway;
     if (!gateway) return [];
     const userKey = `${scope.tenantId}|${scope.userId}`;
-    const cacheKey = `${userKey}|${question.trim()}`;
+    // A follow-up means something different after different questions.
+    const cacheKey = `${userKey}|${JSON.stringify(previousQuestions)}|${question.trim()}`;
     // Before the cache: a repeated empty search also costs a second search of every source.
     if (!this.allow(userKey)) return [];
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
 
     try {
-      const terms = await gateway.rewriteQuery(question, signal, (usage) => {
+      const onUsage = (usage: UsageReport) => {
         const { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, estimated } = usage;
         // Bookkeeping only, so a failed write must not lose the result. Not awaited for speed.
         void appendUsage(this.deps.pool, scope, {
@@ -62,7 +73,8 @@ export class QueryRewriter implements QueryExpander {
           cacheWriteTokens,
           costUsd,
         }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Usage ledger write failed"));
-      });
+      };
+      const terms = await gateway.rewriteQuery(question, signal, onUsage, previousQuestions);
       this.cache.set(cacheKey, terms, CACHE_TTL_MS);
       return terms;
     } catch (err) {

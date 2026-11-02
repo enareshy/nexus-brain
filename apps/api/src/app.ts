@@ -19,9 +19,11 @@ import type { AnswersApi } from "./answers/answers.service.js";
 import { HealthController, MeController } from "./controllers.js";
 import { AuditController } from "./admin/audit.controller.js";
 import type { AuditApi } from "./admin/audit.service.js";
+import { ConversationsController } from "./conversations/conversations.controller.js";
+import type { ConversationsApi } from "./conversations/conversations.service.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { ANSWERS, AUDIT, CONNECTIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -33,6 +35,7 @@ export interface AppDeps {
   readonly answers: AnswersApi;
   readonly proposals: ProposalsApi;
   readonly audit: AuditApi;
+  readonly conversations: ConversationsApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -51,6 +54,7 @@ class AppModule {
         AnswersController,
         ProposalsController,
         AuditController,
+        ConversationsController,
       ],
       providers: [
         { provide: IDENTITY_VERIFIER, useValue: deps.verifier },
@@ -60,6 +64,7 @@ class AppModule {
         { provide: ANSWERS, useValue: deps.answers },
         { provide: PROPOSALS, useValue: deps.proposals },
         { provide: AUDIT, useValue: deps.audit },
+        { provide: CONVERSATIONS, useValue: deps.conversations },
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
@@ -84,7 +89,7 @@ export async function createApp(deps: AppDeps): Promise<NestFastifyApplication> 
       return auth ? `token:${createHash("sha256").update(auth).digest("hex").slice(0, 32)}` : `ip:${req.ip}`;
     },
   });
-  app.enableCors({ origin: [new URL(deps.webAppUrl).origin], credentials: false });
+  app.enableCors({ origin: [new URL(deps.webAppUrl).origin], credentials: false, methods: ["GET", "HEAD", "POST", "DELETE"] });
   app.useGlobalFilters(new AllExceptionsFilter(deps.logger));
   app.enableShutdownHooks();
   return app;

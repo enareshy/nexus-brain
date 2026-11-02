@@ -1,4 +1,4 @@
-import { AppError, isAppError } from "@brain/core";
+import { AppError, isAppError, UuidSchema } from "@brain/core";
 import type { Logger } from "@brain/telemetry";
 import { Body, Controller, Inject, Post, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
@@ -8,7 +8,7 @@ import { Ctx, type RequestContext } from "../context/request-context.js";
 import { ANSWERS, LOGGER } from "../tokens.js";
 import type { AnswersApi, AnswerStreamEvent } from "./answers.service.js";
 
-const AnswerBodySchema = z.object({ q: z.string().trim().min(1).max(500) });
+const AnswerBodySchema = z.object({ q: z.string().trim().min(1).max(500), conversationId: UuidSchema.optional() });
 
 @Controller("answers")
 export class AnswersController {
@@ -52,6 +52,7 @@ export class AnswersController {
         parsed.data.q,
         send,
         controller.signal,
+        parsed.data.conversationId,
       );
     } catch (err) {
       const log = this.logger.child({ request_id: ctx.requestId, tenant_id: ctx.tenantId, user_id: ctx.userId });

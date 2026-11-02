@@ -15,12 +15,15 @@ import {
   savePendingAuthorization,
 } from "./connections.js";
 import { assertRlsEnforced } from "./pool.js";
+import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
   auditLog,
+  conversations,
   groupMembers,
   mcpConnections,
   mcpServerApps,
+  messageFeedback,
   oauthStates,
   tenants,
   usageLedger,
@@ -320,6 +323,59 @@ describe("demo seed", () => {
       vi.unstubAllEnvs();
     }
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe("conversations are private to one person", () => {
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const alice = { tenantId: ACME, userId: seedUser("alice").id };
+
+  it("hides conversations, messages and feedback from a colleague and from other companies", async () => {
+    const id = randomUUID();
+    const messageId = randomUUID();
+    await createConversation(appPool, bob, { id, titleCiphertext: "sealed" });
+    await addMessage(appPool, bob, { id: messageId, conversationId: id, role: "assistant", payloadCiphertext: "sealed" });
+    expect(
+      await saveFeedback(appPool, bob, { conversationId: id, messageId, rating: "up", reasonCiphertext: null }),
+    ).toBe(true);
+
+    const others = [alice, { tenantId: GLOBEX, userId: bob.userId }];
+    for (const other of others) {
+      expect(await getConversation(appPool, other, id)).toBeNull();
+      expect(await listMessages(appPool, other, id, 10)).toEqual([]);
+      expect(await deleteConversation(appPool, other, id)).toBe(false);
+      expect(await saveFeedback(appPool, other, { conversationId: id, messageId, rating: "down", reasonCiphertext: null })).toBe(false);
+    }
+    const unscoped = await withTenant(appPool, ACME, (db) => db.select().from(conversations));
+    expect(unscoped).toEqual([]);
+    expect((await listMessages(appPool, bob, id, 10))[0]?.rating).toBe("up");
+    expect(await deleteConversation(appPool, bob, id)).toBe(true);
+  });
+
+  it("refuses a row whose owner differs from its parent's, even for the database owner", async () => {
+    const id = randomUUID();
+    const messageId = randomUUID();
+    await createConversation(appPool, bob, { id, titleCiphertext: "sealed" });
+    await addMessage(appPool, bob, { id: messageId, conversationId: id, role: "assistant", payloadCiphertext: "sealed" });
+
+    // Alice is allowed to write her own rows, so only the keys can stop these.
+    await expect(
+      addMessage(appPool, alice, { id: randomUUID(), conversationId: id, role: "user", payloadCiphertext: "x" }),
+    ).rejects.toThrow(/foreign key/);
+    await expect(
+      withUser(appPool, alice, (db) =>
+        db.insert(messageFeedback).values({ messageId, tenantId: ACME, userId: alice.userId, rating: "down" }),
+      ),
+    ).rejects.toThrow(/foreign key/);
+    await deleteConversation(appPool, bob, id);
+  });
+
+  it("rejects writing into someone else's history", async () => {
+    await expect(
+      withUser(appPool, alice, (db) =>
+        db.insert(conversations).values({ id: randomUUID(), tenantId: ACME, userId: bob.userId, titleCiphertext: "x" }),
+      ),
+    ).rejects.toThrow(/row-level security/);
   });
 });
 

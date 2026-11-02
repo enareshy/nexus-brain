@@ -7,4 +7,5 @@ export const CONNECTIONS = Symbol("CONNECTIONS");
 export const ANSWERS = Symbol("ANSWERS");
 export const PROPOSALS = Symbol("PROPOSALS");
 export const AUDIT = Symbol("AUDIT");
+export const CONVERSATIONS = Symbol("CONVERSATIONS");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");

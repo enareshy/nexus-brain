@@ -76,6 +76,24 @@ describe("createApiClient", () => {
     expect(fetchImpl.mock.calls.at(-2)?.[1]?.body).toBe(JSON.stringify({ argsHash: "h" }));
   });
 
+  it("lists, reads, deletes and rates conversations", async () => {
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/conversations") return ok([{ id: "c1", title: "t", updatedAt: "2026-11-02T00:00:00Z" }]);
+      if (path.endsWith("/feedback")) return ok({ saved: true });
+      if (init?.method === "DELETE") return ok({ deleted: true });
+      return ok({ id: "c1", title: "t", messages: [{ id: "m1", role: "user", createdAt: "x", text: "hello" }] });
+    });
+    const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
+    expect((await api.conversations())[0]?.title).toBe("t");
+    expect((await api.conversation("c1")).messages[0]?.role).toBe("user");
+    expect(await api.deleteConversation("c1")).toEqual({ deleted: true });
+    expect(await api.sendFeedback("c1", "m1", { rating: "down", reason: "wrong" })).toEqual({ saved: true });
+    const feedback = fetchImpl.mock.calls.at(-1)!;
+    expect(String(feedback[0])).toBe("http://api.test/conversations/c1/messages/m1/feedback");
+    expect(feedback[1]?.body).toBe(JSON.stringify({ rating: "down", reason: "wrong" }));
+  });
+
   it("covers the remaining endpoints", async () => {
     const fetchImpl = vi.fn(async (url: URL | RequestInfo) => {
       const path = new URL(String(url)).pathname;
