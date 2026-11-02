@@ -37,10 +37,16 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
-      "redirectUris": ["http://localhost:3000/*"],
-      "webOrigins": ["http://localhost:3000"],
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
       "protocol": "openid-connect",
-      "attributes": { "pkce.code.challenge.method": "S256" },
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
       "protocolMappers": [
         {
           "name": "tenant_id",
@@ -100,6 +106,59 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "brain-mcp",
+      "name": "Nexus Brain MCP server (audience only)",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "brain-mcp-tools",
+      "name": "AI tools connecting to Nexus Brain",
+      "enabled": true,
+      "consentRequired": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience-brain-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "brain-mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -111,8 +170,18 @@
       "lastName": "Acme",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0a000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0a000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     },
     {
       "id": "5a000000-0000-4000-8000-0000000000a2",
@@ -122,8 +191,18 @@
       "lastName": "Acme",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0a000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0a000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     },
     {
       "id": "5a000000-0000-4000-8000-0000000000a3",
@@ -133,8 +212,18 @@
       "lastName": "Guest",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0a000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0a000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     },
     {
       "id": "5a000000-0000-4000-8000-0000000000a4",
@@ -144,8 +233,18 @@
       "lastName": "Acme",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0a000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0a000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     },
     {
       "id": "5b000000-0000-4000-8000-0000000000b1",
@@ -155,8 +254,18 @@
       "lastName": "Globex",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0b000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0b000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     },
     {
       "id": "5b000000-0000-4000-8000-0000000000b2",
@@ -166,8 +275,18 @@
       "lastName": "Globex",
       "enabled": true,
       "emailVerified": true,
-      "attributes": { "tenant_id": ["0b000000-0000-4000-8000-000000000001"] },
-      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }]
+      "attributes": {
+        "tenant_id": [
+          "0b000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-password",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

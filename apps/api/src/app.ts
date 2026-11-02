@@ -23,9 +23,10 @@ import { AuditController } from "./admin/audit.controller.js";
 import type { AuditApi } from "./admin/audit.service.js";
 import { ConversationsController } from "./conversations/conversations.controller.js";
 import type { ConversationsApi } from "./conversations/conversations.service.js";
+import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -39,6 +40,8 @@ export interface AppDeps {
   readonly audit: AuditApi;
   readonly conversations: ConversationsApi;
   readonly agents: AgentsApi;
+  /** Without this, there is no MCP endpoint. */
+  readonly mcp?: McpEndpointDeps;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -49,6 +52,7 @@ class AppModule {
     return {
       module: AppModule,
       controllers: [
+        ...(deps.mcp ? [McpController] : []),
         HealthController,
         MeController,
         ConnectionsController,
@@ -70,6 +74,7 @@ class AppModule {
         { provide: AUDIT, useValue: deps.audit },
         { provide: CONVERSATIONS, useValue: deps.conversations },
         { provide: AGENTS, useValue: deps.agents },
+        ...(deps.mcp ? [{ provide: MCP, useValue: deps.mcp }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

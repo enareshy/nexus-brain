@@ -148,7 +148,7 @@ export class ProposalsService implements ProposalsApi {
       argsHash: argsHash(draft.args),
       siteOrigin: draft.siteOrigin,
       expiresAt: new Date(this.now() + PROPOSAL_TTL_MS),
-    });
+    }, MAX_PENDING);
     await this.audit(scope, "write.proposed", row);
     return this.view(row);
   }

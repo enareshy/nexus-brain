@@ -18,6 +18,7 @@ export default defineConfig({
         "src/proposals/**",
         "src/admin/**",
         "src/agents/**",
+        "src/mcp/**",
         "src/conversations/**",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },

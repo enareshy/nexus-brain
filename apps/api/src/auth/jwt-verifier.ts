@@ -5,6 +5,8 @@ import { z } from "zod";
 export interface VerifiedIdentity {
   readonly subject: string;
   readonly tenantId: string;
+  /** The app the token was issued to, when the token says. */
+  readonly clientId?: string;
 }
 
 export interface IdentityVerifier {
@@ -23,6 +25,7 @@ const CLOCK_TOLERANCE_SECONDS = 30;
 const claimsSchema = z.object({
   sub: z.string().min(1),
   tenant_id: UuidSchema,
+  azp: z.string().min(1).max(200).optional(),
 });
 
 /**
@@ -49,7 +52,8 @@ export function createJwtVerifier(options: JwtVerifierOptions): IdentityVerifier
       if (!claims.success) {
         throw new AppError("UNAUTHENTICATED", "Token is missing required claims");
       }
-      return Object.freeze({ subject: claims.data.sub, tenantId: claims.data.tenant_id });
+      const { sub, tenant_id: tenantId, azp } = claims.data;
+      return Object.freeze({ subject: sub, tenantId, ...(azp ? { clientId: azp } : {}) });
     },
   };
 }
