@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
 import {
+  atlassianAssignedIssues,
   atlassianSearch,
   atlassianWrites,
   driveSearch,
@@ -29,6 +30,7 @@ import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
 import { createDbAuditApi } from "./admin/audit.service.js";
 import { AgentsService } from "./agents/agents.service.js";
+import { TriggersService } from "./agents/triggers.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -115,12 +117,29 @@ const proposals = new ProposalsService({
   adapters: new Map(enabled.flatMap((e) => (e.writes ? [[e.def.id, e.writes] as const] : []))),
 });
 
-const agents = new AgentsService({ pool, box, gateway, documents: connections, proposals, logger });
+// The two need each other: runs send notifications, and triggers start runs.
+const agents: AgentsService = new AgentsService({
+  pool,
+  box,
+  gateway,
+  documents: connections,
+  proposals,
+  logger,
+  notify: (scope, notification) => triggers.notify(scope, notification),
+});
+const triggers = new TriggersService({
+  pool,
+  box,
+  agents,
+  logger,
+  assignments: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, atlassianAssignedIssues) },
+});
 
 const keySet = createRemoteJWKSet(jwksUrl(env));
 
 const app = await createApp({
   agents,
+  triggers,
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
     tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),
@@ -143,12 +162,14 @@ const app = await createApp({
 });
 
 app.getHttpAdapter().getInstance().addHook("onClose", async () => {
+  triggers.stop();
   connections.close();
   await pool.end();
   await tracing.shutdown();
 });
 
 await app.listen({ host: env.API_HOST, port: env.API_PORT });
+triggers.start();
 logger.info(
   { host: env.API_HOST, port: env.API_PORT, mcpServers: enabled.map((e) => e.def.id), tracing: tracing.enabled },
   "API listening",

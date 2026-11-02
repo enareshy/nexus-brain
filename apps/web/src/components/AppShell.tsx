@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { currentReturnPath } from "@/lib/safe-url";
 import { useAuth } from "./AuthProvider";
+import { NotificationBadge } from "./NotificationBadge";
 
 const NAV = [
   { href: "/", label: "Search" },
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 aria-[current=page]:bg-slate-900 aria-[current=page]:text-white dark:text-slate-300 dark:hover:text-white dark:aria-[current=page]:bg-white dark:aria-[current=page]:text-slate-900"
                 >
                   {item.label}
+                  {item.href === "/agents" && user && <NotificationBadge />}
                 </Link>
               );
             })}

@@ -242,6 +242,38 @@ async function readBody(session: ToolSession, hit: SearchHit): Promise<string | 
 }
 
 /** Searches Jira (JQL) and Confluence (CQL) on each site the user's grant covers. */
+// Only recent assignments, so old issues never look new as others are resolved. Checked against live Jira.
+const ASSIGNED_JQL =
+  "assignee = currentUser() AND resolution = EMPTY AND (assignee CHANGED TO currentUser() AFTER -1d OR created >= -1d) ORDER BY updated DESC";
+const SITE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_ASSIGNED = 50;
+
+/**
+ * Open issues assigned to the signed-in person, as keys only. A failed site throws rather than
+ * returning less, because a short list would look like issues were unassigned.
+ */
+export async function atlassianAssignedIssues(session: ToolSession): Promise<Array<{ key: string; siteId: string }>> {
+  const sitesResult = await session.callTool(SITES_TOOL, {});
+  if (sitesResult.isError) throw new AppError("UNAVAILABLE", "Could not list Atlassian sites");
+  // The site id ends up in a run's goal, so it must be exactly the form Atlassian uses.
+  const sites = parseSites(sitesResult.text)
+    .filter((site) => site.scopes.has(JIRA_SCOPE) && SITE_ID.test(site.id))
+    .slice(0, MAX_SITES);
+  const perSite = await Promise.all(
+    sites.map(async (site) => {
+      const result = await session.callTool("searchJiraIssuesUsingJql", {
+        cloudId: site.id,
+        jql: ASSIGNED_JQL,
+        maxResults: MAX_ASSIGNED,
+        fields: ["summary"],
+      });
+      if (result.isError) throw new AppError("UNAVAILABLE", "Could not list assigned issues");
+      return parseJiraIssues(result.text, site).map((hit) => ({ key: hit.externalId, siteId: site.id }));
+    }),
+  );
+  return perSite.flat();
+}
+
 export const atlassianSearch: SearchAdapter = {
   serverId: "atlassian",
   // Only where to search; every search and read still runs with the user's token.

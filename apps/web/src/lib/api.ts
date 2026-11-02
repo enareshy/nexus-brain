@@ -135,6 +135,7 @@ export const AgentRunSummarySchema = z.object({
   goal: z.string(),
   status: AgentRunStatusSchema,
   errorCode: z.string().nullable(),
+  automatic: z.boolean().optional(),
   createdAt: z.string(),
 });
 export type AgentRunSummary = z.infer<typeof AgentRunSummarySchema>;
@@ -156,6 +157,30 @@ export const AgentRunSchema = AgentRunSummarySchema.extend({
   ),
 });
 export type AgentRun = z.infer<typeof AgentRunSchema>;
+
+export const AgentTriggerSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["schedule", "jira_assigned"]),
+  goal: z.string(),
+  schedule: z.enum(["hourly", "daily", "weekly"]).nullable(),
+  enabled: z.boolean(),
+  pausedReason: z.string().nullable(),
+  nextRunAt: z.string(),
+});
+export type AgentTrigger = z.infer<typeof AgentTriggerSchema>;
+export type NewAgentTrigger =
+  | { kind: "schedule"; goal: string; schedule: "hourly" | "daily" | "weekly" }
+  | { kind: "jira_assigned"; goal: string };
+
+export const NotificationSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  title: z.string(),
+  runId: z.string().nullable(),
+  read: z.boolean(),
+  createdAt: z.string(),
+});
+export type Notification = z.infer<typeof NotificationSchema>;
 
 const ErrorEnvelope = z.object({
   success: z.literal(false),
@@ -194,6 +219,11 @@ export interface ApiClient {
     feedback: { rating: "up" | "down"; reason?: string },
   ): Promise<{ saved: true }>;
   audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
+  agentTriggers(): Promise<AgentTrigger[]>;
+  createAgentTrigger(trigger: NewAgentTrigger): Promise<AgentTrigger>;
+  deleteAgentTrigger(id: string): Promise<{ deleted: true }>;
+  notifications(): Promise<{ items: Notification[]; unread: number }>;
+  markNotificationsRead(ids?: string[]): Promise<{ read: true }>;
   agentRuns(): Promise<AgentRunSummary[]>;
   agentRun(id: string): Promise<AgentRun>;
   startAgentRun(goal: string): Promise<AgentRunSummary>;
@@ -281,6 +311,18 @@ export function createApiClient(
         z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().nullable() }),
         before === undefined ? "/admin/audit" : `/admin/audit?before=${before}`,
       ),
+    agentTriggers: () => request(z.array(AgentTriggerSchema), "/agent-triggers"),
+    createAgentTrigger: (trigger) =>
+      request(AgentTriggerSchema, "/agent-triggers", { method: "POST", body: JSON.stringify(trigger) }),
+    deleteAgentTrigger: (id) =>
+      request(z.object({ deleted: z.literal(true) }), `/agent-triggers/${enc(id)}`, { method: "DELETE" }),
+    notifications: () =>
+      request(z.object({ items: z.array(NotificationSchema), unread: z.number() }), "/notifications"),
+    markNotificationsRead: (ids) =>
+      request(z.object({ read: z.literal(true) }), "/notifications/read", {
+        method: "POST",
+        body: JSON.stringify(ids ? { ids } : {}),
+      }),
     agentRuns: () => request(z.array(AgentRunSummarySchema), "/agent-runs"),
     agentRun: (id) => request(AgentRunSchema, `/agent-runs/${enc(id)}`),
     startAgentRun: (goal) =>
