@@ -21,6 +21,7 @@ import type { Logger } from "@brain/telemetry";
 import { createHash, randomUUID } from "node:crypto";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.js";
+import type { MemorySource } from "../memory/memory.service.js";
 import { AGENT_TOOLS, parseToolCall, untrusted } from "./tools.js";
 
 // Caps per run (FR-AGT-06). Each ends the run with a clear status.
@@ -108,6 +109,8 @@ export interface AgentsDeps {
   };
   readonly logger: Pick<Logger, "error">;
   readonly notify?: (scope: UserScope, notification: AgentNotification) => Promise<void>;
+  /** What the person asked Brain to remember. Read for every turn, never stored with the run. */
+  readonly memories?: MemorySource;
 }
 
 /** Stable, so running the same tool call again after a restart finds the same proposal. */
@@ -321,7 +324,8 @@ export class AgentsService implements AgentsApi {
 
       let turn;
       try {
-        turn = await modelTurnWithRetries(gateway, state.messages, (usage) => {
+        const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
+        turn = await modelTurnWithRetries(gateway, state.messages, memories, (usage) => {
           cost += usage.costUsd ?? 0;
           void this.meter(scope, usage);
         });
@@ -476,12 +480,13 @@ export class AgentsService implements AgentsApi {
 async function modelTurnWithRetries(
   gateway: LlmGateway,
   messages: readonly AgentMessage[],
+  memories: readonly string[],
   onUsage: (usage: UsageReport) => void,
 ): Promise<AgentTurn> {
   const signal = AbortSignal.timeout(MODEL_TIME_LIMIT_MS);
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await gateway.agentTurn({ messages, tools: AGENT_TOOLS }, signal, onUsage);
+      return await gateway.agentTurn({ messages, tools: AGENT_TOOLS, ...(memories.length ? { memories } : {}) }, signal, onUsage);
     } catch (err) {
       const reason = isAppError(err) ? String(err.details?.reason ?? "") : "";
       if (attempt >= MAX_TURN_ATTEMPTS || !reason.startsWith("provider_connection")) throw err;

@@ -183,6 +183,15 @@ export const NotificationSchema = z.object({
 });
 export type Notification = z.infer<typeof NotificationSchema>;
 
+export const MemorySchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  readable: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Memory = z.infer<typeof MemorySchema>;
+
 export const PersonSchema = z.object({
   id: z.string(),
   email: z.string(),
@@ -242,6 +251,11 @@ export interface ApiClient {
     feedback: { rating: "up" | "down"; reason?: string },
   ): Promise<{ saved: true }>;
   audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
+  memories(): Promise<Memory[]>;
+  addMemory(text: string): Promise<Memory>;
+  updateMemory(id: string, text: string): Promise<Memory>;
+  deleteMemory(id: string): Promise<{ deleted: true }>;
+  deleteAllMemories(): Promise<{ deleted: number }>;
   people(): Promise<Person[]>;
   deactivatePerson(id: string): Promise<Deactivation>;
   reactivatePerson(id: string): Promise<{ changed: boolean }>;
@@ -342,6 +356,11 @@ export function createApiClient(
         z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().nullable() }),
         before === undefined ? "/admin/audit" : `/admin/audit?before=${before}`,
       ),
+    memories: () => request(z.array(MemorySchema), "/memories"),
+    addMemory: (text) => request(MemorySchema, "/memories", { method: "POST", body: JSON.stringify({ text }) }),
+    updateMemory: (id, text) => request(MemorySchema, `/memories/${enc(id)}`, { method: "POST", body: JSON.stringify({ text }) }),
+    deleteMemory: (id) => request(z.object({ deleted: z.literal(true) }), `/memories/${enc(id)}`, { method: "DELETE" }),
+    deleteAllMemories: () => request(z.object({ deleted: z.number() }), "/memories", { method: "DELETE" }),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
     reactivatePerson: (id) =>

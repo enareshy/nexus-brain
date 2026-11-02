@@ -12,4 +12,5 @@ export const AGENTS = Symbol("AGENTS");
 export const MCP = Symbol("MCP");
 export const TRIGGERS = Symbol("TRIGGERS");
 export const PEOPLE = Symbol("PEOPLE");
+export const MEMORY = Symbol("MEMORY");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");

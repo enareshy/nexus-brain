@@ -25,12 +25,14 @@ import { AuditController } from "./admin/audit.controller.js";
 import type { AuditApi } from "./admin/audit.service.js";
 import { PeopleController } from "./admin/people.controller.js";
 import type { PeopleApi } from "./admin/people.service.js";
+import { MemoryController } from "./memory/memory.controller.js";
+import type { MemoryApi } from "./memory/memory.service.js";
 import { ConversationsController } from "./conversations/conversations.controller.js";
 import type { ConversationsApi } from "./conversations/conversations.service.js";
 import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, PEOPLE, PROPOSALS, TRIGGERS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, MEMORY, PEOPLE, PROPOSALS, TRIGGERS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -50,6 +52,8 @@ export interface AppDeps {
   readonly triggers?: TriggersApi;
   /** Without this, admins cannot turn people off. */
   readonly people?: PeopleApi;
+  /** Without this, there is no Memory page. */
+  readonly memory?: MemoryApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -63,6 +67,7 @@ class AppModule {
         ...(deps.mcp ? [McpController] : []),
         ...(deps.triggers ? [TriggersController] : []),
         ...(deps.people ? [PeopleController] : []),
+        ...(deps.memory ? [MemoryController] : []),
         HealthController,
         MeController,
         ConnectionsController,
@@ -87,6 +92,7 @@ class AppModule {
         ...(deps.mcp ? [{ provide: MCP, useValue: deps.mcp }] : []),
         ...(deps.triggers ? [{ provide: TRIGGERS, useValue: deps.triggers }] : []),
         ...(deps.people ? [{ provide: PEOPLE, useValue: deps.people }] : []),
+        ...(deps.memory ? [{ provide: MEMORY, useValue: deps.memory }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

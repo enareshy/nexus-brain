@@ -37,6 +37,7 @@ import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
 import { ConversationsService } from "./conversations/conversations.service.js";
 import { McpToolsService } from "./mcp/mcp.service.js";
+import { MemoryService } from "./memory/memory.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
 
 interface KnownServer {
@@ -115,8 +116,10 @@ const connections = new ConnectionsService({
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
 const conversations = new ConversationsService({ pool, box });
+const memory = new MemoryService({ pool, box, logger });
 const answers = new AnswersService({
   conversations,
+  memories: memory,
   pool,
   box,
   logger,
@@ -140,6 +143,7 @@ const agents: AgentsService = new AgentsService({
   documents: connections,
   proposals,
   logger,
+  memories: memory,
   notify: (scope, notification) => triggers.notify(scope, notification),
 });
 const triggers = new TriggersService({
@@ -156,6 +160,7 @@ const app = await createApp({
   agents,
   triggers,
   people: createPeopleService({ pool, logger, connections }),
+  memory,
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
     tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),
