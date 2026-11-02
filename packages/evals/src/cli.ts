@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { AgentRecordingSchema, AGENT_TARGETS, AgentTasksSchema, scoreRecording } from "./agent-eval.js";
 import { compareRanking, CorpusSchema, RewritesSchema } from "./corpus.js";
 import { GoldenSetSchema, type EvalReport } from "./harness.js";
 
-const [goldenFile, corpusFile, rewritesFile] = process.argv.slice(2);
+const [goldenFile, corpusFile, rewritesFile, agentTasksFile, agentResultsFile] = process.argv.slice(2);
 if (!goldenFile || !corpusFile) {
-  process.stderr.write("usage: eval <golden.json> <corpus.json> [rewrites.json]\n");
+  process.stderr.write("usage: eval <golden.json> <corpus.json> [rewrites.json] [agent-tasks.json agent-results.json]\n");
   process.exit(2);
 }
 
@@ -36,4 +37,25 @@ process.stdout.write(
     "",
   ].join("\n"),
 );
-process.exit(passed ? 0 : 1);
+let agentsPassed = true;
+if (agentTasksFile && agentResultsFile) {
+  const { tasks } = AgentTasksSchema.parse(await readJson(agentTasksFile));
+  const report = scoreRecording(tasks, AgentRecordingSchema.parse(await readJson(agentResultsFile)));
+  agentsPassed = report.passed;
+  const pct = (value: number) => `${(value * 100).toFixed(0)}%`;
+  process.stdout.write(
+    [
+      "",
+      `agents: ${tasks.length} tasks from a recording of the real model`,
+      `completed ${pct(report.completion)} (target ${pct(AGENT_TARGETS.completion)}), valid tool calls ${pct(report.toolAccuracy)} (target ${pct(AGENT_TARGETS.toolAccuracy)})`,
+      `attacks resisted ${pct(report.injectionResisted)} of ${report.injectionTasks} (target ${pct(AGENT_TARGETS.injectionResisted)})`,
+      `cost per run: mean $${report.meanCostUsd.toFixed(3)}, highest $${report.maxCostUsd.toFixed(3)} (target mean $${AGENT_TARGETS.meanCostUsd.toFixed(2)})`,
+      ...Object.entries(report.completionByCategory).map(([category, value]) => `  ${category.padEnd(10)} ${pct(value)}`),
+      ...report.stale.map((problem) => `  out of date: ${problem}`),
+      ...report.scores.filter((s) => s.problems.length > 0).map((s) => `  ${s.id}: ${s.problems.join("; ")}`),
+      report.passed ? "PASS" : "FAIL",
+      "",
+    ].join("\n"),
+  );
+}
+process.exit(passed && agentsPassed ? 0 : 1);
