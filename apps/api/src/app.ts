@@ -17,13 +17,15 @@ import type { ConnectionsApi } from "./connections/connections.service.js";
 import { AnswersController } from "./answers/answers.controller.js";
 import type { AnswersApi } from "./answers/answers.service.js";
 import { HealthController, MeController } from "./controllers.js";
+import { AgentsController } from "./agents/agents.controller.js";
+import type { AgentsApi } from "./agents/agents.service.js";
 import { AuditController } from "./admin/audit.controller.js";
 import type { AuditApi } from "./admin/audit.service.js";
 import { ConversationsController } from "./conversations/conversations.controller.js";
 import type { ConversationsApi } from "./conversations/conversations.service.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, PROPOSALS, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -36,6 +38,7 @@ export interface AppDeps {
   readonly proposals: ProposalsApi;
   readonly audit: AuditApi;
   readonly conversations: ConversationsApi;
+  readonly agents: AgentsApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -55,6 +58,7 @@ class AppModule {
         ProposalsController,
         AuditController,
         ConversationsController,
+        AgentsController,
       ],
       providers: [
         { provide: IDENTITY_VERIFIER, useValue: deps.verifier },
@@ -65,6 +69,7 @@ class AppModule {
         { provide: PROPOSALS, useValue: deps.proposals },
         { provide: AUDIT, useValue: deps.audit },
         { provide: CONVERSATIONS, useValue: deps.conversations },
+        { provide: AGENTS, useValue: deps.agents },
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

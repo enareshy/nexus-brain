@@ -28,6 +28,7 @@ import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { jwksUrl, loadApiEnv, oauthRedirectUrl } from "./config.js";
 import { createDbAuditApi } from "./admin/audit.service.js";
+import { AgentsService } from "./agents/agents.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -113,7 +114,10 @@ const proposals = new ProposalsService({
   adapters: new Map(enabled.flatMap((e) => (e.writes ? [[e.def.id, e.writes] as const] : []))),
 });
 
+const agents = new AgentsService({ pool, box, gateway, documents: connections, proposals, logger });
+
 const app = await createApp({
+  agents,
   logger,
   connections,
   answers,

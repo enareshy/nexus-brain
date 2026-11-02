@@ -53,6 +53,11 @@ export class ProposalsController {
     return ok(await this.proposals.list(scopeOf(ctx)), { requestId: ctx.requestId });
   }
 
+  @Get(":id")
+  async get(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<ProposalView>> {
+    return ok(await this.proposals.get(scopeOf(ctx), parse(UuidSchema, id)), { requestId: ctx.requestId });
+  }
+
   @Get("targets/:serverId")
   async targets(
     @Ctx() ctx: RequestContext,

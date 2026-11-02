@@ -18,7 +18,7 @@ import { createApp } from "../app.js";
 import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
 import { ConnectionsService } from "../connections/connections.service.js";
-import { unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
+import { unusedAgents, unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConversationsService } from "./conversations.service.js";
 
@@ -119,7 +119,7 @@ beforeAll(async () => {
     adapters: new Map([[SERVER, keywordSearch]]),
     client: { redirectUrl: "http://127.0.0.1:3001/oauth/callback", clientName: "Nexus Brain (chat test)" },
   });
-  const gateway: LlmGateway = { streamAnswer, rewriteQuery };
+  const gateway: LlmGateway = { streamAnswer, rewriteQuery, agentTurn: vi.fn() };
   const conversations = new ConversationsService({ pool, box });
   app = await createApp({
     logger,
@@ -129,6 +129,7 @@ beforeAll(async () => {
     connections,
     proposals: unusedProposals,
     audit: unusedAudit,
+    agents: unusedAgents,
     conversations,
     answers: new AnswersService({
       pool,

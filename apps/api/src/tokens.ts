@@ -8,4 +8,5 @@ export const ANSWERS = Symbol("ANSWERS");
 export const PROPOSALS = Symbol("PROPOSALS");
 export const AUDIT = Symbol("AUDIT");
 export const CONVERSATIONS = Symbol("CONVERSATIONS");
+export const AGENTS = Symbol("AGENTS");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");

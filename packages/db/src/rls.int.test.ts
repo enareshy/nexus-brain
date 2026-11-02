@@ -14,10 +14,13 @@ import {
   saveConnection,
   savePendingAuthorization,
 } from "./connections.js";
+import { addAgentStep, cancelAgentRun, claimAgentRun, createAgentRun, getAgentRun, listAgentSteps, saveAgentRun } from "./agent-runs.js";
 import { assertRlsEnforced } from "./pool.js";
 import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
+  agentRuns,
+  agentSteps,
   auditLog,
   conversations,
   groupMembers,
@@ -63,6 +66,7 @@ afterAll(async () => {
   await owner.connect();
   try {
     // These rows belong to a seed user, so they would otherwise count towards that user's caps.
+    await owner.query("DELETE FROM agent_runs WHERE goal_ciphertext = 'sealed'");
     await owner.query("DELETE FROM write_proposals WHERE server_id = 'leaktest'");
     await owner.query("DELETE FROM mcp_server_apps WHERE server_id = 'leaktest'");
   } finally {
@@ -376,6 +380,82 @@ describe("conversations are private to one person", () => {
         db.insert(conversations).values({ id: randomUUID(), tenantId: ACME, userId: bob.userId, titleCiphertext: "x" }),
       ),
     ).rejects.toThrow(/row-level security/);
+  });
+});
+
+describe("agent runs are private to one person", () => {
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const alice = { tenantId: ACME, userId: seedUser("alice").id };
+  const newRun = (id: string) => ({
+    id,
+    goalCiphertext: "sealed",
+    stateCiphertext: "sealed",
+    deadlineAt: new Date(Date.now() + 60_000),
+  });
+  const limits = { maxWorking: 100, maxRecent: 100, recentSince: new Date(0) };
+  const step = (runId: string) => ({ runId, seq: 1, toolName: "t", argsHash: "h", outcome: "ok", detailCiphertext: "sealed" });
+
+  const progress = { stateCiphertext: "x", status: "completed" as const, turnCount: 1, costUsd: 0, leaseMs: null };
+
+  it("hides runs and steps from a colleague and from other companies, who cannot take or cancel them", async () => {
+    const id = randomUUID();
+    await createAgentRun(appPool, bob, newRun(id), limits);
+    await addAgentStep(appPool, bob, step(id));
+
+    for (const other of [alice, { tenantId: GLOBEX, userId: bob.userId }]) {
+      expect(await getAgentRun(appPool, other, id)).toBeNull();
+      expect(await listAgentSteps(appPool, other, id)).toEqual([]);
+      expect(await claimAgentRun(appPool, other, id, 60_000)).toBeNull();
+      expect(await cancelAgentRun(appPool, other, id)).toBe(false);
+    }
+    expect(await withTenant(appPool, ACME, (db) => db.select().from(agentRuns))).toEqual([]);
+    expect(await withTenant(appPool, ACME, (db) => db.select().from(agentSteps))).toEqual([]);
+    expect(await listAgentSteps(appPool, bob, id)).toHaveLength(1);
+    expect(await cancelAgentRun(appPool, bob, id)).toBe(true);
+  });
+
+  it("refuses a step on someone else's run, and writing a run for someone else", async () => {
+    const id = randomUUID();
+    await createAgentRun(appPool, bob, newRun(id), limits);
+    // Alice is allowed to write her own rows, so only the key can stop this.
+    await expect(addAgentStep(appPool, alice, step(id))).rejects.toThrow(/foreign key/);
+    await expect(
+      withUser(appPool, alice, (db) =>
+        db.insert(agentRuns).values({ ...newRun(randomUUID()), status: "running", tenantId: ACME, userId: bob.userId }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    await cancelAgentRun(appPool, bob, id);
+  });
+
+  it("lets only one caller hold a run, and none once it has finished", async () => {
+    const id = randomUUID();
+    await createAgentRun(appPool, bob, newRun(id), limits);
+    const claims = await Promise.all([claimAgentRun(appPool, bob, id, 60_000), claimAgentRun(appPool, bob, id, 60_000)]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    await cancelAgentRun(appPool, bob, id);
+    expect(await claimAgentRun(appPool, bob, id, 60_000)).toBeNull();
+    expect(await saveAgentRun(appPool, bob, id, claims.find(Boolean)!.leaseToken!, progress)).toBe(false);
+  });
+
+  it("stops a worker whose lease ran out and was taken over from overwriting the new one", async () => {
+    const id = randomUUID();
+    await createAgentRun(appPool, bob, newRun(id), limits);
+    const first = await claimAgentRun(appPool, bob, id, 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const second = await claimAgentRun(appPool, bob, id, 60_000);
+    expect(second).not.toBeNull();
+    expect(await saveAgentRun(appPool, bob, id, first!.leaseToken!, progress)).toBe(false);
+    expect(await saveAgentRun(appPool, bob, id, second!.leaseToken!, progress)).toBe(true);
+  });
+
+  it("applies the working and hourly limits", async () => {
+    const carol = { tenantId: ACME, userId: seedUser("alice").id };
+    const one = { maxWorking: 1, maxRecent: 100, recentSince: new Date(0) };
+    const id = randomUUID();
+    expect(await createAgentRun(appPool, carol, newRun(id), one)).toBe("created");
+    expect(await createAgentRun(appPool, carol, newRun(randomUUID()), one)).toBe("too_many_working");
+    await cancelAgentRun(appPool, carol, id);
+    expect(await createAgentRun(appPool, carol, newRun(randomUUID()), { ...one, maxRecent: 1 })).toBe("too_many_recent");
   });
 });
 

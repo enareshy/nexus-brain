@@ -16,7 +16,7 @@ import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConnectionsService } from "./connections.service.js";
-import { unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
+import { unusedAgents, unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
@@ -59,6 +59,7 @@ beforeAll(async () => {
     proposals: unusedProposals,
     audit: unusedAudit,
     conversations: unusedConversations,
+    agents: unusedAgents,
     answers: { answer: async () => {} },
     connections: new ConnectionsService({
       pool,
