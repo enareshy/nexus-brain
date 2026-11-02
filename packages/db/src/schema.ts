@@ -220,6 +220,15 @@ export const messageFeedback = pgTable("message_feedback", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const memories = pgTable("memories", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  textCiphertext: text("text_ciphertext").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const mcpServerApps = pgTable(
   "mcp_server_apps",
   {
@@ -267,6 +276,7 @@ export const schema = {
   conversations,
   conversationMessages,
   messageFeedback,
+  memories,
   mcpServerApps,
   writeProposals,
   usageLedger,

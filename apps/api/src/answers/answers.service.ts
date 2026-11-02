@@ -5,6 +5,7 @@ import type { AnswerDocument, AnswerOutcome, LlmGateway, UsageReport } from "@br
 import type { Logger } from "@brain/telemetry";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
+import type { MemorySource } from "../memory/memory.service.js";
 import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 
 const SEARCH_LIMIT = 10;
@@ -57,6 +58,8 @@ export interface AnswersDeps {
   readonly expander?: QueryExpander;
   /** Keeps the person's private history. Without one, nothing is saved. */
   readonly conversations?: ConversationStore;
+  /** What the person asked Brain to remember. Without one, answers use none. */
+  readonly memories?: MemorySource;
 }
 
 function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
@@ -161,6 +164,7 @@ export class AnswersService implements AnswersApi {
       return { title: hit.title, text: full.slice(0, MAX_DOCUMENT_CHARS) };
     });
 
+    const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
     let citationCount = 0;
     let parts: readonly AnswerPart[] = [];
     let usage: UsageReport | null = null;
@@ -173,6 +177,7 @@ export class AnswersService implements AnswersApi {
           documents,
           cacheScope: scope.tenantId,
           ...(conversation?.history.length ? { history: conversation.history } : {}),
+          ...(memories.length ? { memories } : {}),
         },
         (event) => {
           if (event.type === "text") {

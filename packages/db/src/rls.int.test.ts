@@ -17,6 +17,7 @@ import {
 import { addAgentStep, cancelAgentRun, claimAgentRun, createAgentRun, getAgentRun, listAgentSteps, saveAgentRun } from "./agent-runs.js";
 import { assertRlsEnforced } from "./pool.js";
 import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
+import { addMemory, deleteAllMemories, deleteMemory, listMemories, updateMemory } from "./memories.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
   agentRuns,
@@ -26,6 +27,7 @@ import {
   groupMembers,
   mcpConnections,
   mcpServerApps,
+  memories,
   messageFeedback,
   oauthStates,
   tenants,
@@ -380,6 +382,36 @@ describe("conversations are private to one person", () => {
         db.insert(conversations).values({ id: randomUUID(), tenantId: ACME, userId: bob.userId, titleCiphertext: "x" }),
       ),
     ).rejects.toThrow(/row-level security/);
+  });
+});
+
+describe("memories are private to one person", () => {
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const alice = { tenantId: ACME, userId: seedUser("alice").id };
+
+  it("hides a person's memories from a colleague and from other companies, who cannot change them either", async () => {
+    const id = randomUUID();
+    await addMemory(appPool, bob, { id, textCiphertext: "sealed" }, 30);
+    for (const other of [alice, { tenantId: GLOBEX, userId: bob.userId }]) {
+      expect(await listMemories(appPool, other)).toEqual([]);
+      expect(await updateMemory(appPool, other, id, "changed")).toBeNull();
+      expect(await deleteMemory(appPool, other, id)).toBe(false);
+      expect(await deleteAllMemories(appPool, other)).toBe(0);
+    }
+    expect(await withTenant(appPool, ACME, (db) => db.select().from(memories))).toEqual([]);
+    expect((await listMemories(appPool, bob)).map((m) => m.textCiphertext)).toEqual(["sealed"]);
+    await expect(
+      withUser(appPool, alice, (db) => db.insert(memories).values({ id: randomUUID(), tenantId: ACME, userId: bob.userId, textCiphertext: "x" })),
+    ).rejects.toThrow(/row-level security/);
+    expect(await deleteMemory(appPool, bob, id)).toBe(true);
+  });
+
+  it("keeps to the limit even when added at the same time", async () => {
+    const added = await Promise.all(
+      Array.from({ length: 5 }, () => addMemory(appPool, bob, { id: randomUUID(), textCiphertext: "sealed" }, 3)),
+    );
+    expect(added.filter(Boolean)).toHaveLength(3);
+    expect(await deleteAllMemories(appPool, bob)).toBe(3);
   });
 });
 

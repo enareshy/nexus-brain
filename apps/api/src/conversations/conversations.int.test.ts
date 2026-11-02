@@ -20,6 +20,7 @@ import { createDbUserDirectory } from "../auth/user-directory.js";
 import { ConnectionsService } from "../connections/connections.service.js";
 import { unusedAgents, unusedAudit, unusedProposals } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
+import { MemoryService } from "../memory/memory.service.js";
 import { ConversationsService } from "./conversations.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
@@ -121,7 +122,9 @@ beforeAll(async () => {
   });
   const gateway: LlmGateway = { streamAnswer, rewriteQuery, agentTurn: vi.fn() };
   const conversations = new ConversationsService({ pool, box });
+  const memory = new MemoryService({ pool, box, logger });
   app = await createApp({
+    memory,
     logger,
     directory: createDbUserDirectory(pool),
     webAppUrl: "http://localhost:3000",
@@ -139,6 +142,7 @@ beforeAll(async () => {
       gateway,
       expander: new QueryRewriter({ pool, gateway, logger }),
       conversations,
+      memories: memory,
       // Each answer a minute apart, so these tests stay clear of the per-person answer limit.
       now: () => (clock += 61_000),
     }),
@@ -162,11 +166,80 @@ beforeEach(() => {
 afterAll(async () => {
   await owner?.query("DELETE FROM mcp_connections WHERE server_id = $1", [SERVER]);
   await owner?.query("DELETE FROM conversations WHERE user_id = ANY($1)", [[seedUser("bob").id, seedUser("alice").id]]);
+  await owner?.query("SELECT set_config('app.tenant_id', $1, false), set_config('app.user_id', $2, false)", [TENANTS.acme.id, seedUser("bob").id]);
+  await owner?.query("DELETE FROM memories WHERE user_id = $1", [seedUser("bob").id]);
   await owner?.end();
   connections?.close();
   await app?.close();
   await pool?.end();
   await mock?.close();
+});
+
+describe("memory (FR-AST-07)", () => {
+  const SECRET_MEMORY = "I lead the zanzibar launch";
+
+  it("lets a person add, edit and delete what Brain remembers, and nobody else can see or change it", async () => {
+    const bob = await as("bob");
+    const added = (await bob("POST", "/memories", { text: `  ${SECRET_MEMORY}  ` })).json().data;
+    expect(added).toMatchObject({ id: expect.any(String), text: SECRET_MEMORY });
+    const edited = (await bob("POST", `/memories/${added.id}`, { text: "I lead the launch" })).json().data;
+    expect(edited.text).toBe("I lead the launch");
+
+    const alice = await as("alice");
+    expect((await alice("GET", "/memories")).json().data).toEqual([]);
+    expect((await alice("POST", `/memories/${added.id}`, { text: "x" })).statusCode).toBe(404);
+    expect((await alice("DELETE", `/memories/${added.id}`)).statusCode).toBe(404);
+    expect((await (await as("patGlobex"))("GET", "/memories")).json().data).toEqual([]);
+
+    expect((await bob("DELETE", `/memories/${added.id}`)).statusCode).toBe(200);
+    expect((await bob("GET", "/memories")).json().data).toEqual([]);
+  });
+
+  it("refuses empty, over-long or multi-line text", async () => {
+    const bob = await as("bob");
+    for (const text of ["   ", "x".repeat(301), "first line\nsecond line", "hidden ‮reversed", "zero​width"]) {
+      expect((await bob("POST", "/memories", { text })).statusCode).toBe(400);
+    }
+    expect((await bob("POST", "/memories", { text: "ok", extra: true })).statusCode).toBe(400);
+  });
+
+  it("stores it sealed and records changes in the audit trail without the words", async () => {
+    const bob = await as("bob");
+    const added = (await bob("POST", "/memories", { text: SECRET_MEMORY })).json().data;
+    await owner.query("SELECT set_config('app.tenant_id', $1, false), set_config('app.user_id', $2, false)", [TENANTS.acme.id, seedUser("bob").id]);
+    const raw = await owner.query("SELECT text_ciphertext FROM memories WHERE id = $1", [added.id]);
+    expect(raw.rows[0].text_ciphertext).not.toContain("zanzibar");
+    const audit = await owner.query("SELECT action, meta::text AS meta FROM audit_log WHERE resource = $1", [added.id]);
+    expect(audit.rows.map((r) => r.action)).toEqual(["memory.added"]);
+    expect(JSON.stringify(audit.rows)).not.toContain("zanzibar");
+    expect((await bob("DELETE", "/memories")).json().data).toEqual({ deleted: 1 });
+  });
+
+  it("keeps answering when one memory cannot be read, and lets the person delete it", async () => {
+    const bob = await as("bob");
+    await bob("POST", "/memories", { text: "Keep answers short" });
+    const badId = randomUUID();
+    await owner.query("SELECT set_config('app.tenant_id', $1, false), set_config('app.user_id', $2, false)", [TENANTS.acme.id, seedUser("bob").id]);
+    await owner.query("INSERT INTO memories (id, tenant_id, user_id, text_ciphertext) VALUES ($1, $2, $3, 'damaged')", [badId, TENANTS.acme.id, seedUser("bob").id]);
+
+    const listed = (await bob("GET", "/memories")).json().data as Array<{ id: string; readable: boolean }>;
+    expect(listed.find((m) => m.id === badId)).toMatchObject({ readable: false, text: "" });
+    await ask(bob, SECRET_QUESTION);
+    expect(streamAnswer.mock.calls.at(-1)![0].memories).toEqual(["Keep answers short"]);
+    expect((await bob("DELETE", `/memories/${badId}`)).statusCode).toBe(200);
+    await bob("DELETE", "/memories");
+  });
+
+  it("is sent with the person's next answer, and a deleted memory is gone from the one after", async () => {
+    const bob = await as("bob");
+    const added = (await bob("POST", "/memories", { text: SECRET_MEMORY })).json().data;
+    await ask(bob, SECRET_QUESTION);
+    expect(streamAnswer.mock.calls.at(-1)![0].memories).toEqual([SECRET_MEMORY]);
+
+    await bob("DELETE", `/memories/${added.id}`);
+    await ask(bob, SECRET_QUESTION);
+    expect(streamAnswer.mock.calls.at(-1)![0].memories).toBeUndefined();
+  });
 });
 
 describe("a conversation", () => {

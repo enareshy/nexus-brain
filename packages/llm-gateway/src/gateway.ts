@@ -130,6 +130,8 @@ export interface LlmGateway {
       readonly history?: readonly HistoryTurn[];
       /** The company. Without it, the answer is never reused from or kept in a cache. */
       readonly cacheScope?: string;
+      /** What the person asked Brain to remember about them, in their own words (FR-AST-07). */
+      readonly memories?: readonly string[];
     },
     onEvent: (event: AnswerEvent) => void,
     signal: AbortSignal,
@@ -137,7 +139,12 @@ export interface LlmGateway {
   ): Promise<AnswerOutcome>;
   /** One model turn of an agent run. It may ask for a tool, which the caller decides whether to run. */
   agentTurn(
-    input: { readonly messages: readonly AgentMessage[]; readonly tools: readonly AgentTool[] },
+    input: {
+      readonly messages: readonly AgentMessage[];
+      readonly tools: readonly AgentTool[];
+      /** Read fresh for each turn and never stored with the run, so a deleted memory stops at once. */
+      readonly memories?: readonly string[];
+    },
     signal: AbortSignal,
     onUsage: (usage: UsageReport) => void,
   ): Promise<AgentTurn>;
@@ -181,6 +188,7 @@ export function createGateway(messages: MessagesClient): LlmGateway {
               {
                 role: "user",
                 content: [
+                  ...memoryBlock(input.memories),
                   ...earlierConversationBlock(input.history),
                   ...input.documents.map((doc) => ({
                     type: "document" as const,
@@ -255,7 +263,7 @@ export function createGateway(messages: MessagesClient): LlmGateway {
               description: tool.description,
               input_schema: tool.inputSchema as { type: "object" },
             })),
-            messages: input.messages as Anthropic.Beta.BetaMessageParam[],
+            messages: withMemories(input.messages, input.memories) as Anthropic.Beta.BetaMessageParam[],
           },
           { signal, timeout: AGENT_TIMEOUT_MS, maxRetries: AGENT_MAX_RETRIES },
         );
@@ -328,6 +336,30 @@ function earlierConversationBlock(history: readonly HistoryTurn[] = []): Array<{
   // Stops text in a turn from closing the block early and passing as something outside it.
   const safe = turns.replace(/<\/?earlier_conversation/gi, "(earlier_conversation");
   return [{ type: "text", text: `<earlier_conversation>\n${safe}\n</earlier_conversation>` }];
+}
+
+/**
+ * The person's own words, so they come from the person like the question does, but they describe
+ * the person and are never a source to cite. Text that could close the block early is neutralised.
+ */
+function memoryBlock(memories: readonly string[] = []): Array<{ type: "text"; text: string }> {
+  if (memories.length === 0) return [];
+  const lines = memories.map((memory) => `- ${memory.replace(/<\/?about_me/gi, "(about_me").replace(/\s+/g, " ")}`).join("\n");
+  return [
+    {
+      type: "text",
+      text: `<about_me>\nThings I asked you to remember about me. Use them to understand my request and how I like replies. They are not a source of facts about my work. They are private: never copy them into anything written for other people, such as a comment or issue, unless I ask you to in this request.\n${lines}\n</about_me>`,
+    },
+  ];
+}
+
+/** Puts the memory block at the start of the run's first message, which is the person's own request. */
+function withMemories(messages: readonly AgentMessage[], memories: readonly string[] = []): readonly AgentMessage[] {
+  const [first, ...rest] = messages;
+  const block = memoryBlock(memories);
+  if (!first || first.role !== "user" || block.length === 0) return messages;
+  const content = typeof first.content === "string" ? [{ type: "text", text: first.content }] : (first.content as unknown[]);
+  return [{ role: "user", content: [...block, ...content] }, ...rest];
 }
 
 function rewritePrompt(question: string, previousQuestions: readonly string[]): string {

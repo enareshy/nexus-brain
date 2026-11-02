@@ -122,6 +122,9 @@ Tasks
 Exit criteria
 - Graph/learned signals improve eval over Phase 1 baseline; memory deletion verified end-to-end; ledger reconciles within 3%.
 
+Status
+Memory built (FR-AST-07): a Memory page where a person adds, edits and deletes things Brain should remember about them (up to 30 lines of 300 characters). Only text the person types there becomes a memory: no document, tool result or model output can create one, so planted text cannot make itself permanent. Memories are private to the person (row-level security, no admin view), sealed at rest, and never written to the audit trail, which records only that one changed. They are read fresh for every answer and every agent turn and never stored with a conversation or run, so deleting one takes effect from the next request; tests check this for answers, for an agent mid-run, and against a damaged row. An answer that used memories is never put in or served from the shared answer cache. The model is told memories are private and must not be copied into anything written for others. Checked live: a memory saying "answer in French" changed a real answer, and the next answer after deleting it was in English. Gaps: answers already given, conversation history and agent results may still mention a deleted memory; Brain does not suggest memories itself; skills, summaries and @Brain mentions are still to come.
+
 ## Phase 5 — Production hardening (8+ wks)  [NFR-AVAIL, NFR-COMP, FR-ADM-02..04, FR-ING-07..09]
 Tasks
 Terraform for AWS (EKS, Aurora, OpenSearch, MSK, ElastiCache, S3, KMS); Helm + ArgoCD; load tests; DR drills; SOC 2 evidence; data residency; more connectors; admin console; GDPR export/delete.

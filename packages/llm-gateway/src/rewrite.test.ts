@@ -55,6 +55,19 @@ describe("agentTurn", () => {
     expect(JSON.stringify([second!.tools, second!.system])).toBe(JSON.stringify([first!.tools, first!.system]));
   });
 
+  it("puts memories at the start of the person's own first message, without changing the stored messages", async () => {
+    const { gateway, stream } = gatewayReplying(reply("ok", { model: MODELS.agent }));
+    const run = [
+      { role: "user" as const, content: "Find the runbook" },
+      { role: "assistant" as const, content: [{ type: "text", text: "Looking" }] },
+    ];
+    await gateway.agentTurn({ messages: run, tools, memories: ["I work on KAN"] }, signal, () => {});
+    const sent = stream.mock.calls[0]![0].messages as Array<{ role: string; content: Array<{ type: string; text: string }> }>;
+    expect(sent[0]!.content.map((b) => b.text)).toEqual([expect.stringContaining("- I work on KAN"), "Find the runbook"]);
+    expect(sent[1]).toEqual(run[1]);
+    expect(run[0]!.content).toBe("Find the runbook");
+  });
+
   it("keeps only the tool call it returns, because each one kept needs a result", async () => {
     const content = [
       { type: "text", text: "Looking" },

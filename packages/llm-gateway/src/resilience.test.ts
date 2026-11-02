@@ -261,6 +261,15 @@ describe("withAnswerCache", () => {
     expect(inner.calls()).toBe(2);
   });
 
+  it("never caches an answer shaped by someone's memories, so it cannot reach anyone else", async () => {
+    const inner = fakeGateway();
+    const gateway = withAnswerCache(inner, options);
+    await ask(gateway, { ...base, memories: ["My team is Payments"] });
+    await ask(gateway, base);
+    await ask(gateway, { ...base, memories: ["My team is Payments"] });
+    expect(inner.calls()).toBe(3);
+  });
+
   it("forgets answers after their time and keeps only the most recent few", async () => {
     let clock = 0;
     const inner = fakeGateway();

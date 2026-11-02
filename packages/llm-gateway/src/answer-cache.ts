@@ -23,7 +23,8 @@ interface Entry {
  * answer is only ever given to someone who has just read exactly the same text themselves.
  */
 function keyFor(input: Parameters<LlmGateway["streamAnswer"]>[0]): string | null {
-  if (!input.cacheScope) return null;
+  // An answer shaped by someone's memories is theirs alone, and could repeat what they saved.
+  if (!input.cacheScope || input.memories?.length) return null;
   return createHash("sha256")
     .update(
       JSON.stringify({

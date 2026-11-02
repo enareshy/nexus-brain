@@ -20,7 +20,7 @@ import { ConnectionsService } from "../connections/connections.service.js";
 import { ProposalsService } from "../proposals/proposals.service.js";
 import { unusedAudit, unusedConversations } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
-import { AgentsService } from "./agents.service.js";
+import { AgentsService, type AgentsDeps } from "./agents.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
@@ -41,6 +41,7 @@ let keys: TestKeys;
 let connections: ConnectionsService;
 let agents: AgentsService;
 let makeAgents: () => AgentsService;
+let agentDeps: AgentsDeps;
 
 const USAGE = { model: "m", inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.001, estimated: false };
 const agentTurn = vi.fn<LlmGateway["agentTurn"]>();
@@ -146,7 +147,8 @@ beforeAll(async () => {
   });
   const proposals = new ProposalsService({ pool, logger, sessions: connections, adapters: new Map([[SERVER, mockWrites]]) });
   const gateway: LlmGateway = { streamAnswer: vi.fn(), rewriteQuery: vi.fn(), agentTurn };
-  makeAgents = () => new AgentsService({ pool, box, gateway, documents: connections, proposals, logger });
+  agentDeps = { pool, box, gateway, documents: connections, proposals, logger };
+  makeAgents = () => new AgentsService(agentDeps);
   agents = makeAgents();
   app = await createApp({
     logger,
@@ -204,6 +206,26 @@ describe("a run", () => {
     expect(run.costUsd).toBeCloseTo(0.002);
     const ledger = await owner.query("SELECT count(*) FROM usage_ledger WHERE feature = 'agent' AND user_id = $1", [seedUser("bob").id]);
     expect(Number(ledger.rows[0].count)).toBeGreaterThan(0);
+  });
+
+  it("reads the person's memories fresh for every turn and never keeps them in the run (FR-AST-07)", async () => {
+    let saved = ["I work on the ENG project"];
+    const withMemory = new AgentsService({ ...agentDeps, memories: { forPrompt: async () => saved } });
+    agentTurn.mockReset();
+    agentTurn.mockImplementationOnce(async (_input, _signal, onUsage) => {
+      onUsage(USAGE);
+      saved = []; // The person deletes the memory while the run is working.
+      return call("search_documents", { query: "runbook" });
+    });
+    agentTurn.mockImplementationOnce(async (_input, _signal, onUsage) => {
+      onUsage(USAGE);
+      return say("done");
+    });
+    await withMemory.start(bobScope(), "find the runbook");
+    await withMemory.settled();
+
+    expect(agentTurn.mock.calls.map(([input]) => input.memories)).toEqual([["I work on the ENG project"], undefined]);
+    expect(JSON.stringify(agentTurn.mock.calls[1]![0].messages)).not.toContain("ENG project");
   });
 
   it("stores its goal and results encrypted, and audits tool calls without content", async () => {
