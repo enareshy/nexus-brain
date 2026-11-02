@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
-    "eval": "node --import tsx src/cli.ts golden/synthetic.json golden/corpus.json golden/rewrites.json"
+    "eval": "node --import tsx src/cli.ts golden/synthetic.json golden/corpus.json golden/rewrites.json golden/agent-tasks.json golden/agent-results.json"
   },
   "dependencies": {
     "@brain/connectors": "workspace:*",
