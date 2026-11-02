@@ -107,6 +107,42 @@ describe("createApiClient", () => {
     expect(await api.disconnect("atlassian")).toEqual({ disconnected: true, revoked: false });
   });
 
+  it("calls the right route with the right method and body for memory, people, agents and changes", async () => {
+    const memory = { id: "m1", text: "Keep it short", readable: true, createdAt: "t", updatedAt: "t" };
+    const person = { id: "p1", email: "a@b.c", displayName: "A", role: "member", active: true, deactivatedAt: null };
+    const deactivation = { changed: true, connectionsRemoved: 0, connectionsRevoked: 0, triggersPaused: 0, runsCancelled: 0, proposalsRejected: 0, changesInProgress: 0 };
+    const run = { id: "r1", goal: "g", status: "running", errorCode: null, createdAt: "t" };
+    const trigger = { id: "t1", kind: "schedule", goal: "g", schedule: "daily", enabled: true, pausedReason: null, nextRunAt: "t" };
+    const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) => ok(null));
+    const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
+    const cases: Array<[() => Promise<unknown>, unknown, string, string, unknown?]> = [
+      [() => api.memories(), [memory], "GET", "/memories"],
+      [() => api.addMemory("Keep it short"), memory, "POST", "/memories", { text: "Keep it short" }],
+      [() => api.updateMemory("m 1", "x"), memory, "POST", "/memories/m%201", { text: "x" }],
+      [() => api.deleteMemory("m1"), { deleted: true }, "DELETE", "/memories/m1"],
+      [() => api.deleteAllMemories(), { deleted: 2 }, "DELETE", "/memories"],
+      [() => api.people(), [person], "GET", "/admin/people"],
+      [() => api.deactivatePerson("p1"), deactivation, "POST", "/admin/people/p1/deactivate"],
+      [() => api.reactivatePerson("p1"), { changed: true }, "POST", "/admin/people/p1/reactivate"],
+      [() => api.agentRuns(), [run], "GET", "/agent-runs"],
+      [() => api.startAgentRun("g"), run, "POST", "/agent-runs", { goal: "g" }],
+      [() => api.cancelAgentRun("r1"), { cancelled: true }, "POST", "/agent-runs/r1/cancel"],
+      [() => api.agentTriggers(), [trigger], "GET", "/agent-triggers"],
+      [() => api.deleteAgentTrigger("t1"), { deleted: true }, "DELETE", "/agent-triggers/t1"],
+      [() => api.markNotificationsRead(["n1"]), { read: true }, "POST", "/notifications/read", { ids: ["n1"] }],
+      [() => api.notifications(), { items: [], unread: 0 }, "GET", "/notifications"],
+      [() => api.setServerAllowed("slack", false), { allowed: false }, "POST", "/connections/slack/allowed", { allowed: false }],
+      [() => api.deleteConversation("c1"), { deleted: true }, "DELETE", "/conversations/c1"],
+    ];
+    for (const [send, reply, method, path, body] of cases) {
+      fetchImpl.mockResolvedValueOnce(ok(reply));
+      expect(await send()).toEqual(reply);
+      const [url, init] = fetchImpl.mock.calls.at(-1)!;
+      expect(`${init?.method ?? "GET"} ${new URL(String(url)).pathname}`).toBe(`${method} ${path}`);
+      expect(init?.body).toBe(body === undefined ? undefined : JSON.stringify(body));
+    }
+  });
+
   it("refuses to call the API without a token", async () => {
     const fetchImpl = vi.fn();
     const api = createApiClient("http://api.test", () => null, fetchImpl as unknown as typeof fetch);

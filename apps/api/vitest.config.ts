@@ -20,6 +20,7 @@ export default defineConfig({
         "src/agents/**",
         "src/mcp/**",
         "src/conversations/**",
+        "src/memory/**",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
