@@ -73,6 +73,14 @@ describe("streamAnswer", () => {
     expect(stream.mock.calls[0]![1]).toMatchObject({ signal });
   });
 
+  it("asks for no prompt caching, since its system prompt is too short to cache and everything after it changes", async () => {
+    const { client, stream } = fakeMessages([]);
+    await createGateway(client).streamAnswer(input, () => {}, signal, () => {});
+    const params = stream.mock.calls[0]![0];
+    expect(params.cache_control).toBeUndefined();
+    expect(JSON.stringify(params)).not.toContain("cache_control");
+  });
+
   it("keeps document text out of the system prompt", async () => {
     const { client, stream } = fakeMessages([]);
     await createGateway(client).streamAnswer(input, () => {}, signal, () => {});

@@ -38,7 +38,21 @@ describe("agentTurn", () => {
     expect(params.tool_choice).toEqual({ type: "auto", disable_parallel_tool_use: true });
     expect((params.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["search_documents"]);
     expect(options.maxRetries).toBe(3);
-    expect(String(params.system)).toContain("<untrusted>");
+    expect(JSON.stringify(params.system)).toContain("<untrusted>");
+  });
+
+  it("caches the instructions and tools for every run, and each run's conversation as it grows", async () => {
+    const { gateway, stream } = gatewayReplying(reply("ok", { model: MODELS.agent }));
+    await gateway.agentTurn({ messages, tools }, signal, () => {});
+    await gateway.agentTurn({ messages, tools }, signal, () => {});
+    const [first, second] = stream.mock.calls.map(([params]) => params);
+    const system = first!.system as Array<{ type: string; text: string; cache_control?: unknown }>;
+    expect(system).toHaveLength(1);
+    expect(system[0]).toMatchObject({ type: "text", cache_control: { type: "ephemeral" } });
+    // Only the default five-minute lifetime: agent turns follow each other within seconds.
+    expect(first!.cache_control).toEqual({ type: "ephemeral" });
+    // The cached part must be byte-identical from one request to the next.
+    expect(JSON.stringify([second!.tools, second!.system])).toBe(JSON.stringify([first!.tools, first!.system]));
   });
 
   it("keeps only the tool call it returns, because each one kept needs a result", async () => {
