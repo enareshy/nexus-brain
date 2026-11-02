@@ -7,6 +7,7 @@ export const ConnectionSchema = z.object({
   lastUsedAt: z.string().nullable(),
   setup: z.enum(["ready", "needs_app", "configured"]),
   redirectUrl: z.string(),
+  allowed: z.boolean(),
 });
 export type Connection = z.infer<typeof ConnectionSchema>;
 
@@ -207,6 +208,7 @@ export interface ApiClient {
   complete(code: string, state: string): Promise<{ serverId: string }>;
   disconnect(serverId: string): Promise<{ disconnected: boolean; revoked: boolean }>;
   saveServerApp(serverId: string, app: { clientId: string; clientSecret: string }): Promise<{ saved: true }>;
+  setServerAllowed(serverId: string, allowed: boolean): Promise<{ allowed: boolean }>;
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal, conversationId?: string): Promise<ReadableStream<Uint8Array>>;
@@ -301,6 +303,11 @@ export function createApiClient(
       request(z.object({ saved: z.literal(true) }), `/connections/${enc(serverId)}/app`, {
         method: "POST",
         body: JSON.stringify(app),
+      }),
+    setServerAllowed: (serverId, allowed) =>
+      request(z.object({ allowed: z.boolean() }), `/connections/${enc(serverId)}/allowed`, {
+        method: "POST",
+        body: JSON.stringify({ allowed }),
       }),
     search: (query, options = {}) =>
       request(SearchResultSchema, `/search?q=${enc(query)}&limit=${options.limit ?? 10}`, {

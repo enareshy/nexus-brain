@@ -244,8 +244,9 @@ export class TriggersService implements TriggersApi {
     try {
       issues = await withinTime(this.deps.assignments.list(scope), ASSIGNMENT_CHECK_TIMEOUT_MS);
     } catch (err) {
-      if (!isAppError(err) || err.code !== "RECONNECT_REQUIRED") throw err;
-      await pauseTrigger(this.deps.pool, scope, trigger.id, "reconnect_jira");
+      const turnedOff = isAppError(err) && err.details?.reason === "service_turned_off";
+      if (!isAppError(err) || (err.code !== "RECONNECT_REQUIRED" && !turnedOff)) throw err;
+      await pauseTrigger(this.deps.pool, scope, trigger.id, turnedOff ? "service_turned_off" : "reconnect_jira");
       await this.notify(scope, { kind: "trigger_paused", dedupeKey: `trigger:${trigger.id}:paused:${Date.now()}`, title: goal });
       return;
     }

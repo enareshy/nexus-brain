@@ -141,6 +141,18 @@ export const agentSteps = pgTable(
   (table) => [primaryKey({ columns: [table.runId, table.seq] })],
 );
 
+export const tenantServerSettings = pgTable(
+  "tenant_server_settings",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    serverId: text("server_id").notNull(),
+    allowed: boolean("allowed").notNull(),
+    updatedBy: uuid("updated_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.serverId] })],
+);
+
 export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
@@ -250,6 +262,7 @@ export const schema = {
   agentTriggers,
   agentTriggerEvents,
   notifications,
+  tenantServerSettings,
   conversations,
   conversationMessages,
   messageFeedback,

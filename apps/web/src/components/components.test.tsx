@@ -77,7 +77,7 @@ describe("AnswerPanel", () => {
   });
 });
 
-const READY = { setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" } as const;
+const READY = { setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback", allowed: true } as const;
 const CONNECTIONS: Connection[] = [
   { serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: "2026-10-31T10:00:00Z", ...READY },
   { serverId: "slack", displayName: "Slack", status: "not_connected", lastUsedAt: null, ...READY },
@@ -103,6 +103,39 @@ describe("ConnectionsList", () => {
     expect(onConnect.mock.calls).toEqual([["slack"], ["github"]]);
   });
 
+  describe("a service the company has turned off", () => {
+    const OFF: Connection[] = [{ ...CONNECTIONS[0]!, allowed: false }, { ...CONNECTIONS[1]!, allowed: false }];
+
+    it("tells a member it is off, offers no way to connect, but still lets them disconnect", async () => {
+      const onDisconnect = vi.fn();
+      render(<ConnectionsList connections={OFF} busyServerId={null} onConnect={vi.fn()} onDisconnect={onDisconnect} />);
+      const rows = screen.getAllByRole("listitem");
+      expect(within(rows[0]!).getByText("Turned off")).toBeInTheDocument();
+      expect(within(rows[0]!).getByText(/Your admin has turned this off/)).toBeInTheDocument();
+      expect(within(rows[1]!).queryByRole("button", { name: /Connect/ })).not.toBeInTheDocument();
+      await userEvent.click(within(rows[0]!).getByRole("button", { name: "Disconnect Atlassian" }));
+      expect(onDisconnect).toHaveBeenCalledWith("atlassian");
+      expect(screen.queryByRole("button", { name: /for everyone/ })).not.toBeInTheDocument();
+    });
+
+    it("lets an admin turn a service off and on for everyone", async () => {
+      const onSetAllowed = vi.fn();
+      render(
+        <ConnectionsList
+          connections={[CONNECTIONS[0]!, OFF[1]!]}
+          busyServerId={null}
+          onConnect={vi.fn()}
+          onDisconnect={vi.fn()}
+          canSetUp
+          onSetAllowed={onSetAllowed}
+        />,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Turn off Atlassian for everyone" }));
+      await userEvent.click(screen.getByRole("button", { name: "Allow Slack for everyone" }));
+      expect(onSetAllowed.mock.calls).toEqual([["atlassian", false], ["slack", true]]);
+    });
+  });
+
   describe("a service that needs setup", () => {
     const NEEDS_SETUP: Connection[] = [
       {
@@ -112,6 +145,7 @@ describe("ConnectionsList", () => {
         lastUsedAt: null,
         setup: "needs_app",
         redirectUrl: "http://127.0.0.1:3001/oauth/callback",
+        allowed: true,
       },
     ];
     const noop = () => {};

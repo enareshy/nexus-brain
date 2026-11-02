@@ -297,6 +297,13 @@ describe("a Jira assignment", () => {
     expect(await runsOf(bob)).toEqual([]);
   });
 
+  it("pauses, saying why, when the company turns the service off", async () => {
+    await triggers.create(bob, { kind: "jira_assigned", goal: "Turned off" });
+    assigned = new AppError("FORBIDDEN", "Turned off", { reason: "service_turned_off" });
+    await tickAndSettle();
+    expect((await triggers.list(bob))[0]).toMatchObject({ enabled: false, pausedReason: "service_turned_off" });
+  });
+
   it("tries again next time on a passing failure, without losing any issue", async () => {
     await triggers.create(bob, { kind: "jira_assigned", goal: "Flaky" });
     await tickAndSettle();

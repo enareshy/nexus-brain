@@ -11,7 +11,7 @@ const fail = (code: string, message: string, status: number) =>
 describe("createApiClient", () => {
   it("sends the bearer token and validates the response", async () => {
     const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) =>
-      ok([{ serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" }]),
+      ok([{ serverId: "atlassian", displayName: "Atlassian", status: "active", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback", allowed: true }]),
     );
     const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
     const connections = await api.connections();
