@@ -12,6 +12,8 @@ const apiEnvObject = baseEnvSchema.extend({
   DATABASE_APP_ROLE_URL: z.string().url(),
   OIDC_ISSUER: z.string().url(),
   OIDC_AUDIENCE: z.string().min(1),
+  /** Tokens for Brain's own MCP server carry this audience, and web app tokens do not (FR-MCP-03). */
+  MCP_SERVER_AUDIENCE: z.string().min(1).default("brain-mcp"),
   /** Defaults to the Keycloak JWKS path under the issuer. */
   OIDC_JWKS_URL: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
@@ -33,6 +35,9 @@ const apiEnvObject = baseEnvSchema.extend({
 
 /** In production, every externally visible URL must be https and not loopback (review M6). */
 export const apiEnvSchema = apiEnvObject.superRefine((env, issues) => {
+  if (env.MCP_SERVER_AUDIENCE === env.OIDC_AUDIENCE) {
+    issues.addIssue({ code: z.ZodIssueCode.custom, path: ["MCP_SERVER_AUDIENCE"], message: "must differ from OIDC_AUDIENCE" });
+  }
   if (env.NODE_ENV !== "production") return;
   for (const key of ["PUBLIC_API_URL", "WEB_APP_URL", "OIDC_ISSUER"] as const) {
     const url = new URL(env[key]);

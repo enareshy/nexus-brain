@@ -60,7 +60,7 @@ export class AuthGuard implements CanActivate {
   }
 }
 
-function bearerToken(header: string | undefined): string {
+export function bearerToken(header: string | undefined): string {
   const match = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/.exec(header ?? "");
   if (!match?.[1]) {
     throw new AppError("UNAUTHENTICATED", "Missing bearer token");

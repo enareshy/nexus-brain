@@ -1,3 +1,4 @@
+import { AppError } from "@brain/core";
 import { and, count, desc, eq, gt, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { writeProposals, type ProposalStatus } from "./schema.js";
 import { withUser, type PoolLike, type UserScope } from "./tenant.js";
@@ -25,8 +26,21 @@ export interface ProposalResult {
   readonly errorCode?: string | null;
 }
 
-export function createProposal(pool: PoolLike, scope: UserScope, proposal: NewProposal): Promise<StoredProposal> {
+/** The limit is checked under a per-user lock, so parallel requests cannot pass it together. */
+export function createProposal(pool: PoolLike, scope: UserScope, proposal: NewProposal, maxPending?: number): Promise<StoredProposal> {
   return withUser(pool, scope, async (db) => {
+    if (maxPending !== undefined) {
+      await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`proposal|${scope.tenantId}|${scope.userId}`}, 0))`);
+      const [same] = await db.select().from(writeProposals).where(eq(writeProposals.id, proposal.id)).limit(1);
+      if (same) return same;
+      const [pending] = await db
+        .select({ value: count() })
+        .from(writeProposals)
+        .where(and(eq(writeProposals.status, "pending"), gt(writeProposals.expiresAt, sql`now()`)));
+      if ((pending?.value ?? 0) >= maxPending) {
+        throw new AppError("RATE_LIMITED", "Too many changes are waiting. Approve or reject some first");
+      }
+    }
     const [row] = await db
       .insert(writeProposals)
       .values({ ...proposal, tenantId: scope.tenantId, userId: scope.userId, status: "pending" })

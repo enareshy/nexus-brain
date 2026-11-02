@@ -33,6 +33,7 @@ import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
 import { ConversationsService } from "./conversations/conversations.service.js";
+import { McpToolsService } from "./mcp/mcp.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
 
 interface KnownServer {
@@ -116,8 +117,16 @@ const proposals = new ProposalsService({
 
 const agents = new AgentsService({ pool, box, gateway, documents: connections, proposals, logger });
 
+const keySet = createRemoteJWKSet(jwksUrl(env));
+
 const app = await createApp({
   agents,
+  mcp: {
+    verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
+    tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),
+    resourceUrl: new URL("/mcp", env.PUBLIC_API_URL).toString(),
+    issuer: env.OIDC_ISSUER,
+  },
   logger,
   connections,
   answers,
@@ -128,7 +137,7 @@ const app = await createApp({
   verifier: createJwtVerifier({
     issuer: env.OIDC_ISSUER,
     audience: env.OIDC_AUDIENCE,
-    keySet: createRemoteJWKSet(jwksUrl(env)),
+    keySet,
   }),
   directory: createDbUserDirectory(pool),
 });

@@ -15,6 +15,10 @@ describe("loadApiEnv", () => {
     expect(env.API_HOST).toBe("127.0.0.1");
   });
 
+  it("refuses one audience for both the web API and the MCP server, so tokens stay separate", () => {
+    expect(() => loadApiEnv({ ...BASE, MCP_SERVER_AUDIENCE: BASE.OIDC_AUDIENCE })).toThrow(/MCP_SERVER_AUDIENCE/);
+  });
+
   it("fails fast without OIDC settings", () => {
     expect(() => loadApiEnv({ DATABASE_APP_ROLE_URL: BASE.DATABASE_APP_ROLE_URL })).toThrow(
       /OIDC_ISSUER/,

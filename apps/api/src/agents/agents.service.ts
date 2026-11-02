@@ -20,7 +20,7 @@ import type { Logger } from "@brain/telemetry";
 import { createHash, randomUUID } from "node:crypto";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.js";
-import { AGENT_TOOLS, parseToolCall } from "./tools.js";
+import { AGENT_TOOLS, parseToolCall, untrusted } from "./tools.js";
 
 // Caps per run (FR-AGT-06). Each ends the run with a clear status.
 const MAX_TURNS = 8;
@@ -39,7 +39,6 @@ const TURN_RETRY_DELAY_MS = 1_000;
 /** Well inside the lease, so a slow tool cannot outlive it. */
 const TOOL_TIMEOUT_MS = 60_000;
 const MAX_LIST_RESUMES = 5;
-const MAX_LABEL_CHARS = 200;
 const MAX_TARGETS_CHARS = 20_000;
 const SEARCH_LIMIT = 10;
 const MAX_DOCUMENTS = 5;
@@ -100,13 +99,6 @@ export interface AgentsDeps {
 function proposalIdFor(runId: string, toolCallId: string): string {
   const hex = createHash("sha256").update(`${runId}|${toolCallId}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-}
-
-/** Tool output is written by other people. The label and escape stop it posing as anything else. */
-function untrusted(label: string, text: string): string {
-  const safeLabel = label.replace(/[\p{Cc}"<>]/gu, " ").slice(0, MAX_LABEL_CHARS);
-  const safeText = text.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return `<untrusted source="${safeLabel}">\n${safeText}\n</untrusted>`;
 }
 
 function withinToolTime<T>(work: Promise<T>): Promise<T> {

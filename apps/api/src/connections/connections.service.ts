@@ -78,6 +78,15 @@ export interface ConnectionsApi {
   saveApp(scope: UserScope, serverId: string, app: ServerAppInput): Promise<{ saved: true }>;
   tools(scope: UserScope, serverId: string): Promise<readonly ToolInfo[]>;
   search(scope: UserScope, query: string, limit: number): Promise<FederatedResult>;
+  /** Full text of one search result, read with the person's own connection, or null if it cannot be read. */
+  readItem(scope: UserScope, item: ItemReference): Promise<string | null>;
+}
+
+export interface ItemReference {
+  readonly serverId: string;
+  readonly externalId: string;
+  readonly url: string;
+  readonly siteId?: string | undefined;
 }
 
 export interface GatheredDocuments extends FederatedResult {
@@ -343,6 +352,17 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   /** Searches, then reads the top hits' full text in the same session per source. */
+  async readItem(scope: UserScope, item: ItemReference): Promise<string | null> {
+    const adapter = this.deps.adapters.get(item.serverId);
+    if (!adapter) throw new AppError("NOT_FOUND", "This service is not available");
+    const { siteId, ...rest } = item;
+    // The caller supplies these details, so only the service's own access check decides what is returned.
+    const hit: SearchHit = { ...rest, ...(siteId ? { siteId } : {}), title: "", snippet: "", updatedAt: null };
+    const read = await this.readWithSession(scope, item.serverId, (session) => adapter.readDocuments?.(session, [hit]) ?? Promise.resolve(null));
+    await this.audit(scope, "item.read", item.serverId, { externalId: item.externalId });
+    return read?.get(item.url) ?? null;
+  }
+
   async gatherDocuments(
     scope: UserScope,
     query: string,

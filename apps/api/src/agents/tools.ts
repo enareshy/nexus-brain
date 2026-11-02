@@ -85,6 +85,15 @@ export const AGENT_TOOLS: readonly AgentTool[] = [
   },
 ];
 
+const MAX_LABEL_CHARS = 200;
+
+/** Tool output is written by other people. The label and escaping stop it posing as anything else. */
+export function untrusted(label: string, text: string): string {
+  const safeLabel = label.replace(/[\p{Cc}"<>]/gu, " ").slice(0, MAX_LABEL_CHARS);
+  const safeText = text.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return `<untrusted source="${safeLabel}">\n${safeText}\n</untrusted>`;
+}
+
 export type ParsedCall =
   | { readonly kind: "search"; readonly query: string }
   | { readonly kind: "list_projects" }

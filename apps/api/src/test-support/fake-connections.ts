@@ -11,6 +11,7 @@ export function createFakeConnections(): FakeConnections {
   const record = (method: string, args: unknown[]) => calls.push({ method, args });
   return {
     calls,
+    readItem: async () => null,
     list: async (...args) => {
       record("list", args);
       return [{ serverId: "atlassian", displayName: "Atlassian", status: "not_connected", lastUsedAt: null, setup: "ready", redirectUrl: "http://127.0.0.1:3001/oauth/callback" }];

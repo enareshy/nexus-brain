@@ -19,6 +19,7 @@
     "@brain/mcp-client": "workspace:*",
     "@brain/telemetry": "workspace:*",
     "@fastify/rate-limit": "^10.2.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
