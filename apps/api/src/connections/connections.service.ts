@@ -20,6 +20,7 @@ import {
   setServerAllowed,
   touchConnection,
   type PoolLike,
+  type RemovedConnection,
   type UserScope,
 } from "@brain/db";
 import {
@@ -39,7 +40,7 @@ import { withExpandedTerms, type QueryExpander } from "../answers/query-rewriter
 import { KeyedMutex } from "./keyed-mutex.js";
 import { SessionPool } from "./session-pool.js";
 import { TtlCache } from "./ttl-cache.js";
-import { createVaultStore, readClientInfo, readStoredTokens, verifierContext } from "./vault-store.js";
+import { createVaultStore, openTokens, readClientInfo, readStoredTokens, verifierContext } from "./vault-store.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43,128}$/;
@@ -297,6 +298,28 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       if (disconnected) await this.audit(scope, "connection.disconnected", serverId, { revoked });
       return { disconnected, revoked };
     });
+  }
+
+  /**
+   * After someone is turned off their tokens are already deleted here. This revokes each grant at
+   * its provider where supported and drops sessions kept for them. Best effort, never retried:
+   * the tokens no longer exist, so a failure is reported and left.
+   */
+  async revokeRemoved(scope: UserScope, removed: readonly RemovedConnection[]): Promise<number> {
+    const outcomes = await Promise.allSettled(
+      removed.map(async (connection) => {
+        this.forget(scope, connection.serverId);
+        const tokens = openTokens(this.deps.box, scope, connection.serverId, connection.tokensCiphertext);
+        if (!tokens) return false;
+        const def = await this.definitionFor(scope, connection.serverId);
+        const clientInfo = await readClientInfo(this.deps.pool, this.deps.box, connection.serverId);
+        return revokeAuthorization(def, this.deps.client, tokens, clientInfo);
+      }),
+    );
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") this.deps.onBackgroundError?.(outcome.reason);
+    }
+    return outcomes.filter((o) => o.status === "fulfilled" && o.value).length;
   }
 
   async tools(scope: UserScope, serverId: string): Promise<readonly ToolInfo[]> {

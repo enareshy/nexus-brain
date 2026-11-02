@@ -1,4 +1,5 @@
 import { fail, isAppError, type ErrorCode } from "@brain/core";
+import { isUserTurnedOffError } from "@brain/db";
 import type { Logger } from "@brain/telemetry";
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
@@ -34,6 +35,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (isAppError(exception)) {
       log.warn({ code: exception.code, details: exception.details }, exception.message);
       void reply.status(exception.status).send(fail(exception.code, exception.message, meta));
+      return;
+    }
+
+    // Work for someone an admin turned off, refused by the database after the request began.
+    if (isUserTurnedOffError(exception)) {
+      log.warn("Refused work for a person who is turned off");
+      void reply.status(403).send(fail("FORBIDDEN", "This account has been turned off", meta));
       return;
     }
 

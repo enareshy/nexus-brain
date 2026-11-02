@@ -40,6 +40,11 @@ export async function readStoredTokens(
   return row ? parseStoredTokens(box.open(row.tokensCiphertext, tokenContext(scope, serverId))) : undefined;
 }
 
+/** Opens tokens already taken out of the database, such as those deleted when someone is turned off. */
+export function openTokens(box: SecretBox, scope: UserScope, serverId: string, tokensCiphertext: string): OAuthTokens | undefined {
+  return parseStoredTokens(box.open(tokensCiphertext, tokenContext(scope, serverId)));
+}
+
 export async function readClientInfo(
   pool: PoolLike,
   box: SecretBox,
