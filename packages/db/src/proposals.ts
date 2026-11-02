@@ -14,6 +14,8 @@ export interface NewProposal {
   readonly argsHash: string;
   readonly siteOrigin: string;
   readonly expiresAt: Date;
+  /** The agent run that drafted this, if any. */
+  readonly agentRunId?: string;
 }
 
 export interface ProposalResult {
@@ -28,8 +30,13 @@ export function createProposal(pool: PoolLike, scope: UserScope, proposal: NewPr
     const [row] = await db
       .insert(writeProposals)
       .values({ ...proposal, tenantId: scope.tenantId, userId: scope.userId, status: "pending" })
+      .onConflictDoNothing({ target: writeProposals.id })
       .returning();
-    return row!;
+    if (row) return row;
+    // The same id again means a repeated agent step after a restart: it is the same proposal.
+    const [existing] = await db.select().from(writeProposals).where(eq(writeProposals.id, proposal.id)).limit(1);
+    if (!existing) throw new Error("A proposal with this id belongs to someone else");
+    return existing;
   });
 }
 

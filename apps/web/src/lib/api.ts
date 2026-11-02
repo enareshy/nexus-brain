@@ -59,6 +59,7 @@ export const ProposalSchema = z.object({
   errorCode: z.string().nullable(),
   createdAt: z.string(),
   expiresAt: z.string(),
+  agentRunId: z.string().nullable().optional(),
 });
 export type Proposal = z.infer<typeof ProposalSchema>;
 
@@ -127,6 +128,35 @@ export const ConversationDetailSchema = z.object({
 });
 export type ConversationDetail = z.infer<typeof ConversationDetailSchema>;
 
+const AgentRunStatusSchema = z.enum(["running", "waiting_approval", "completed", "failed", "cancelled"]);
+
+export const AgentRunSummarySchema = z.object({
+  id: z.string(),
+  goal: z.string(),
+  status: AgentRunStatusSchema,
+  errorCode: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type AgentRunSummary = z.infer<typeof AgentRunSummarySchema>;
+
+export const AgentRunSchema = AgentRunSummarySchema.extend({
+  result: z.string().nullable(),
+  costUsd: z.number(),
+  turnCount: z.number(),
+  waitingProposalId: z.string().nullable(),
+  steps: z.array(
+    z.object({
+      seq: z.number(),
+      tool: z.string(),
+      outcome: z.string(),
+      documents: z.array(z.object({ title: z.string(), url: z.string() })),
+      proposalId: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+export type AgentRun = z.infer<typeof AgentRunSchema>;
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -164,6 +194,11 @@ export interface ApiClient {
     feedback: { rating: "up" | "down"; reason?: string },
   ): Promise<{ saved: true }>;
   audit(before?: number): Promise<{ entries: AuditEntry[]; nextBefore: number | null }>;
+  agentRuns(): Promise<AgentRunSummary[]>;
+  agentRun(id: string): Promise<AgentRun>;
+  startAgentRun(goal: string): Promise<AgentRunSummary>;
+  cancelAgentRun(id: string): Promise<{ cancelled: true }>;
+  proposal(id: string): Promise<Proposal>;
   proposals(): Promise<Proposal[]>;
   writeTargets(serverId: string): Promise<WriteTarget[]>;
   propose(serverId: string, request: WriteRequest): Promise<Proposal>;
@@ -246,6 +281,13 @@ export function createApiClient(
         z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().nullable() }),
         before === undefined ? "/admin/audit" : `/admin/audit?before=${before}`,
       ),
+    agentRuns: () => request(z.array(AgentRunSummarySchema), "/agent-runs"),
+    agentRun: (id) => request(AgentRunSchema, `/agent-runs/${enc(id)}`),
+    startAgentRun: (goal) =>
+      request(AgentRunSummarySchema, "/agent-runs", { method: "POST", body: JSON.stringify({ goal }) }),
+    cancelAgentRun: (id) =>
+      request(z.object({ cancelled: z.literal(true) }), `/agent-runs/${enc(id)}/cancel`, { method: "POST" }),
+    proposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}`),
     proposals: () => request(z.array(ProposalSchema), "/proposals"),
     writeTargets: (serverId) => request(z.array(WriteTargetSchema), `/proposals/targets/${enc(serverId)}`),
     propose: (serverId, writeRequest) =>

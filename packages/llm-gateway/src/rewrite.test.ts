@@ -17,8 +17,62 @@ function reply(text: string, overrides: Record<string, unknown> = {}) {
 
 function gatewayReplying(message: unknown) {
   const create = vi.fn(async (_params: Record<string, unknown>, _options: Record<string, unknown>) => message);
-  return { gateway: createGateway({ create } as unknown as MessagesClient), create };
+  const stream = vi.fn((_params: Record<string, unknown>, _options: Record<string, unknown>) => ({
+    finalMessage: async () => message,
+  }));
+  return { gateway: createGateway({ create, stream } as unknown as MessagesClient), create, stream };
 }
+
+describe("agentTurn", () => {
+  const tools = [{ name: "search_documents", description: "Search", inputSchema: { type: "object", properties: {} } }];
+  const messages = [{ role: "user" as const, content: "do it" }];
+
+  it("offers only the given tools, one call at a time, and returns the call", async () => {
+    const content = [{ type: "tool_use", id: "t1", name: "search_documents", input: { query: "x" } }];
+    const { gateway, stream } = gatewayReplying(reply("", { model: MODELS.agent, content, stop_reason: "tool_use" }));
+    const turn = await gateway.agentTurn({ messages, tools }, signal, () => {});
+    expect(turn.toolCall).toEqual({ id: "t1", name: "search_documents", input: { query: "x" } });
+    expect(turn.content).toEqual(content);
+    const [params, options] = stream.mock.calls[0]!;
+    expect(params.model).toBe(MODELS.agent);
+    expect(params.tool_choice).toEqual({ type: "auto", disable_parallel_tool_use: true });
+    expect((params.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["search_documents"]);
+    expect(options.maxRetries).toBe(3);
+    expect(String(params.system)).toContain("<untrusted>");
+  });
+
+  it("keeps only the tool call it returns, because each one kept needs a result", async () => {
+    const content = [
+      { type: "text", text: "Looking" },
+      { type: "tool_use", id: "t1", name: "search_documents", input: {} },
+      { type: "tool_use", id: "t2", name: "search_documents", input: {} },
+    ];
+    const { gateway } = gatewayReplying(reply("", { model: MODELS.agent, content, stop_reason: "tool_use" }));
+    const turn = await gateway.agentTurn({ messages, tools }, signal, () => {});
+    expect(turn.toolCall?.id).toBe("t1");
+    expect(turn.content).toEqual(content.slice(0, 2));
+  });
+
+  it("returns the final text, and reports usage", async () => {
+    const { gateway } = gatewayReplying(reply("All done.", { model: MODELS.agent }));
+    const onUsage = vi.fn();
+    const turn = await gateway.agentTurn({ messages, tools }, signal, onUsage);
+    expect(turn).toMatchObject({ text: "All done.", toolCall: null, stopReason: "end_turn" });
+    expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({ model: MODELS.agent, estimated: false }));
+  });
+
+  it("records an estimate when it stops waiting, and hides provider details", async () => {
+    const stream = vi.fn(() => ({
+      finalMessage: async () => {
+        throw new Anthropic.APIUserAbortError();
+      },
+    }));
+    const gateway = createGateway({ stream } as unknown as MessagesClient);
+    const onUsage = vi.fn();
+    await expect(gateway.agentTurn({ messages, tools }, signal, onUsage)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({ estimated: true, model: MODELS.agent }));
+  });
+});
 
 describe("rewriteQuery", () => {
   it("uses the low-cost model with no tools, and asks for structured output", async () => {

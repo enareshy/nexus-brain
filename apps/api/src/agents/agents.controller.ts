@@ -1,0 +1,48 @@
+import { AppError, ok, UuidSchema, type ApiSuccess } from "@brain/core";
+import { Body, Controller, Get, HttpCode, Inject, Param, Post } from "@nestjs/common";
+import { z } from "zod";
+import { Ctx, type RequestContext } from "../context/request-context.js";
+import { AGENTS } from "../tokens.js";
+import type { AgentRunSummary, AgentRunView, AgentsApi } from "./agents.service.js";
+
+const StartSchema = z.strictObject({ goal: z.string().trim().min(1).max(2_000) });
+
+function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new AppError("VALIDATION", "Invalid request parameters");
+  return result.data;
+}
+
+function scopeOf(ctx: RequestContext) {
+  return { tenantId: ctx.tenantId, userId: ctx.userId };
+}
+
+/** Always the signed-in person's own runs. A run acts as them, with their connections. */
+@Controller("agent-runs")
+export class AgentsController {
+  constructor(@Inject(AGENTS) private readonly agents: AgentsApi) {}
+
+  @Post()
+  @HttpCode(201)
+  async start(@Ctx() ctx: RequestContext, @Body() body: unknown): Promise<ApiSuccess<AgentRunSummary>> {
+    const { goal } = parse(StartSchema, body);
+    return ok(await this.agents.start(scopeOf(ctx), goal), { requestId: ctx.requestId });
+  }
+
+  @Get()
+  async list(@Ctx() ctx: RequestContext): Promise<ApiSuccess<readonly AgentRunSummary[]>> {
+    return ok(await this.agents.list(scopeOf(ctx)), { requestId: ctx.requestId });
+  }
+
+  @Get(":id")
+  async get(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<AgentRunView>> {
+    return ok(await this.agents.get(scopeOf(ctx), parse(UuidSchema, id)), { requestId: ctx.requestId });
+  }
+
+  @Post(":id/cancel")
+  @HttpCode(200)
+  async cancel(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<{ cancelled: true }>> {
+    await this.agents.cancel(scopeOf(ctx), parse(UuidSchema, id));
+    return ok({ cancelled: true as const }, { requestId: ctx.requestId });
+  }
+}

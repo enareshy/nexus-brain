@@ -53,11 +53,14 @@ export interface ProposalView {
   readonly errorCode: string | null;
   readonly createdAt: string;
   readonly expiresAt: string;
+  /** The agent run that drafted this, if any. */
+  readonly agentRunId: string | null;
 }
 
 export interface ProposalsApi {
   targets(scope: UserScope, serverId: string): Promise<readonly WriteTarget[]>;
   list(scope: UserScope): Promise<readonly ProposalView[]>;
+  get(scope: UserScope, id: string): Promise<ProposalView>;
   propose(scope: UserScope, serverId: string, request: WriteRequest): Promise<ProposalView>;
   approve(scope: UserScope, id: string, approvedHash: string): Promise<ProposalView>;
   reject(scope: UserScope, id: string): Promise<ProposalView>;
@@ -100,8 +103,31 @@ export class ProposalsService implements ProposalsApi {
     return rows.filter((row) => this.deps.adapters.has(row.serverId)).map((row) => this.view(row));
   }
 
+  async get(scope: UserScope, id: string): Promise<ProposalView> {
+    return this.view(await this.requireProposal(scope, id));
+  }
+
+  /** A proposal from an agent. Its stable id means repeating the step finds the same proposal. */
+  proposeForAgent(
+    scope: UserScope,
+    serverId: string,
+    request: WriteRequest,
+    origin: { readonly id: string; readonly agentRunId: string },
+  ): Promise<ProposalView> {
+    return this.createProposal(scope, serverId, request, origin);
+  }
+
   /** Records what would be done. Nothing changes in the connected service here. */
-  async propose(scope: UserScope, serverId: string, request: WriteRequest): Promise<ProposalView> {
+  propose(scope: UserScope, serverId: string, request: WriteRequest): Promise<ProposalView> {
+    return this.createProposal(scope, serverId, request, { id: randomUUID() });
+  }
+
+  private async createProposal(
+    scope: UserScope,
+    serverId: string,
+    request: WriteRequest,
+    origin: { readonly id: string; readonly agentRunId?: string },
+  ): Promise<ProposalView> {
     const adapter = this.adapter(serverId);
     if ((await countPendingProposals(this.deps.pool, scope)) >= MAX_PENDING) {
       throw new AppError("RATE_LIMITED", "Too many changes are waiting. Approve or reject some first");
@@ -113,7 +139,7 @@ export class ProposalsService implements ProposalsApi {
     if (!isApprovable(toolClass)) throw new AppError("FORBIDDEN", "This kind of change is not allowed");
 
     const row = await createProposal(this.deps.pool, scope, {
-      id: randomUUID(),
+      ...origin,
       serverId,
       action: draft.action,
       toolName: draft.toolName,
@@ -232,6 +258,7 @@ export class ProposalsService implements ProposalsApi {
       errorCode: row.errorCode,
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
+      agentRunId: row.agentRunId,
     };
   }
 

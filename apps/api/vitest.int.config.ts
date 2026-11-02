@@ -16,6 +16,7 @@ export default defineConfig({
         "src/proposals/proposals.service.ts",
         "src/proposals/proposals.controller.ts",
         "src/admin/**/*.ts",
+        "src/agents/**/*.ts",
         "src/conversations/**/*.ts",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },

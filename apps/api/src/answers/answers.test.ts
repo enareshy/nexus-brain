@@ -13,7 +13,7 @@ import { createFakeConnections } from "../test-support/fake-connections.js";
 import { AUDIENCE, createTestKeys, ISSUER } from "../test-support/tokens.js";
 import type { QueryExpander } from "./query-rewriter.js";
 import { AnswersService, type AnswersApi, type AnswerStreamEvent } from "./answers.service.js";
-import { unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
+import { unusedAgents, unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
 
 const scope = { tenantId: "0a000000-0000-4000-8000-000000000001", userId: "0a000000-0000-4000-8000-0000000000a4" };
 const signal = new AbortController().signal;
@@ -54,6 +54,9 @@ function fakePool() {
 }
 
 const noRewrite: LlmGateway["rewriteQuery"] = async () => [];
+const unusedTurn: LlmGateway["agentTurn"] = async () => {
+  throw new Error("Agents are not used here");
+};
 
 function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike } = {}) {
   const gathered: GatheredDocuments = {
@@ -75,7 +78,7 @@ function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Ma
     box: { fingerprint: () => "f".repeat(64) },
     logger: opts.logger ?? { error: vi.fn() },
     documents: { gatherDocuments },
-    gateway: opts.gateway === undefined ? { streamAnswer, rewriteQuery: noRewrite } : opts.gateway,
+    gateway: opts.gateway === undefined ? { streamAnswer, rewriteQuery: noRewrite, agentTurn: unusedTurn } : opts.gateway,
     now: opts.now,
     ...(opts.expander ? { expander: opts.expander } : {}),
   });
@@ -122,6 +125,7 @@ describe("AnswersService", () => {
 
   it("drops citations to documents it never sent and marks the answer ungrounded", async () => {
     const gateway: LlmGateway = {
+      agentTurn: unusedTurn,
       rewriteQuery: noRewrite,
       streamAnswer: async (_i, onEvent) => {
         onEvent({ type: "text", text: "Made up." });
@@ -155,6 +159,7 @@ describe("AnswersService", () => {
 
   it("records usage and audit when the stream fails, then rethrows", async () => {
     const gateway: LlmGateway = {
+      agentTurn: unusedTurn,
       rewriteQuery: noRewrite,
       streamAnswer: async (_i, _e, _s, onUsage) => {
         onUsage({ ...OUTCOME, outputTokens: 3, estimated: true });
@@ -191,6 +196,7 @@ describe("AnswersService", () => {
     let release = () => {};
     const gate = new Promise<void>((r) => { release = r; });
     const gateway: LlmGateway = {
+      agentTurn: unusedTurn,
       rewriteQuery: noRewrite,
       streamAnswer: async () => {
         await gate;
@@ -241,6 +247,7 @@ describe("POST /answers", () => {
       proposals: unusedProposals,
     audit: unusedAudit,
     conversations: unusedConversations,
+    agents: unusedAgents,
       answers: { answer: (...args) => behaviour(...args) },
       webAppUrl: "http://localhost:3000",
       verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keySet: keys.keySet }),
@@ -315,7 +322,7 @@ describe("the audit trail", () => {
       pool,
       box: { fingerprint: () => "f".repeat(64) },
       logger: { error: vi.fn() },
-      gateway: { streamAnswer: vi.fn(), rewriteQuery: noRewrite },
+      gateway: { streamAnswer: vi.fn(), rewriteQuery: noRewrite, agentTurn: unusedTurn },
       documents: {
         gatherDocuments: async () => {
           throw new AppError("UNAVAILABLE", "lookup failed");

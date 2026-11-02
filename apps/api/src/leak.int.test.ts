@@ -19,7 +19,7 @@ import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
 import { ConnectionsService } from "./connections/connections.service.js";
-import { unusedConversations, unusedProposals } from "./test-support/fake-proposals.js";
+import { unusedAgents, unusedConversations, unusedProposals } from "./test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "./test-support/tokens.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
@@ -65,6 +65,9 @@ const OUTCOME: AnswerOutcome = {
 
 /** Records exactly what would reach the model. */
 const gateway: LlmGateway = {
+  agentTurn: async () => {
+    throw new Error("Agents are not used here");
+  },
   rewriteQuery: async () => [],
   streamAnswer: async (input, onEvent, _signal, onUsage) => {
     documentsSent = [...documentsSent, [...input.documents]];
@@ -152,6 +155,7 @@ beforeAll(async () => {
     proposals: unusedProposals,
     audit: createDbAuditApi(pool),
     conversations: unusedConversations,
+    agents: unusedAgents,
     answers: new AnswersService({ pool, box, logger, documents: connections, gateway }),
   });
   await app.init();

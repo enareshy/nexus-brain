@@ -2,7 +2,7 @@
  * The only place model IDs live. Change the answer model here to trade quality for cost,
  * for example "claude-sonnet-5-5" ($2/$10 per MTok) or "claude-haiku-5-5" ($0.10/$0.50).
  */
-export const MODELS = Object.freeze({ answer: "claude-opus-5-5", rewrite: "claude-haiku-5-5" });
+export const MODELS = Object.freeze({ answer: "claude-opus-5-5", rewrite: "claude-haiku-5-5", agent: "claude-opus-5-5" });
 
 export interface ModelPrice {
   readonly inputPerMTok: number;

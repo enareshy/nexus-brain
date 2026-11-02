@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { createJwtVerifier } from "../auth/jwt-verifier.js";
 import { createDbUserDirectory } from "../auth/user-directory.js";
-import { unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
+import { unusedAgents, unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { ConnectionsService } from "./connections.service.js";
 
@@ -75,6 +75,7 @@ beforeAll(async () => {
     proposals: unusedProposals,
     audit: unusedAudit,
     conversations: unusedConversations,
+    agents: unusedAgents,
     connections: new ConnectionsService({
       pool,
       box: createSecretBox(randomBytes(32).toString("base64")),

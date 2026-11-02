@@ -104,6 +104,41 @@ export const usageLedger = pgTable("usage_ledger", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const agentRuns = pgTable("agent_runs", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  status: text("status").notNull().$type<"running" | "waiting_approval" | "completed" | "failed" | "cancelled">(),
+  goalCiphertext: text("goal_ciphertext").notNull(),
+  stateCiphertext: text("state_ciphertext").notNull(),
+  resultCiphertext: text("result_ciphertext"),
+  errorCode: text("error_code"),
+  turnCount: integer("turn_count").notNull().default(0),
+  costUsd: numeric("cost_usd", { precision: 12, scale: 6 }).notNull().default("0"),
+  waitingProposalId: uuid("waiting_proposal_id"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  leaseToken: uuid("lease_token"),
+  deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const agentSteps = pgTable(
+  "agent_steps",
+  {
+    runId: uuid("run_id").notNull(),
+    seq: integer("seq").notNull(),
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    argsHash: text("args_hash").notNull(),
+    outcome: text("outcome").notNull(),
+    detailCiphertext: text("detail_ciphertext").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.seq] })],
+);
+
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
@@ -164,11 +199,14 @@ export const writeProposals = pgTable("write_proposals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  agentRunId: uuid("agent_run_id"),
 });
 
 export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | "unknown" | "rejected";
 
 export const schema = {
+  agentRuns,
+  agentSteps,
   conversations,
   conversationMessages,
   messageFeedback,
