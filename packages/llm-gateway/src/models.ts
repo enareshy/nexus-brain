@@ -1,8 +1,22 @@
+/** The only place model IDs live (FR-LLM-03). Each tier trades quality for cost. */
+export const TIERS = Object.freeze({
+  fast: "claude-haiku-5-5",
+  standard: "claude-sonnet-5-5",
+  premium: "claude-opus-5-5",
+});
+export type Tier = keyof typeof TIERS;
+
 /**
- * The only place model IDs live. Change the answer model here to trade quality for cost,
- * for example "claude-sonnet-5-5" ($2/$10 per MTok) or "claude-haiku-5-5" ($0.10/$0.50).
+ * Which tier each task uses. Answers and agents need the strongest model, because a wrong answer or a
+ * badly chosen action costs far more than the call. Turning a question into search words is simple.
  */
-export const MODELS = Object.freeze({ answer: "claude-opus-5-5", rewrite: "claude-haiku-5-5", agent: "claude-opus-5-5" });
+export const TASK_TIERS = Object.freeze({ answer: "premium", agent: "premium", rewrite: "fast" } satisfies Record<string, Tier>);
+
+export const MODELS = Object.freeze({
+  answer: TIERS[TASK_TIERS.answer],
+  rewrite: TIERS[TASK_TIERS.rewrite],
+  agent: TIERS[TASK_TIERS.agent],
+});
 
 export interface ModelPrice {
   readonly inputPerMTok: number;
