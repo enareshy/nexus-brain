@@ -104,15 +104,6 @@ export interface McpToolsDeps {
 const ok = (value: string): McpToolResult => ({ text: value, isError: false });
 const failed = (value: string): McpToolResult => ({ text: value, isError: true });
 
-/** Callers can send input nested too deeply to hash, and that call must still be audited. */
-function safeArgsHash(input: unknown): string {
-  try {
-    return argsHash(input);
-  } catch {
-    return "unhashable";
-  }
-}
-
 function proposalOutcome(proposal: ProposalView): string {
   return JSON.stringify({
     proposalId: proposal.id,
@@ -207,7 +198,7 @@ export class McpToolsService implements McpToolsApi {
       userId: caller.userId,
       action: "mcp.tool",
       resource: name.slice(0, 100),
-      meta: { tool: name.slice(0, 100), argsHash: safeArgsHash(input), outcome, clientId: caller.clientId },
+      meta: { tool: name.slice(0, 100), argsHash: argsHash(input), outcome, clientId: caller.clientId },
     }).catch((err: unknown) => {
       const errorType = err instanceof Error ? err.name : typeof err;
       this.deps.logger.error({ errorType, tenant_id: caller.tenantId }, "Audit write failed");

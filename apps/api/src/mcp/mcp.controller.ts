@@ -19,7 +19,18 @@ export interface McpEndpointDeps {
   readonly issuer: string;
 }
 
-const FORWARDED_HEADERS = ["accept", "content-type", "mcp-protocol-version", "mcp-session-id"] as const;
+const MAX_BODY_DEPTH = 32;
+const FORWARDED_HEADERS =["accept", "content-type", "mcp-protocol-version", "mcp-session-id"] as const;
+
+/** Checked level by level, since recursive code further on would run out of stack on such input. */
+function isNestedTooDeeply(body: unknown): boolean {
+  let level: readonly unknown[] = [body];
+  for (let depth = 0; level.length > 0; depth += 1) {
+    if (depth > MAX_BODY_DEPTH) return true;
+    level = level.flatMap((value) => (value && typeof value === "object" ? Object.values(value) : []));
+  }
+  return false;
+}
 
 function buildServer(caller: McpCaller, tools: McpToolsApi): Server {
   const server = new Server({ name: "nexus-brain", version: "1.0.0" }, { capabilities: { tools: {} } });
@@ -64,6 +75,7 @@ export class McpController {
     if (request.headers.origin) throw new AppError("FORBIDDEN", "Browser requests are not allowed here");
     // One request, one message: a batch would run many tool calls for one count against the rate limit.
     if (Array.isArray(request.body)) throw new AppError("VALIDATION", "Batch requests are not supported");
+    if (isNestedTooDeeply(request.body)) throw new AppError("VALIDATION", "Request is nested too deeply");
 
     let caller: McpCaller;
     try {
