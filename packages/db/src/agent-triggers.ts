@@ -39,14 +39,15 @@ export function createTrigger(
     readonly firstRunInMinutes: number;
   },
   maxTriggers: number,
-): Promise<"created" | "too_many" | "one_jira_trigger"> {
+): Promise<"created" | "too_many" | "one_of_kind"> {
   return withUser(pool, scope, async (db) => {
     await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`trigger|${scope.tenantId}|${scope.userId}`}, 0))`);
     const [existing] = await db.select({ value: count() }).from(agentTriggers);
     if ((existing?.value ?? 0) >= maxTriggers) return "too_many";
-    if (trigger.kind === "jira_assigned") {
-      const [jira] = await db.select({ value: count() }).from(agentTriggers).where(eq(agentTriggers.kind, "jira_assigned"));
-      if ((jira?.value ?? 0) > 0) return "one_jira_trigger";
+    // One Jira event must start one run, so each kind of Jira trigger is allowed once.
+    if (trigger.kind !== "schedule") {
+      const [same] = await db.select({ value: count() }).from(agentTriggers).where(eq(agentTriggers.kind, trigger.kind));
+      if ((same?.value ?? 0) > 0) return "one_of_kind";
     }
     const { firstRunInMinutes, ...values } = trigger;
     await db.insert(agentTriggers).values({

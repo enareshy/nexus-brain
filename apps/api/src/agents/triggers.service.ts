@@ -32,14 +32,33 @@ const MAX_RUNS_PER_CHECK = 3;
 const MAX_WORK_PER_TICK = 50;
 const TICK_MS = 60_000;
 /** One person's slow service must not hold up everyone else's triggers. */
-const ASSIGNMENT_CHECK_TIMEOUT_MS = 30_000;
+const JIRA_CHECK_TIMEOUT_MS = 30_000;
 const RETRY_AFTER_DAILY_LIMIT_MINUTES = 60;
 const NOTIFICATION_LIST_LIMIT = 30;
 const MAX_TITLE_CHARS = 100;
+const ONE_OF_KIND: Record<Exclude<StoredTrigger["kind"], "schedule">, string> = {
+  jira_assigned: "You already have an automatic agent for Jira assignments. Remove it first",
+  jira_mention: "You already have an automatic agent for @Brain mentions. Remove it first",
+};
 
 export interface AssignedIssue {
   readonly key: string;
   readonly siteId: string;
+}
+
+/** "@Brain ..." in a Jira comment the person wrote themselves. */
+export interface MentionRequest {
+  readonly siteId: string;
+  readonly key: string;
+  readonly commentId: string;
+  readonly request: string;
+}
+
+/** Something new in Jira that may start a run. */
+interface JiraEvent {
+  readonly hashInput: string;
+  readonly goal: string;
+  readonly title: string;
 }
 
 export interface TriggerView {
@@ -63,7 +82,7 @@ export interface NotificationView {
 
 export type NewTrigger =
   | { readonly kind: "schedule"; readonly goal: string; readonly schedule: Schedule }
-  | { readonly kind: "jira_assigned"; readonly goal: string };
+  | { readonly kind: "jira_assigned" | "jira_mention"; readonly goal: string };
 
 export interface TriggersApi {
   create(scope: UserScope, trigger: NewTrigger): Promise<TriggerView>;
@@ -79,6 +98,8 @@ export interface TriggersDeps {
   readonly agents: Pick<AgentsApi, "start" | "resume">;
   /** Issues assigned to the person, read with their own connection. */
   readonly assignments: { list(scope: UserScope): Promise<readonly AssignedIssue[]> };
+  /** The person's own @Brain comments, read with their own connection. */
+  readonly mentions: { list(scope: UserScope): Promise<readonly MentionRequest[]> };
   readonly logger: Pick<Logger, "error">;
 }
 
@@ -136,9 +157,7 @@ export class TriggersService implements TriggersApi {
       MAX_TRIGGERS,
     );
     if (created === "too_many") throw new AppError("RATE_LIMITED", `You can have up to ${MAX_TRIGGERS} automatic agents. Remove one first`);
-    if (created === "one_jira_trigger") {
-      throw new AppError("VALIDATION", "You already have an automatic agent for Jira assignments. Remove it first");
-    }
+    if (created === "one_of_kind" && trigger.kind !== "schedule") throw new AppError("VALIDATION", ONE_OF_KIND[trigger.kind]);
     const row = (await listTriggers(this.deps.pool, scope)).find((t) => t.id === id);
     if (!row) throw new AppError("INTERNAL", "The automatic agent could not be saved");
     return this.view(scope, row);
@@ -218,7 +237,7 @@ export class TriggersService implements TriggersApi {
       await this.startRun(scope, trigger, goal, goal);
       return;
     }
-    await this.checkAssignments(scope, trigger, goal);
+    await this.checkJira(scope, trigger, goal);
   }
 
   /** False when limits stopped the run. Hitting the daily limit is reported; being busy just retries soon. */
@@ -232,7 +251,7 @@ export class TriggersService implements TriggersApi {
       if (err.details?.limit === "triggered" || err.code === "BUDGET_EXCEEDED") {
         const day = new Date().toISOString().slice(0, 10);
         await this.notify(scope, { kind: "trigger_skipped", dedupeKey: `trigger:${trigger.id}:skipped:${day}`, title });
-        if (trigger.kind === "jira_assigned") await rescheduleTrigger(this.deps.pool, scope, trigger.id, RETRY_AFTER_DAILY_LIMIT_MINUTES);
+        if (trigger.kind !== "schedule") await rescheduleTrigger(this.deps.pool, scope, trigger.id, RETRY_AFTER_DAILY_LIMIT_MINUTES);
       } else {
         await rescheduleTrigger(this.deps.pool, scope, trigger.id, RETRY_BUSY_MINUTES);
       }
@@ -240,10 +259,30 @@ export class TriggersService implements TriggersApi {
     }
   }
 
-  private async checkAssignments(scope: UserScope, trigger: StoredTrigger, goal: string): Promise<void> {
-    let issues: readonly AssignedIssue[];
+  /** New Jira events for this trigger. Only keys, ids and the person's own words reach the goal. */
+  private async readEvents(scope: UserScope, trigger: StoredTrigger, goal: string): Promise<JiraEvent[]> {
+    if (trigger.kind === "jira_mention") {
+      const mentions = await withinTime(this.deps.mentions.list(scope), JIRA_CHECK_TIMEOUT_MS);
+      return mentions.map((m) => ({
+        hashInput: `mention|${m.siteId}|${m.key}|${m.commentId}`,
+        // The request leads, so the run and its notifications are named after it.
+        goal: `${m.request}\n\nI asked this in my own comment on Jira issue ${m.key} on site ${m.siteId}. My standing instructions for these requests: ${goal}`,
+        title: `${m.key}: ${m.request}`,
+      }));
+    }
+    const issues = await withinTime(this.deps.assignments.list(scope), JIRA_CHECK_TIMEOUT_MS);
+    // Only the key is used, never the title: anyone can write a title, and this text becomes the goal.
+    return issues.map((issue) => ({
+      hashInput: `${issue.siteId}|${issue.key}`,
+      goal: `${goal}\n\nThis run started because Jira issue ${issue.key} on site ${issue.siteId} was assigned to me.`,
+      title: `${issue.key}: ${goal}`,
+    }));
+  }
+
+  private async checkJira(scope: UserScope, trigger: StoredTrigger, goal: string): Promise<void> {
+    let events: readonly JiraEvent[];
     try {
-      issues = await withinTime(this.deps.assignments.list(scope), ASSIGNMENT_CHECK_TIMEOUT_MS);
+      events = await this.readEvents(scope, trigger, goal);
     } catch (err) {
       const turnedOff = isAppError(err) && err.details?.reason === "service_turned_off";
       if (!isAppError(err) || (err.code !== "RECONNECT_REQUIRED" && !turnedOff)) throw err;
@@ -251,25 +290,23 @@ export class TriggersService implements TriggersApi {
       await this.notify(scope, { kind: "trigger_paused", dedupeKey: `trigger:${trigger.id}:paused:${Date.now()}`, title: goal });
       return;
     }
-    const hashOf = (issue: AssignedIssue) => this.deps.box.fingerprint(`${issue.siteId}|${issue.key}`);
+    const hashOf = (event: JiraEvent) => this.deps.box.fingerprint(event.hashInput);
 
-    // Issues already assigned when this was set up are not news.
+    // What was already there when this was set up is not news.
     if (!trigger.baselinedAt) {
-      for (const issue of issues) await addTriggerEvent(this.deps.pool, scope, trigger.id, hashOf(issue));
+      for (const event of events) await addTriggerEvent(this.deps.pool, scope, trigger.id, hashOf(event));
       await markTriggerBaselined(this.deps.pool, scope, trigger.id);
       return;
     }
 
     let started = 0;
-    for (const issue of issues) {
+    for (const event of events) {
       if (started >= MAX_RUNS_PER_CHECK) return;
-      const hash = hashOf(issue);
+      const hash = hashOf(event);
       if (!(await addTriggerEvent(this.deps.pool, scope, trigger.id, hash))) continue;
-      // Only the key is used, never the title: anyone can write a title, and this text becomes the goal.
-      const fullGoal = `${goal}\n\nThis run started because Jira issue ${issue.key} on site ${issue.siteId} was assigned to me.`;
       let didStart = false;
       try {
-        didStart = await this.startRun(scope, trigger, fullGoal, `${issue.key}: ${goal}`);
+        didStart = await this.startRun(scope, trigger, event.goal, event.title);
       } finally {
         // Not started, for whatever reason, so a later check picks it up.
         if (!didStart) await removeTriggerEvent(this.deps.pool, scope, trigger.id, hash);

@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { AppError, createSecretBox } from "@brain/core";
 import {
   atlassianAssignedIssues,
+  atlassianMentionRequests,
   atlassianSearch,
   atlassianWrites,
   driveSearch,
@@ -157,6 +158,7 @@ const triggers = new TriggersService({
   agents,
   logger,
   assignments: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, atlassianAssignedIssues) },
+  mentions: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, (session) => atlassianMentionRequests(session)) },
 });
 
 const keySet = createRemoteJWKSet(jwksUrl(env));

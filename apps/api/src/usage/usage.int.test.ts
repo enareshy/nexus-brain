@@ -95,7 +95,7 @@ beforeAll(async () => {
     proposals: { targets: async () => [], reject: vi.fn(), proposeForAgent: vi.fn(), get: vi.fn() },
     notify: (scope, notification) => triggers.notify(scope, notification),
   });
-  triggers = new TriggersService({ pool, box, logger, agents, assignments: { list: async () => [] } });
+  triggers = new TriggersService({ pool, box, logger, agents, assignments: { list: async () => [] }, mentions: { list: async () => [] } });
   app = await createApp({
     logger,
     directory: createDbUserDirectory(pool),

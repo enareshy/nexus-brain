@@ -8,7 +8,7 @@ import type { SearchAdapter, SearchHit, ToolSession } from "./types.js";
 export const SITES_TOOL = "getAccessibleAtlassianResources";
 const JIRA_TOOL = "searchJiraIssuesUsingJql";
 const CONFLUENCE_TOOL = "searchConfluenceUsingCql";
-const JIRA_SCOPE = "read:jira-work";
+export const JIRA_SCOPE = "read:jira-work";
 const CONFLUENCE_SCOPE = "search:confluence";
 const MAX_SITES = 3;
 const SITES_TTL_MS = 5 * 60 * 1000;
@@ -245,7 +245,7 @@ async function readBody(session: ToolSession, hit: SearchHit): Promise<string | 
 // Only recent assignments, so old issues never look new as others are resolved. Checked against live Jira.
 const ASSIGNED_JQL =
   "assignee = currentUser() AND resolution = EMPTY AND (assignee CHANGED TO currentUser() AFTER -1d OR created >= -1d) ORDER BY updated DESC";
-const SITE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const SITE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ASSIGNED = 50;
 
 /**

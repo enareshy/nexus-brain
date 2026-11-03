@@ -107,6 +107,15 @@ describe("draft", () => {
     });
   });
 
+  it("never posts a comment that reads as a new @Brain request", async () => {
+    const draft = await atlassianWrites.draft(session(), { action: "add_comment", siteId: CLOUD, issueKey: "ENG-1", body: "@Brain done" });
+    expect(draft.args).toMatchObject({ commentBody: "Brain done" });
+    const edit = await atlassianWrites.draft(session(), { action: "update_issue", siteId: CLOUD, issueKey: "ENG-1", summary: "@Brain a", description: "@brain b" });
+    expect(edit.args).toMatchObject({ fields: { summary: "Brain a", description: "brain b" } });
+    const create = await atlassianWrites.draft(session(), { ...CREATE, summary: "@Brain c", description: "@Brain d" });
+    expect(create.args).toMatchObject({ summary: "Brain c", description: "Brain d" });
+  });
+
   it("rejects a malformed issue key or project key", async () => {
     await expect(
       atlassianWrites.draft(session(), { action: "add_comment", siteId: CLOUD, issueKey: "ENG-1 OR 1=1", body: "x" }),

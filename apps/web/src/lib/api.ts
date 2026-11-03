@@ -163,7 +163,7 @@ export type AgentRun = z.infer<typeof AgentRunSchema>;
 
 export const AgentTriggerSchema = z.object({
   id: z.string(),
-  kind: z.enum(["schedule", "jira_assigned"]),
+  kind: z.enum(["schedule", "jira_assigned", "jira_mention"]),
   goal: z.string(),
   schedule: z.enum(["hourly", "daily", "weekly"]).nullable(),
   enabled: z.boolean(),
@@ -173,7 +173,7 @@ export const AgentTriggerSchema = z.object({
 export type AgentTrigger = z.infer<typeof AgentTriggerSchema>;
 export type NewAgentTrigger =
   | { kind: "schedule"; goal: string; schedule: "hourly" | "daily" | "weekly" }
-  | { kind: "jira_assigned"; goal: string };
+  | { kind: "jira_assigned" | "jira_mention"; goal: string };
 
 export const NotificationSchema = z.object({
   id: z.string(),
