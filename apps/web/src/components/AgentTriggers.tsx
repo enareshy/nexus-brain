@@ -4,22 +4,33 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { describeError, type AgentTrigger, type NewAgentTrigger } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
 
-type When = "daily" | "hourly" | "weekly" | "jira_assigned";
+type When = "daily" | "hourly" | "weekly" | "jira_assigned" | "jira_mention";
+type JiraKind = Exclude<AgentTrigger["kind"], "schedule">;
 
 const WHEN_LABELS: Readonly<Record<When, string>> = {
   daily: "Every day",
   hourly: "Every hour",
   weekly: "Every week",
   jira_assigned: "When a Jira issue is assigned to me",
+  jira_mention: "When I write @Brain in a Jira comment",
 };
+const GOAL_HINTS: Readonly<Record<When, string>> = {
+  daily: "Summarise what changed in my projects",
+  hourly: "Check for new blockers in my sprint",
+  weekly: "Summarise my week",
+  jira_assigned: "Read the issue and summarise what I need to do",
+  jira_mention: "When you are done, propose a comment with your answer",
+};
+
+const isJiraKind = (when: When): when is JiraKind => when === "jira_assigned" || when === "jira_mention";
 const MAX_GOAL = 2_000;
 
 function triggerWhen(trigger: AgentTrigger): string {
-  return trigger.kind === "jira_assigned" ? WHEN_LABELS.jira_assigned : WHEN_LABELS[trigger.schedule ?? "daily"];
+  return trigger.kind === "schedule" ? WHEN_LABELS[trigger.schedule ?? "daily"] : WHEN_LABELS[trigger.kind];
 }
 
 function toNewTrigger(when: When, goal: string): NewAgentTrigger {
-  return when === "jira_assigned" ? { kind: "jira_assigned", goal } : { kind: "schedule", goal, schedule: when };
+  return isJiraKind(when) ? { kind: when, goal } : { kind: "schedule", goal, schedule: when };
 }
 
 /** Agents that start on their own. They read as the person, and every change still waits for approval. */
@@ -94,10 +105,16 @@ export function AgentTriggers() {
               </option>
             ))}
           </select>
+          {when === "jira_mention" && (
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Write &ldquo;@Brain&rdquo; and then your request in a comment on any Jira issue. Only comments you write yourself count, and Brain
+              checks every 5 minutes.
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="trigger-goal" className="text-sm font-medium">
-            What should it do?
+            {when === "jira_mention" ? "Anything it should always do?" : "What should it do?"}
           </label>
           <textarea
             id="trigger-goal"
@@ -105,7 +122,7 @@ export function AgentTriggers() {
             maxLength={MAX_GOAL}
             rows={2}
             onChange={(e) => setGoal(e.target.value)}
-            placeholder="Read the issue and summarise what I need to do"
+            placeholder={GOAL_HINTS[when]}
             className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-brand dark:border-slate-700 dark:bg-slate-900"
           />
         </div>

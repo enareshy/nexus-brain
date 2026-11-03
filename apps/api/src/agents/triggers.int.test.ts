@@ -9,7 +9,7 @@ import { Writable } from "node:stream";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentsService } from "./agents.service.js";
-import { TriggersService, type AssignedIssue } from "./triggers.service.js";
+import { TriggersService, type AssignedIssue, type MentionRequest } from "./triggers.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
@@ -26,6 +26,7 @@ const people = [bob, alice, globex];
 let pool: pg.Pool;
 let owner: pg.Client;
 let assigned: AssignedIssue[] | Error = [];
+let mentioned: MentionRequest[] | Error = [];
 const agentTurn = vi.fn<LlmGateway["agentTurn"]>();
 const say = (text: string): AgentTurn => ({ content: [{ type: "text", text }], text, toolCall: null, stopReason: "end_turn" });
 const usage = { model: "m", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.001, estimated: false };
@@ -66,6 +67,12 @@ function build() {
         return assigned;
       },
     },
+    mentions: {
+      list: async () => {
+        if (mentioned instanceof Error) throw mentioned;
+        return mentioned;
+      },
+    },
   });
   return { service, scheduler };
 }
@@ -97,6 +104,7 @@ beforeEach(async () => {
     return say("Done.");
   });
   assigned = [];
+  mentioned = [];
   decision = "pending";
   ({ service: agents, scheduler: triggers } = build());
 });
@@ -276,6 +284,7 @@ describe("a Jira assignment", () => {
         agents,
         logger: { error: () => {} },
         assignments: { list: hang },
+        mentions: { list: async () => [] },
       });
       const tick = slow.tick();
       await vi.waitFor(() => expect(hang).toHaveBeenCalled());
@@ -315,6 +324,92 @@ describe("a Jira assignment", () => {
     await makeDue(bob);
     await tickAndSettle();
     expect(await runsOf(bob)).toHaveLength(1);
+  });
+});
+
+describe("an @Brain mention (FR-AST-05)", () => {
+  const mention = (commentId: string, request: string, key = "ENG-1"): MentionRequest => ({ siteId: "site-1", key, commentId, request });
+
+  it("ignores earlier mentions, then starts one run per new request, with the person's words as the task", async () => {
+    mentioned = [mention("100", "an old request")];
+    await triggers.create(bob, { kind: "jira_mention", goal: "Reply in a comment when done" });
+    await tickAndSettle();
+    expect(await runsOf(bob)).toEqual([]);
+
+    mentioned = [mention("101", "list the open questions"), mention("100", "an old request")];
+    await makeDue(bob);
+    await tickAndSettle();
+    const runs = await runsOf(bob);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.goal).toContain("Reply in a comment when done");
+    expect(runs[0]!.goal).toContain("list the open questions");
+    expect(runs[0]!.goal).toContain("ENG-1");
+    expect(runs[0]!.goal).not.toContain("an old request");
+
+    await makeDue(bob);
+    await tickAndSettle();
+    expect(await runsOf(bob)).toHaveLength(1);
+    expect((await triggers.notifications(bob)).items[0]).toMatchObject({ kind: "run_finished", title: expect.stringMatching(/^list the open questions/) });
+  });
+
+  it("treats the same comment id on another issue as a different request", async () => {
+    await triggers.create(bob, { kind: "jira_mention", goal: "Help" });
+    await tickAndSettle();
+    mentioned = [mention("7", "first", "ENG-1"), mention("7", "second", "ENG-2")];
+    await makeDue(bob);
+    await tickAndSettle();
+    expect(await runsOf(bob)).toHaveLength(2);
+  });
+
+  it("lives alongside an assignment trigger, but only once per person", async () => {
+    await triggers.create(bob, { kind: "jira_assigned", goal: "Assigned" });
+    await triggers.create(bob, { kind: "jira_mention", goal: "Mentioned" });
+    await expect(triggers.create(bob, { kind: "jira_mention", goal: "Again" })).rejects.toMatchObject({
+      code: "VALIDATION",
+      message: expect.stringContaining("@Brain"),
+    });
+  });
+
+  it("pauses and says so when the connection needs renewing", async () => {
+    await triggers.create(bob, { kind: "jira_mention", goal: "Needs Jira" });
+    mentioned = new AppError("RECONNECT_REQUIRED", "Reconnect");
+    await tickAndSettle();
+    expect((await triggers.list(bob))[0]).toMatchObject({ kind: "jira_mention", enabled: false, pausedReason: "reconnect_jira" });
+  });
+
+  it("keeps a request for later when the daily limit stops it, and says so once", async () => {
+    const trigger = await triggers.create(bob, { kind: "jira_mention", goal: "Keen" });
+    await tickAndSettle();
+    await owner.query(
+      `INSERT INTO agent_runs (id, tenant_id, user_id, status, goal_ciphertext, state_ciphertext, deadline_at, trigger_id)
+       SELECT gen_random_uuid(), $1, $2, 'completed', 'x', 'x', now() + interval '1 day', $3 FROM generate_series(1, 10)`,
+      [bob.tenantId, bob.userId, trigger.id],
+    );
+    mentioned = [mention("200", "later please")];
+    await makeDue(bob);
+    await tickAndSettle();
+    expect(agentTurn).not.toHaveBeenCalled();
+    expect((await triggers.notifications(bob)).items.map((n) => n.kind)).toEqual(["trigger_skipped"]);
+    const [{ next_run_at: next }] = (await owner.query("SELECT next_run_at FROM agent_triggers WHERE id = $1", [trigger.id])).rows;
+    expect(new Date(next).getTime()).toBeGreaterThan(Date.now() + 50 * 60 * 1000);
+
+    await owner.query("DELETE FROM agent_runs WHERE user_id = $1", [bob.userId]);
+    await makeDue(bob);
+    await tickAndSettle();
+    expect((await runsOf(bob))[0]!.goal).toContain("later please");
+  });
+
+  it("stores the request encrypted", async () => {
+    await triggers.create(bob, { kind: "jira_mention", goal: "Help" });
+    await tickAndSettle();
+    mentioned = [mention("300", "quokka request")];
+    await makeDue(bob);
+    await tickAndSettle();
+    const dump = await owner.query(
+      "SELECT (SELECT json_agg(r) FROM agent_runs r WHERE user_id = $1) AS r, (SELECT json_agg(n) FROM notifications n WHERE user_id = $1) AS n, (SELECT json_agg(e) FROM agent_trigger_events e WHERE user_id = $1) AS e",
+      [bob.userId],
+    );
+    expect(JSON.stringify(dump.rows)).not.toContain("quokka");
   });
 });
 

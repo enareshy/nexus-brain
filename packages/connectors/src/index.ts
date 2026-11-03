@@ -1,5 +1,6 @@
 export * from "./adapters.js";
 export * from "./atlassian.js";
+export * from "./atlassian-mentions.js";
 export * from "./atlassian-writes.js";
 export * from "./extract.js";
 export * from "./federated.js";

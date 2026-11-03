@@ -66,6 +66,20 @@ describe("AgentTriggers", () => {
     expect(api.createAgentTrigger).toHaveBeenCalledWith({ kind: "jira_assigned", goal: "Read it" });
   });
 
+  it("adds an @Brain mention trigger, explaining that only the person's own comments count", async () => {
+    const user = userEvent.setup();
+    api.agentTriggers.mockResolvedValue([]);
+    api.createAgentTrigger.mockResolvedValue(trigger({ kind: "jira_mention", schedule: null, goal: "Reply when done" }));
+    render(<AgentTriggers />);
+    await user.selectOptions(await screen.findByLabelText("When"), "jira_mention");
+    expect(screen.getByText(/Only comments you write yourself count/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Anything it should always do?"), "Reply when done");
+    await user.click(screen.getByRole("button", { name: "Add automatic agent" }));
+    expect(api.createAgentTrigger).toHaveBeenCalledWith({ kind: "jira_mention", goal: "Reply when done" });
+    expect(await screen.findByRole("button", { name: "Remove: Reply when done" })).toBeInTheDocument();
+    expect(screen.getAllByText("When I write @Brain in a Jira comment")).toHaveLength(2);
+  });
+
   it("shows a paused trigger and removes one", async () => {
     const user = userEvent.setup();
     api.agentTriggers.mockResolvedValue([trigger({ kind: "jira_assigned", schedule: null, enabled: false, pausedReason: "reconnect_jira" })]);

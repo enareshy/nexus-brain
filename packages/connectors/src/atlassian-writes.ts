@@ -1,4 +1,5 @@
 import { AppError } from "@brain/core";
+import { defuseMentions } from "./atlassian-mentions.js";
 import { ISSUE_KEY, parseSites, SITES_TOOL } from "./atlassian.js";
 import type { ToolSession, WriteAdapter, WriteDraft, WriteOutcome, WriteProject, WriteRequest } from "./types.js";
 
@@ -61,8 +62,12 @@ export function parseProjects(text: string): WriteProject[] {
   });
 }
 
-/** Arguments are built field by field, so nothing else in a request can reach the tool. */
+/**
+ * Arguments are built field by field, so nothing else in a request can reach the tool. Every text
+ * field has its @Brain defused: Brain writes as the person, so its text must never read as a request.
+ */
 function toolCall(request: WriteRequest): Pick<WriteDraft, "toolName" | "args"> {
+  const text = defuseMentions;
   const cloudId = request.siteId;
   switch (request.action) {
     case "create_issue":
@@ -73,15 +78,15 @@ function toolCall(request: WriteRequest): Pick<WriteDraft, "toolName" | "args"> 
           cloudId,
           projectKey: request.projectKey,
           issueTypeName: request.issueType,
-          summary: request.summary,
-          ...(request.description ? { description: request.description } : {}),
+          summary: text(request.summary),
+          ...(request.description ? { description: text(request.description) } : {}),
           contentFormat: "markdown",
         },
       };
     case "update_issue": {
       const fields = {
-        ...(request.summary ? { summary: request.summary } : {}),
-        ...(request.description ? { description: request.description } : {}),
+        ...(request.summary ? { summary: text(request.summary) } : {}),
+        ...(request.description ? { description: text(request.description) } : {}),
       };
       if (Object.keys(fields).length === 0) throw new AppError("VALIDATION", "Nothing to change");
       return {
@@ -96,7 +101,7 @@ function toolCall(request: WriteRequest): Pick<WriteDraft, "toolName" | "args"> 
         args: {
           cloudId,
           issueIdOrKey: requireIssueKey(request.issueKey),
-          commentBody: request.body,
+          commentBody: text(request.body),
           contentFormat: "markdown",
         },
       };

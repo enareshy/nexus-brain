@@ -51,6 +51,7 @@ Known gaps: no undo or before-state (FR-WR-06, P1); no tenant-wide write cap, be
 ### Not verified
 - **Jira descriptions:** the search shape is now confirmed live on a real issue (`issues[].key`, `fields.summary`, `fields.updated`), and `createJiraIssue` returned a usable `key`. Reading `fields.description` for answers is still untested, because the test issue has no description.
 - **`editJiraIssue` and `addCommentToJiraIssue`:** tested against the mock server only. `createJiraIssue` was run once live through the approval flow on 2026-11-01.
+- **@Brain mentions** (`atlassian-mentions.ts`): `atlassianUserInfo` (`account_id`) and `getJiraIssue` with `fields: ["comment"]` (`fields.comment.comments[].{ id, author.accountId, updateAuthor.accountId, body, created }`, markdown body) follow Jira's REST format and the tool descriptions, not a live response. A different shape makes the mention agent find nothing rather than act on the wrong comment.
 - Rate limits (responses include `x-ratelimit-*` headers; values not yet recorded).
 - Accounts with several sites.
 

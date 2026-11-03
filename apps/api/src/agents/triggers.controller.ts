@@ -8,7 +8,7 @@ import type { NotificationView, TriggersApi, TriggerView } from "./triggers.serv
 const Goal = z.string().trim().min(1).max(2_000);
 const NewTriggerSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("schedule"), goal: Goal, schedule: z.enum(["hourly", "daily", "weekly"]) }),
-  z.strictObject({ kind: z.literal("jira_assigned"), goal: Goal }),
+  z.strictObject({ kind: z.enum(["jira_assigned", "jira_mention"]), goal: Goal }),
 ]);
 const MarkReadSchema = z.strictObject({ ids: z.array(UuidSchema).min(1).max(100).optional() });
 

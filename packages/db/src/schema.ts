@@ -167,7 +167,7 @@ export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
   userId: uuid("user_id").notNull(),
-  kind: text("kind").notNull().$type<"schedule" | "jira_assigned">(),
+  kind: text("kind").notNull().$type<"schedule" | "jira_assigned" | "jira_mention">(),
   goalCiphertext: text("goal_ciphertext").notNull(),
   intervalMinutes: integer("interval_minutes").notNull(),
   nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
