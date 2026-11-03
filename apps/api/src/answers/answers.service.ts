@@ -6,6 +6,7 @@ import type { Logger } from "@brain/telemetry";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
+import type { BudgetGuard } from "../usage/usage.service.js";
 import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 
 const SEARCH_LIMIT = 10;
@@ -60,6 +61,8 @@ export interface AnswersDeps {
   readonly conversations?: ConversationStore;
   /** What the person asked Brain to remember. Without one, answers use none. */
   readonly memories?: MemorySource;
+  /** Stops answers once the monthly budget is used up. Without one, there is no limit. */
+  readonly budget?: BudgetGuard;
 }
 
 function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
@@ -97,6 +100,8 @@ export class AnswersService implements AnswersApi {
       throw new AppError("UNAVAILABLE", "AI answers are not configured yet. Search still works.");
     }
     this.enforceRate(scope);
+    // Before the search too, since rewriting the question is also a paid call.
+    await this.deps.budget?.require(scope);
     const key = userKey(scope);
     const running = this.inFlight.get(key) ?? 0;
     if (running >= MAX_CONCURRENT_ANSWERS) {

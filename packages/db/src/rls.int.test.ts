@@ -17,6 +17,7 @@ import {
 import { addAgentStep, cancelAgentRun, claimAgentRun, createAgentRun, getAgentRun, listAgentSteps, saveAgentRun } from "./agent-runs.js";
 import { assertRlsEnforced } from "./pool.js";
 import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
+import { getBudget, saveBudget, usageSummary } from "./budgets.js";
 import { addMemory, deleteAllMemories, deleteMemory, listMemories, updateMemory } from "./memories.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
@@ -30,6 +31,7 @@ import {
   memories,
   messageFeedback,
   oauthStates,
+  tenantBudgets,
   tenants,
   usageLedger,
   users,
@@ -71,6 +73,10 @@ afterAll(async () => {
     await owner.query("DELETE FROM agent_runs WHERE goal_ciphertext = 'sealed'");
     await owner.query("DELETE FROM write_proposals WHERE server_id = 'leaktest'");
     await owner.query("DELETE FROM mcp_server_apps WHERE server_id = 'leaktest'");
+    // A limit left behind would stop real work in the local workspace.
+    await owner.query("DELETE FROM tenant_budgets WHERE tenant_id = $1", [ACME]);
+    // Test rows would otherwise count against the company's real monthly budget.
+    await owner.query("DELETE FROM usage_ledger WHERE feature = 'leaktest'");
   } finally {
     await owner.end();
   }
@@ -412,6 +418,24 @@ describe("memories are private to one person", () => {
     );
     expect(added.filter(Boolean)).toHaveLength(3);
     expect(await deleteAllMemories(appPool, bob)).toBe(3);
+  });
+});
+
+describe("budgets and spending belong to one company", () => {
+  const acmeAdmin = { tenantId: ACME, userId: seedUser("patAcme").id };
+  const globexAdmin = { tenantId: GLOBEX, userId: seedUser("patGlobex").id };
+
+  it("keeps a company's limits and spending from another company, which cannot set them either", async () => {
+    await saveBudget(appPool, acmeAdmin, { monthlyLimitUsd: 7, perPersonLimitUsd: null, warnAtPercent: 80 });
+    expect(await getBudget(appPool, GLOBEX)).toBeNull();
+    expect((await getBudget(appPool, ACME))?.monthlyLimitUsd).toBe(7);
+    await expect(
+      withTenant(appPool, GLOBEX, (db) =>
+        db.insert(tenantBudgets).values({ tenantId: ACME, monthlyLimitUsd: "0", warnAtPercent: 80, updatedBy: globexAdmin.userId }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    const summary = await usageSummary(appPool, GLOBEX);
+    expect(summary.byPerson.every((p) => p.userId !== seedUser("bob").id)).toBe(true);
   });
 });
 

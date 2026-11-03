@@ -22,6 +22,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
+import type { BudgetGuard } from "../usage/usage.service.js";
 import { AGENT_TOOLS, parseToolCall, untrusted } from "./tools.js";
 
 // Caps per run (FR-AGT-06). Each ends the run with a clear status.
@@ -111,6 +112,8 @@ export interface AgentsDeps {
   readonly notify?: (scope: UserScope, notification: AgentNotification) => Promise<void>;
   /** What the person asked Brain to remember. Read for every turn, never stored with the run. */
   readonly memories?: MemorySource;
+  /** Checked before a run starts and before every model turn. Without one, there is no limit. */
+  readonly budget?: BudgetGuard;
 }
 
 /** Stable, so running the same tool call again after a restart finds the same proposal. */
@@ -166,6 +169,7 @@ export class AgentsService implements AgentsApi {
 
   async start(scope: UserScope, goal: string, origin?: { readonly triggerId: string }): Promise<AgentRunSummary> {
     if (!this.deps.gateway) throw new AppError("UNAVAILABLE", "Agents are not configured yet");
+    await this.deps.budget?.require(scope);
     const id = randomUUID();
     const state: RunState = { messages: [{ role: "user", content: goal }] };
     const created = await createAgentRun(
@@ -321,6 +325,18 @@ export class AgentsService implements AgentsApi {
       if (Date.now() > claimed.deadlineAt.getTime()) return fail("time_limit");
       if (turns >= MAX_TURNS) return fail("step_limit");
       if (cost >= MAX_COST_USD) return fail("cost_limit");
+      if (this.deps.budget) {
+        // A check that cannot run stops the run too: spending without knowing the budget is not safe.
+        const outcome = await this.deps.budget.require(scope).then(
+          () => "ok" as const,
+          (err: unknown) => {
+            if (isAppError(err) && err.code === "BUDGET_EXCEEDED") return "budget_limit" as const;
+            this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, runId: id, tenant_id: scope.tenantId }, "Budget check failed");
+            return "budget_unavailable" as const;
+          },
+        );
+        if (outcome !== "ok") return fail(outcome);
+      }
 
       let turn;
       try {

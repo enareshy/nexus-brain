@@ -154,6 +154,15 @@ export const tenantServerSettings = pgTable(
   (table) => [primaryKey({ columns: [table.tenantId, table.serverId] })],
 );
 
+export const tenantBudgets = pgTable("tenant_budgets", {
+  tenantId: uuid("tenant_id").primaryKey(),
+  monthlyLimitUsd: numeric("monthly_limit_usd", { precision: 12, scale: 2 }),
+  perPersonLimitUsd: numeric("per_person_limit_usd", { precision: 12, scale: 2 }),
+  warnAtPercent: integer("warn_at_percent").notNull().default(80),
+  updatedBy: uuid("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
@@ -273,6 +282,7 @@ export const schema = {
   agentTriggerEvents,
   notifications,
   tenantServerSettings,
+  tenantBudgets,
   conversations,
   conversationMessages,
   messageFeedback,

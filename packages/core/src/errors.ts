@@ -1,6 +1,8 @@
 export const ERROR_STATUS = {
   VALIDATION: 400,
   UNAUTHENTICATED: 401,
+  /** The company's monthly AI budget, or this person's share of it, is used up (FR-MET-03). */
+  BUDGET_EXCEEDED: 402,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   RECONNECT_REQUIRED: 409,

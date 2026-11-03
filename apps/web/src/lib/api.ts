@@ -192,6 +192,37 @@ export const MemorySchema = z.object({
 });
 export type Memory = z.infer<typeof MemorySchema>;
 
+const BudgetLevelSchema = z.enum(["ok", "warn", "stop"]);
+
+export const BudgetStatusSchema = z.object({
+  level: BudgetLevelSchema,
+  limit: z.enum(["company", "person"]).nullable(),
+  percentUsed: z.number().nullable(),
+});
+export type BudgetStatus = z.infer<typeof BudgetStatusSchema>;
+
+export const BudgetSchema = z.object({
+  monthlyLimitUsd: z.number().nullable(),
+  perPersonLimitUsd: z.number().nullable(),
+  warnAtPercent: z.number(),
+});
+export type Budget = z.infer<typeof BudgetSchema>;
+
+export const UsageOverviewSchema = z.object({
+  summary: z.object({
+    monthStart: z.string(),
+    totalUsd: z.number(),
+    calls: z.number(),
+    unpricedCalls: z.number(),
+    byFeature: z.array(z.object({ feature: z.string(), costUsd: z.number(), calls: z.number() })),
+    byPerson: z.array(z.object({ userId: z.string(), email: z.string().nullable(), costUsd: z.number(), calls: z.number() })),
+    byDay: z.array(z.object({ day: z.string(), costUsd: z.number() })),
+  }),
+  budget: BudgetSchema.nullable(),
+  companyLevel: BudgetLevelSchema,
+});
+export type UsageOverview = z.infer<typeof UsageOverviewSchema>;
+
 export const PersonSchema = z.object({
   id: z.string(),
   email: z.string(),
@@ -256,6 +287,9 @@ export interface ApiClient {
   updateMemory(id: string, text: string): Promise<Memory>;
   deleteMemory(id: string): Promise<{ deleted: true }>;
   deleteAllMemories(): Promise<{ deleted: number }>;
+  usageStatus(): Promise<BudgetStatus>;
+  usageOverview(): Promise<UsageOverview>;
+  setBudget(budget: Budget): Promise<Budget>;
   people(): Promise<Person[]>;
   deactivatePerson(id: string): Promise<Deactivation>;
   reactivatePerson(id: string): Promise<{ changed: boolean }>;
@@ -361,6 +395,9 @@ export function createApiClient(
     updateMemory: (id, text) => request(MemorySchema, `/memories/${enc(id)}`, { method: "POST", body: JSON.stringify({ text }) }),
     deleteMemory: (id) => request(z.object({ deleted: z.literal(true) }), `/memories/${enc(id)}`, { method: "DELETE" }),
     deleteAllMemories: () => request(z.object({ deleted: z.number() }), "/memories", { method: "DELETE" }),
+    usageStatus: () => request(BudgetStatusSchema, "/usage/status"),
+    usageOverview: () => request(UsageOverviewSchema, "/admin/usage"),
+    setBudget: (budget) => request(BudgetSchema, "/admin/budget", { method: "POST", body: JSON.stringify(budget) }),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
     reactivatePerson: (id) =>
@@ -449,6 +486,7 @@ export function describeError(error: unknown): string {
     case "NETWORK":
       return "The service is unavailable right now. Please try again shortly.";
     case "VALIDATION":
+    case "BUDGET_EXCEEDED":
       return error.message;
     default:
       return "Something went wrong. Please try again.";
