@@ -31,8 +31,8 @@ import { unusedAgents, unusedAudit, unusedConversations, unusedProposals } from 
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { createPeopleService } from "./people.service.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 const SERVER = "atlassian";
 const ACME = TENANTS.acme.id;
 // Turning someone off deletes all their connections, so only people made for this test are ever turned

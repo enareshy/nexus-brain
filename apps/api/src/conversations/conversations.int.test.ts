@@ -23,8 +23,8 @@ import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support
 import { MemoryService } from "../memory/memory.service.js";
 import { ConversationsService } from "./conversations.service.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 const SERVER = "mockchat";
 const SECRET_QUESTION = "what is the zanzibar launch date";
 

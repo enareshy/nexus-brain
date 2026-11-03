@@ -18,8 +18,8 @@ import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support
 import { ConnectionsService } from "./connections.service.js";
 import { unusedAgents, unusedAudit, unusedProposals, unusedConversations } from "../test-support/fake-proposals.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 const ACME = TENANTS.acme.id;
 const SERVER = "mock";
 
