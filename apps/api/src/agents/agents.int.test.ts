@@ -22,8 +22,8 @@ import { unusedAudit, unusedConversations } from "../test-support/fake-proposals
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { AgentsService, type AgentsDeps } from "./agents.service.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 // The agent proposes through this server id, so the mock takes its place.
 const SERVER = "atlassian";
 const ORIGIN = "https://acme.atlassian.net";

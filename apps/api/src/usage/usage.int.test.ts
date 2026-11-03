@@ -20,8 +20,8 @@ import { unusedAudit, unusedConversations, unusedProposals } from "../test-suppo
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { UsageService } from "./usage.service.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 const FEATURE = "usagetest";
 
 const scopeOf = (person: "bob" | "alice" | "patAcme" | "patGlobex"): UserScope => {

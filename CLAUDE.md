@@ -31,7 +31,7 @@ pnpm db:migrate        # drizzle-kit migrate
 pnpm db:seed           # demo tenants/users/docs (two tenants, overlapping users to test isolation)
 pnpm dev               # api + web + worker
 pnpm typecheck | lint | test | test:cov
-pnpm test:int          # integration tests (needs infra:up)
+pnpm test:int          # integration tests (needs infra:up); use their own `brain_test` database, never the dev one
 pnpm test:leak         # red-team permission leak suite (must be 0 failures); today = Postgres RLS suite
 node scripts/smoke-login.mjs   # end-to-end: Keycloak login -> API /me (needs infra + db:seed + dev)
 pnpm eval              # retrieval + answer quality vs golden set

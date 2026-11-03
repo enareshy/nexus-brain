@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./seed-data": "./src/seed-data.ts"
+    "./seed-data": "./src/seed-data.ts",
+    "./testing": "./src/test-database.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

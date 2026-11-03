@@ -43,9 +43,9 @@ import { seed } from "./seed.js";
 import { getServerApp, listServerApps, saveServerApp } from "./server-apps.js";
 import { inScopedTransaction, withTenant, withUser } from "./tenant.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
 const APP_URL =
-  process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+  process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 
 const ACME = TENANTS.acme.id;
 const GLOBEX = TENANTS.globex.id;

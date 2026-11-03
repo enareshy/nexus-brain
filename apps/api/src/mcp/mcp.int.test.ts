@@ -22,8 +22,8 @@ import { unusedAgents, unusedAudit, unusedConversations } from "../test-support/
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { McpToolsService } from "./mcp.service.js";
 
-const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain";
-const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
+const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
 const SERVER = "atlassian";
 const ORIGIN = "https://acme.atlassian.net";
 const MCP_AUDIENCE = "brain-mcp";
