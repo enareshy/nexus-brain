@@ -97,6 +97,18 @@ describe("openAnswerStream", () => {
     await expect(api.openAnswerStream("q", signal)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
 
+  it("asks for a summary of one result by its reference, sending only what is needed to read it", async () => {
+    const fetchImpl = vi.fn(async (_u: URL | RequestInfo, _i?: RequestInit) => new Response(bodyOf(sse(done))));
+    const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
+    const hit = { serverId: "atlassian", externalId: "KAN-1", title: "Login bug", url: "https://a.example/KAN-1", snippet: "secret", updatedAt: null, score: 1, siteId: "s1" };
+    await api.openSummaryStream(hit, signal);
+    await api.openSummaryStream({ ...hit, siteId: undefined }, signal);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(String(url)).toBe("http://api.test/answers/summary");
+    expect(JSON.parse(String(init?.body))).toEqual({ serverId: "atlassian", externalId: "KAN-1", url: "https://a.example/KAN-1", title: "Login bug", siteId: "s1" });
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body))).not.toHaveProperty("siteId");
+  });
+
   it("maps HTTP errors, unknown failures, network errors and aborts", async () => {
     const withFetch = (f: () => Promise<Response>) =>
       createApiClient("http://api.test", () => "tok", (async () => f()) as typeof fetch);
