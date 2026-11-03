@@ -112,6 +112,12 @@ describe("createApiClient", () => {
     const person = { id: "p1", email: "a@b.c", displayName: "A", role: "member", active: true, deactivatedAt: null };
     const deactivation = { changed: true, connectionsRemoved: 0, connectionsRevoked: 0, triggersPaused: 0, runsCancelled: 0, proposalsRejected: 0, changesInProgress: 0 };
     const run = { id: "r1", goal: "g", status: "running", errorCode: null, createdAt: "t" };
+    const budget = { monthlyLimitUsd: 100, perPersonLimitUsd: null, warnAtPercent: 80 };
+    const overview = {
+      summary: { monthStart: "2026-11-01", totalUsd: 1, calls: 2, unpricedCalls: 0, byFeature: [], byPerson: [], byDay: [] },
+      budget,
+      companyLevel: "ok",
+    };
     const trigger = { id: "t1", kind: "schedule", goal: "g", schedule: "daily", enabled: true, pausedReason: null, nextRunAt: "t" };
     const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) => ok(null));
     const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
@@ -121,6 +127,9 @@ describe("createApiClient", () => {
       [() => api.updateMemory("m 1", "x"), memory, "POST", "/memories/m%201", { text: "x" }],
       [() => api.deleteMemory("m1"), { deleted: true }, "DELETE", "/memories/m1"],
       [() => api.deleteAllMemories(), { deleted: 2 }, "DELETE", "/memories"],
+      [() => api.usageStatus(), { level: "warn", limit: "person", percentUsed: 85 }, "GET", "/usage/status"],
+      [() => api.usageOverview(), overview, "GET", "/admin/usage"],
+      [() => api.setBudget(budget), budget, "POST", "/admin/budget", budget],
       [() => api.people(), [person], "GET", "/admin/people"],
       [() => api.deactivatePerson("p1"), deactivation, "POST", "/admin/people/p1/deactivate"],
       [() => api.reactivatePerson("p1"), { changed: true }, "POST", "/admin/people/p1/reactivate"],

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { currentReturnPath } from "@/lib/safe-url";
 import { useAuth } from "./AuthProvider";
+import { BudgetBanner } from "./BudgetBanner";
 import { NotificationBadge } from "./NotificationBadge";
 
 const NAV = [
@@ -16,6 +17,7 @@ const NAV = [
   { href: "/memory", label: "Memory" },
   { href: "/activity", label: "Activity" },
   { href: "/people", label: "People" },
+  { href: "/usage", label: "Usage" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -69,6 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main id="main" className="mx-auto max-w-5xl px-6 py-12">
+        {user && <BudgetBanner />}
         {children}
       </main>
     </div>

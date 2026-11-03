@@ -227,8 +227,9 @@ export class TriggersService implements TriggersApi {
       await this.deps.agents.start(scope, goal, { triggerId: trigger.id });
       return true;
     } catch (err) {
-      if (!isAppError(err) || err.code !== "RATE_LIMITED") throw err;
-      if (err.details?.limit === "triggered") {
+      if (!isAppError(err) || (err.code !== "RATE_LIMITED" && err.code !== "BUDGET_EXCEEDED")) throw err;
+      // An exhausted budget, like the daily limit, is reported once a day rather than retried soon.
+      if (err.details?.limit === "triggered" || err.code === "BUDGET_EXCEEDED") {
         const day = new Date().toISOString().slice(0, 10);
         await this.notify(scope, { kind: "trigger_skipped", dedupeKey: `trigger:${trigger.id}:skipped:${day}`, title });
         if (trigger.kind === "jira_assigned") await rescheduleTrigger(this.deps.pool, scope, trigger.id, RETRY_AFTER_DAILY_LIMIT_MINUTES);

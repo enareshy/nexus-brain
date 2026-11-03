@@ -23,6 +23,8 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
 const STOP_REASONS: Readonly<Record<string, string>> = {
   step_limit: "Stopped because it reached its limit of steps.",
   cost_limit: "Stopped because it reached its spending limit.",
+  budget_limit: "Stopped because this month's AI budget is used up. An admin can raise it.",
+  budget_unavailable: "Stopped because the budget could not be checked. Try again shortly.",
   time_limit: "Stopped because it ran out of time.",
   model_unavailable: "Stopped because the AI service could not be reached. Nothing further was done.",
   refused: "The AI declined to continue with this.",

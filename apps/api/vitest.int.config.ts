@@ -20,6 +20,7 @@ export default defineConfig({
         "src/mcp/**/*.ts",
         "src/conversations/**/*.ts",
         "src/memory/**/*.ts",
+        "src/usage/**/*.ts",
       ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
