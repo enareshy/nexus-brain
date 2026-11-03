@@ -19,6 +19,8 @@ export const HitSchema = z.object({
   snippet: z.string(),
   updatedAt: z.string().nullable(),
   score: z.number(),
+  /** Which provider site the item is on, needed to read it again for a summary. */
+  siteId: z.string().optional(),
 });
 export type Hit = z.infer<typeof HitSchema>;
 
@@ -273,6 +275,8 @@ export interface ApiClient {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal, conversationId?: string): Promise<ReadableStream<Uint8Array>>;
+  /** Opens a summary of one search result, in the same events as an answer. */
+  openSummaryStream(hit: Hit, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
   conversations(): Promise<ConversationSummary[]>;
   conversation(id: string): Promise<ConversationDetail>;
   deleteConversation(id: string): Promise<{ deleted: true }>;
@@ -443,31 +447,40 @@ export function createApiClient(
         method: "POST",
         body: JSON.stringify(feedback),
       }),
-    async openAnswerStream(question, signal, conversationId) {
-      const token = getToken();
-      if (!token) throw new ApiError("UNAUTHENTICATED", "Please sign in", 401);
-      let res: Response;
-      try {
-        // No client timeout: answers stream for as long as the caller keeps the signal open.
-        res = await fetchImpl(joinUrl(baseUrl, "/answers"), {
-          method: "POST",
-          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ q: question, ...(conversationId ? { conversationId } : {}) }),
-          signal,
-        });
-      } catch {
-        if (signal.aborted) throw new ApiError("ABORTED", "Request was cancelled", 0);
-        throw new ApiError("NETWORK", "Cannot reach the Nexus Brain API", 0);
-      }
-      if (!res.ok || !res.body) {
-        const failure = ErrorEnvelope.safeParse(await res.json().catch(() => null));
-        throw failure.success
-          ? new ApiError(failure.data.error.code, failure.data.error.message, res.status)
-          : new ApiError("BAD_RESPONSE", "Unexpected response from the API", res.status);
-      }
-      return res.body;
-    },
+    openAnswerStream: (question, signal, conversationId) =>
+      openStream("/answers", { q: question, ...(conversationId ? { conversationId } : {}) }, signal),
+    openSummaryStream: (hit, signal) =>
+      openStream(
+        "/answers/summary",
+        { serverId: hit.serverId, externalId: hit.externalId, url: hit.url, title: hit.title, ...(hit.siteId ? { siteId: hit.siteId } : {}) },
+        signal,
+      ),
   };
+
+  async function openStream(path: string, body: object, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+    const token = getToken();
+    if (!token) throw new ApiError("UNAUTHENTICATED", "Please sign in", 401);
+    let res: Response;
+    try {
+      // No client timeout: answers stream for as long as the caller keeps the signal open.
+      res = await fetchImpl(joinUrl(baseUrl, path), {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+    } catch {
+      if (signal.aborted) throw new ApiError("ABORTED", "Request was cancelled", 0);
+      throw new ApiError("NETWORK", "Cannot reach the Nexus Brain API", 0);
+    }
+    if (!res.ok || !res.body) {
+      const failure = ErrorEnvelope.safeParse(await res.json().catch(() => null));
+      throw failure.success
+        ? new ApiError(failure.data.error.code, failure.data.error.message, res.status)
+        : new ApiError("BAD_RESPONSE", "Unexpected response from the API", res.status);
+    }
+    return res.body;
+  }
 }
 
 /** Human message for an API error code; never shows server internals. */

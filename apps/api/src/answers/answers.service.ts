@@ -3,7 +3,7 @@ import { AppError, type SecretBox } from "@brain/core";
 import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/db";
 import type { AnswerDocument, AnswerOutcome, LlmGateway, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
-import type { DocumentSource } from "../connections/connections.service.js";
+import type { DocumentSource, ItemReference } from "../connections/connections.service.js";
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
 import type { BudgetGuard } from "../usage/usage.service.js";
@@ -16,6 +16,7 @@ const RATE_WINDOW_MS = 60_000;
 /** In-process cost guard per user; plan budgets come with FR-MET-02/03. */
 const MAX_ANSWERS_PER_WINDOW = 10;
 const MAX_CONCURRENT_ANSWERS = 2;
+const READ_TIME_LIMIT_MS = 20_000;
 
 export type AnswerStreamEvent =
   | { readonly type: "conversation"; readonly conversationId: string }
@@ -45,7 +46,18 @@ export interface AnswersApi {
     /** Continues this conversation. Without it, a new one is started. */
     conversationId?: string,
   ): Promise<void>;
+  /** Summarises one item the person can read, citing it (FR-AST-06). Not saved to their history. */
+  summarise?(scope: UserScope, item: SummaryItem, emit: (event: AnswerStreamEvent) => void, signal: AbortSignal): Promise<void>;
 }
+
+/** An item from the person's search results. The service's own access check decides whether it is read. */
+export interface SummaryItem extends ItemReference {
+  readonly title: string;
+}
+
+/** The person's own request, so the answer instructions apply as they do to any question. */
+const SUMMARY_REQUEST =
+  "Summarise this for me in a few short bullet points: what it is about, where it stands now, any decisions or open questions, and who is involved.";
 
 export interface AnswersDeps {
   readonly pool: PoolLike;
@@ -63,6 +75,8 @@ export interface AnswersDeps {
   readonly memories?: MemorySource;
   /** Stops answers once the monthly budget is used up. Without one, there is no limit. */
   readonly budget?: BudgetGuard;
+  /** Reads one item with the person's own access, for summaries. Without one, there are none. */
+  readonly items?: { readItem(scope: UserScope, item: ItemReference): Promise<string | null> };
 }
 
 function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
@@ -76,6 +90,17 @@ function appendText(parts: readonly AnswerPart[], text: string): readonly Answer
 function appendCitation(parts: readonly AnswerPart[], source: number): readonly AnswerPart[] {
   const last = parts.at(-1);
   return last?.kind === "cite" && last.source === source ? parts : [...parts, { kind: "cite", source }];
+}
+
+/** Stops waiting for a read when it takes too long or the person leaves. The read itself may finish later. */
+function withinReadTime<T>(read: Promise<T>, signal: AbortSignal): Promise<T> {
+  const limit = AbortSignal.any([signal, AbortSignal.timeout(READ_TIME_LIMIT_MS)]);
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new AppError("UNAVAILABLE", "Reading the item took too long. Please try again.", { reason: "read_timeout" }));
+    if (limit.aborted) return stop();
+    limit.addEventListener("abort", stop, { once: true });
+    read.then(resolve, reject).finally(() => limit.removeEventListener("abort", stop));
+  });
 }
 
 function userKey(scope: UserScope): string {
@@ -95,12 +120,64 @@ export class AnswersService implements AnswersApi {
     signal: AbortSignal,
     conversationId?: string,
   ): Promise<void> {
+    await this.guarded(scope, (gateway) => this.run(gateway, scope, question, emit, signal, conversationId));
+  }
+
+  async summarise(scope: UserScope, item: SummaryItem, emit: (event: AnswerStreamEvent) => void, signal: AbortSignal): Promise<void> {
+    const items = this.deps.items;
+    if (!items) throw new AppError("UNAVAILABLE", "Summaries are not available here");
+    await this.guarded(scope, async (gateway) => {
+      const { title, ...reference } = item;
+      // Read with the person's own token: what they cannot open, Brain cannot summarise for them.
+      // Bounded, so a stalled service or a person who left cannot hold one of their answer slots.
+      const text = await withinReadTime(items.readItem(scope, reference), signal);
+      if (!text) throw new AppError("NOT_FOUND", "Brain could not read this item with your access");
+      const hit: RankedHit = { ...reference, title, snippet: "", updatedAt: null, score: 1 };
+      emit({ type: "sources", hits: [hit], sources: [] });
+
+      let parts: readonly AnswerPart[] = [];
+      let citationCount = 0;
+      let usage: UsageReport | null = null;
+      let outcome: AnswerOutcome | null = null;
+      const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
+      try {
+        outcome = await gateway.streamAnswer(
+          {
+            question: SUMMARY_REQUEST,
+            documents: [{ title, text: text.slice(0, MAX_DOCUMENT_CHARS) }],
+            cacheScope: scope.tenantId,
+            ...(memories.length ? { memories } : {}),
+          },
+          (event) => {
+            if (event.type === "text") {
+              parts = appendText(parts, event.text);
+              emit(event);
+            } else if (event.documentIndex === 0) {
+              citationCount += 1;
+              emit({ type: "citation", source: 1, citedText: event.citedText });
+            }
+          },
+          signal,
+          (report) => {
+            usage = report;
+          },
+        );
+        const ended = outcome.stopReason === "refusal" ? "refused" : outcome.stopReason === "end_turn" ? "answered" : "incomplete";
+        emit({ type: "done", outcome: ended, grounded: citationCount > 0, truncatedDocuments: text.length > MAX_DOCUMENT_CHARS ? 1 : 0, messageId: null });
+      } finally {
+        await this.recordSummary(scope, reference, usage, outcome, citationCount);
+      }
+    });
+  }
+
+  /** What answers and summaries share: the AI must be configured, and rate, budget and concurrency allow it. */
+  private async guarded(scope: UserScope, work: (gateway: LlmGateway) => Promise<void>): Promise<void> {
     const gateway = this.deps.gateway;
     if (!gateway) {
       throw new AppError("UNAVAILABLE", "AI answers are not configured yet. Search still works.");
     }
     this.enforceRate(scope);
-    // Before the search too, since rewriting the question is also a paid call.
+    // Before any search or read too, since rewriting the question is also a paid call.
     await this.deps.budget?.require(scope);
     const key = userKey(scope);
     const running = this.inFlight.get(key) ?? 0;
@@ -109,7 +186,7 @@ export class AnswersService implements AnswersApi {
     }
     this.inFlight.set(key, running + 1);
     try {
-      await this.run(gateway, scope, question, emit, signal, conversationId);
+      await work(gateway);
     } finally {
       const left = (this.inFlight.get(key) ?? 1) - 1;
       if (left > 0) this.inFlight.set(key, left);
@@ -271,6 +348,40 @@ export class AnswersService implements AnswersApi {
         // A replay of a recent identical answer, so the model was not called.
         cached: outcome?.cached === true,
         stopReason: endedEarly ?? outcome?.stopReason ?? "not_completed",
+        citations,
+      },
+    }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Audit write failed"));
+  }
+
+  /** Runs on failure and abort too, as the provider may have billed. Never records the item's text. */
+  private async recordSummary(
+    scope: UserScope,
+    item: ItemReference,
+    usage: UsageReport | null,
+    outcome: AnswerOutcome | null,
+    citations: number,
+  ): Promise<void> {
+    if (usage) {
+      const { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, estimated } = usage;
+      await appendUsage(this.deps.pool, scope, {
+        feature: estimated ? "summary_estimated" : "summary",
+        model,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        costUsd,
+      }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Usage ledger write failed"));
+    }
+    await appendAudit(this.deps.pool, {
+      tenantId: scope.tenantId,
+      userId: scope.userId,
+      action: "summary",
+      meta: {
+        documents: [{ serverId: item.serverId, externalId: item.externalId }],
+        model: outcome?.model ?? null,
+        cached: outcome?.cached === true,
+        stopReason: outcome?.stopReason ?? "not_completed",
         citations,
       },
     }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Audit write failed"));

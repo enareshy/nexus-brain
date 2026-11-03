@@ -5,9 +5,9 @@ import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { AnswerPanel } from "@/components/AnswerPanel";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
-import { SearchResults } from "@/components/SearchResults";
+import { hitKey, SearchResults } from "@/components/SearchResults";
 import { INITIAL_ANSWER, readAnswerStream, reduceAnswer, type AnswerState } from "@/lib/answer";
-import { ApiError, describeError, type SearchResult } from "@/lib/api";
+import { ApiError, describeError, type Hit, type SearchResult } from "@/lib/api";
 
 const MAX_QUERY_CHARS = 200;
 
@@ -24,16 +24,41 @@ function SearchPage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [answer, setAnswer] = useState<{ query: string; state: AnswerState } | null>(null);
   const answerAbort = useRef<AbortController | null>(null);
+  const [summary, setSummary] = useState<{ key: string; state: AnswerState } | null>(null);
+  const summaryAbort = useRef<AbortController | null>(null);
 
-  // Leaving this query (or the page) cancels any answer still streaming, which stops spending.
-  // Clearing it also means returning to this query later offers the button again.
+  // Leaving this query (or the page) cancels any answer or summary still streaming, which stops spending.
+  // Clearing it also means returning to this query later offers the buttons again.
   useEffect(
     () => () => {
       answerAbort.current?.abort();
+      summaryAbort.current?.abort();
       setAnswer(null);
+      setSummary(null);
     },
     [query],
   );
+
+  async function handleSummarise(hit: Hit) {
+    const controller = new AbortController();
+    summaryAbort.current?.abort();
+    summaryAbort.current = controller;
+    const key = hitKey(hit);
+    const apply = (next: (state: AnswerState) => AnswerState) =>
+      setSummary((prev) => (controller.signal.aborted ? prev : { key, state: next(prev?.key === key ? prev.state : INITIAL_ANSWER) }));
+
+    setSummary({ key, state: INITIAL_ANSWER });
+    try {
+      const body = await api.openSummaryStream(hit, controller.signal);
+      await readAnswerStream(body, (event) => apply((state) => reduceAnswer(state, event)));
+      apply((state) =>
+        state.status === "streaming" ? { ...state, status: "error", error: "The summary was interrupted. Please try again." } : state,
+      );
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      apply((state) => ({ ...state, status: "error", error: describeError(e) }));
+    }
+  }
 
   async function handleAnswer() {
     const controller = new AbortController();
@@ -146,7 +171,9 @@ function SearchPage() {
             {current.error}
           </p>
         )}
-        {current && "result" in current && <SearchResults result={current.result} query={query} />}
+        {current && "result" in current && (
+          <SearchResults result={current.result} query={query} summary={summary} onSummarise={(hit) => void handleSummarise(hit)} />
+        )}
       </div>
     </div>
   );

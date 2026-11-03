@@ -80,6 +80,7 @@ const keywordSearch: SearchAdapter = {
     /launch/i.test(query)
       ? [{ serverId: SERVER, externalId: "Z-1", title: "launch date", url: "https://acme.example/browse/Z-1", snippet: "launch in May", updatedAt: null }]
       : [],
+  readDocuments: async (_session, hits) => new Map(hits.map((h) => [h.url, "launch in May"])),
 };
 
 /** Sends a question and returns the parsed stream events. */
@@ -143,6 +144,7 @@ beforeAll(async () => {
       expander: new QueryRewriter({ pool, gateway, logger }),
       conversations,
       memories: memory,
+      items: connections,
       // Each answer a minute apart, so these tests stay clear of the per-person answer limit.
       now: () => (clock += 61_000),
     }),
@@ -239,6 +241,69 @@ describe("memory (FR-AST-07)", () => {
     await bob("DELETE", `/memories/${added.id}`);
     await ask(bob, SECRET_QUESTION);
     expect(streamAnswer.mock.calls.at(-1)![0].memories).toBeUndefined();
+  });
+});
+
+describe("summaries (FR-AST-06)", () => {
+  const item = { serverId: SERVER, externalId: "Z-1", url: "https://acme.example/browse/Z-1", title: "launch date" };
+  const summarise = async (caller: Caller, body: object = item) => {
+    const res = await caller("POST", "/answers/summary", body);
+    return { status: res.statusCode, events: res.body.split("\n\n").flatMap((b) => {
+      const line = b.split("\n").find((l) => l.startsWith("data: "));
+      return line ? [JSON.parse(line.slice(6)) as Record<string, unknown>] : [];
+    }) };
+  };
+
+  it("summarises one item read with the person's own access, citing it, and meters and audits it", async () => {
+    const bob = await as("bob");
+    const { events } = await summarise(bob);
+    expect(eventOf(events, "sources")).toMatchObject({ hits: [{ externalId: "Z-1", title: "launch date" }] });
+    expect(eventOf(events, "citation")).toMatchObject({ source: 1 });
+    expect(eventOf(events, "done")).toMatchObject({ outcome: "answered", grounded: true, messageId: null });
+    const input = streamAnswer.mock.calls.at(-1)![0];
+    expect(input.question).toMatch(/^Summarise this/);
+    expect(input.documents).toEqual([{ title: "launch date", text: "launch in May" }]);
+
+    const ledger = await owner.query("SELECT count(*)::int AS n FROM usage_ledger WHERE feature = 'summary' AND user_id = $1", [seedUser("bob").id]);
+    expect(ledger.rows[0].n).toBeGreaterThan(0);
+    const audit = await owner.query("SELECT meta::text AS meta FROM audit_log WHERE action = 'summary' AND user_id = $1 ORDER BY id DESC LIMIT 1", [seedUser("bob").id]);
+    expect(audit.rows[0].meta).toContain("Z-1");
+    expect(audit.rows[0].meta).not.toContain("launch in May");
+  });
+
+  it("removes control characters from the title before the model sees it", async () => {
+    const bob = await as("bob");
+    await summarise(bob, { ...item, title: "launch\ndate‮" });
+    expect(streamAnswer.mock.calls.at(-1)![0].documents[0]!.title).toBe("launch date");
+  });
+
+  it("is not saved to the person's chat history", async () => {
+    const bob = await as("bob");
+    const before = (await bob("GET", "/conversations")).json().data.length;
+    await summarise(bob);
+    expect((await bob("GET", "/conversations")).json().data.length).toBe(before);
+  });
+
+  it("reads nothing and calls no model for someone without access to the item", async () => {
+    const alice = await as("alice");
+    const { events } = await summarise(alice);
+    expect(eventOf(events, "error")).toBeTruthy();
+    expect(eventOf(events, "sources")).toBeUndefined();
+    expect(streamAnswer).not.toHaveBeenCalled();
+  });
+
+  it("refuses links that are not https, unknown fields and missing titles", async () => {
+    const bob = await as("bob");
+    for (const body of [
+      { ...item, url: "http://acme.example/x" },
+      { ...item, extra: 1 },
+      { ...item, title: " ‮ " },
+      { ...item, serverId: "../x" },
+      { ...item, siteId: "a/b?c" },
+    ]) {
+      expect((await bob("POST", "/answers/summary", body)).statusCode).toBe(400);
+    }
+    expect(streamAnswer).not.toHaveBeenCalled();
   });
 });
 

@@ -58,7 +58,7 @@ const unusedTurn: LlmGateway["agentTurn"] = async () => {
   throw new Error("Agents are not used here");
 };
 
-function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike } = {}) {
+function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike; readItem?: (scope: unknown, item: unknown) => Promise<string | null> } = {}) {
   const gathered: GatheredDocuments = {
     hits: opts.hits ?? [hit(1), hit(2)],
     sources: [{ id: "atlassian", ok: true, hits: 2, ms: 10 }],
@@ -81,6 +81,7 @@ function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Ma
     gateway: opts.gateway === undefined ? { streamAnswer, rewriteQuery: noRewrite, agentTurn: unusedTurn } : opts.gateway,
     now: opts.now,
     ...(opts.expander ? { expander: opts.expander } : {}),
+    ...(opts.readItem ? { items: { readItem: opts.readItem } } : {}),
   });
   const events: AnswerStreamEvent[] = [];
   return { service, events, emit: (e: AnswerStreamEvent) => events.push(e), streamAnswer, gatherDocuments, queries };
@@ -312,6 +313,43 @@ describe("POST /answers", () => {
     const res = await post({ q: "x" });
     expect(res.body).toContain('"code":"INTERNAL"');
     expect(res.body).not.toContain("postgres://");
+  });
+});
+
+describe("summaries (FR-AST-06)", () => {
+  const item = { serverId: "atlassian", externalId: "KAN-1", url: "https://acme.atlassian.net/browse/KAN-1", title: "Login bug" };
+
+  it("summarises the item's text with one citation, marking long items as shortened", async () => {
+    const { service, events, emit, streamAnswer } = setup({ readItem: async () => "x".repeat(40_000) });
+    await service.summarise(scope, item, emit, signal);
+    expect(events.map((e) => e.type)).toEqual(["sources", "text", "citation", "done"]);
+    expect(events.at(-1)).toMatchObject({ type: "done", outcome: "answered", truncatedDocuments: 1, messageId: null });
+    expect(streamAnswer.mock.calls[0]![0].documents[0]!.text).toHaveLength(30_000);
+  });
+
+  it("says plainly when the item cannot be read, and calls no model", async () => {
+    const { service, emit, streamAnswer } = setup({ readItem: async () => null });
+    await expect(service.summarise(scope, item, emit, signal)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(streamAnswer).not.toHaveBeenCalled();
+  });
+
+  it("stops waiting for a read when the person leaves, freeing their slot for the next request", async () => {
+    let calls = 0;
+    const readItem = () => (calls++ === 0 ? new Promise<string>(() => {}) : Promise.resolve("text"));
+    const { service, emit } = setup({ readItem });
+    const leaving = new AbortController();
+    const stuck = service.summarise(scope, item, emit, leaving.signal);
+    leaving.abort();
+    await expect(stuck).rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "read_timeout" } });
+    await service.summarise(scope, item, emit, signal);
+    await service.summarise(scope, item, emit, signal);
+  });
+
+  it("is unavailable without a way to read items, or without the AI configured", async () => {
+    await expect(setup().service.summarise(scope, item, () => {}, signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(setup({ gateway: null, readItem: async () => "t" }).service.summarise(scope, item, () => {}, signal)).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
   });
 });
 

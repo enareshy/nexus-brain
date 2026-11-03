@@ -123,6 +123,7 @@ const answers = new AnswersService({
   conversations,
   memories: memory,
   budget: usage,
+  items: connections,
   pool,
   box,
   logger,

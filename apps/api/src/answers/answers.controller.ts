@@ -10,6 +10,20 @@ import type { AnswersApi, AnswerStreamEvent } from "./answers.service.js";
 
 const AnswerBodySchema = z.object({ q: z.string().trim().min(1).max(500), conversationId: UuidSchema.optional() });
 
+/** An item from the person's own search results. Only the service's access check decides if it is read. */
+const SummaryBodySchema = z.strictObject({
+  serverId: z.string().regex(/^[a-z0-9-]{1,40}$/),
+  externalId: z.string().min(1).max(200),
+  url: z.string().url().max(2000).refine((u) => u.startsWith("https://"), "https only"),
+  siteId: z.string().regex(/^[\w-]{1,100}$/).optional(),
+  // Shown to the model as the document's title, so control characters that could reshape it are removed.
+  title: z
+    .string()
+    .max(300)
+    .transform((t) => t.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ").trim())
+    .pipe(z.string().min(1)),
+});
+
 @Controller("answers")
 export class AnswersController {
   constructor(
@@ -26,7 +40,30 @@ export class AnswersController {
   ): Promise<void> {
     const parsed = AnswerBodySchema.safeParse(body);
     if (!parsed.success) throw new AppError("VALIDATION", "Invalid request parameters");
+    await this.stream(ctx, reply, "Answer", (send, signal) =>
+      this.answers.answer({ tenantId: ctx.tenantId, userId: ctx.userId }, parsed.data.q, send, signal, parsed.data.conversationId),
+    );
+  }
 
+  /** Streams a summary of one item (FR-AST-06), in the same events as an answer. */
+  @Post("summary")
+  async summary(@Ctx() ctx: RequestContext, @Body() body: unknown, @Res() reply: FastifyReply): Promise<void> {
+    const summarise = this.answers.summarise?.bind(this.answers);
+    if (!summarise) throw new AppError("NOT_FOUND", "Summaries are not available here");
+    const parsed = SummaryBodySchema.safeParse(body);
+    if (!parsed.success) throw new AppError("VALIDATION", "Invalid request parameters");
+    const { siteId, ...item } = parsed.data;
+    await this.stream(ctx, reply, "Summary", (send, signal) =>
+      summarise({ tenantId: ctx.tenantId, userId: ctx.userId }, { ...item, ...(siteId ? { siteId } : {}) }, send, signal),
+    );
+  }
+
+  private async stream(
+    ctx: RequestContext,
+    reply: FastifyReply,
+    label: string,
+    work: (send: (event: AnswerStreamEvent) => void, signal: AbortSignal) => Promise<void>,
+  ): Promise<void> {
     reply.hijack();
     const raw = reply.raw;
     // Hijacking bypasses Fastify's send, so carry over the CORS headers it already set.
@@ -47,20 +84,14 @@ export class AnswersController {
     };
 
     try {
-      await this.answers.answer(
-        { tenantId: ctx.tenantId, userId: ctx.userId },
-        parsed.data.q,
-        send,
-        controller.signal,
-        parsed.data.conversationId,
-      );
+      await work(send, controller.signal);
     } catch (err) {
       const log = this.logger.child({ request_id: ctx.requestId, tenant_id: ctx.tenantId, user_id: ctx.userId });
       if (isAppError(err)) {
-        log.warn({ code: err.code, details: err.details }, "Answer failed");
+        log.warn({ code: err.code, details: err.details }, `${label} failed`);
         send({ type: "error", code: err.code, message: err.message });
       } else {
-        log.error({ err }, "Answer failed unexpectedly");
+        log.error({ err }, `${label} failed unexpectedly`);
         send({ type: "error", code: "INTERNAL", message: "Something went wrong. Please try again." });
       }
     } finally {
