@@ -5,9 +5,10 @@ import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { AnswerPanel } from "@/components/AnswerPanel";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
+import type { ItemWorkState } from "@/components/ItemWork";
 import { hitKey, SearchResults } from "@/components/SearchResults";
 import { INITIAL_ANSWER, readAnswerStream, reduceAnswer, type AnswerState } from "@/lib/answer";
-import { ApiError, describeError, type Hit, type SearchResult } from "@/lib/api";
+import { ApiError, describeError, type Hit, type ItemTask, type SearchResult, type WriteRequest } from "@/lib/api";
 
 const MAX_QUERY_CHARS = 200;
 
@@ -24,40 +25,48 @@ function SearchPage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [answer, setAnswer] = useState<{ query: string; state: AnswerState } | null>(null);
   const answerAbort = useRef<AbortController | null>(null);
-  const [summary, setSummary] = useState<{ key: string; state: AnswerState } | null>(null);
-  const summaryAbort = useRef<AbortController | null>(null);
+  const [work, setWork] = useState<ItemWorkState | null>(null);
+  const workAbort = useRef<AbortController | null>(null);
+  const workRun = useRef(0);
 
-  // Leaving this query (or the page) cancels any answer or summary still streaming, which stops spending.
+  // Leaving this query (or the page) cancels any answer or item work still streaming, which stops spending.
   // Clearing it also means returning to this query later offers the buttons again.
   useEffect(
     () => () => {
       answerAbort.current?.abort();
-      summaryAbort.current?.abort();
+      workAbort.current?.abort();
       setAnswer(null);
-      setSummary(null);
+      setWork(null);
     },
     [query],
   );
 
-  async function handleSummarise(hit: Hit) {
+  async function handleItemTask(hit: Hit, task: ItemTask) {
     const controller = new AbortController();
-    summaryAbort.current?.abort();
-    summaryAbort.current = controller;
+    workAbort.current?.abort();
+    workAbort.current = controller;
+    workRun.current += 1;
+    const run = workRun.current;
     const key = hitKey(hit);
     const apply = (next: (state: AnswerState) => AnswerState) =>
-      setSummary((prev) => (controller.signal.aborted ? prev : { key, state: next(prev?.key === key ? prev.state : INITIAL_ANSWER) }));
+      setWork((prev) => (controller.signal.aborted ? prev : { key, run, kind: task.kind, state: next(prev?.run === run ? prev.state : INITIAL_ANSWER) }));
 
-    setSummary({ key, state: INITIAL_ANSWER });
+    setWork({ key, run, kind: task.kind, state: INITIAL_ANSWER });
     try {
-      const body = await api.openSummaryStream(hit, controller.signal);
+      const body = await api.openItemStream(task, hit, controller.signal);
       await readAnswerStream(body, (event) => apply((state) => reduceAnswer(state, event)));
       apply((state) =>
-        state.status === "streaming" ? { ...state, status: "error", error: "The summary was interrupted. Please try again." } : state,
+        state.status === "streaming" ? { ...state, status: "error", error: "This was interrupted. Please try again." } : state,
       );
     } catch (e) {
       if (controller.signal.aborted) return;
       apply((state) => ({ ...state, status: "error", error: describeError(e) }));
     }
+  }
+
+  // Only records the change: the person approves it on the Changes page before anything happens in Jira.
+  async function handlePropose(request: WriteRequest) {
+    await api.propose("atlassian", request);
   }
 
   async function handleAnswer() {
@@ -172,7 +181,13 @@ function SearchPage() {
           </p>
         )}
         {current && "result" in current && (
-          <SearchResults result={current.result} query={query} summary={summary} onSummarise={(hit) => void handleSummarise(hit)} />
+          <SearchResults
+            result={current.result}
+            query={query}
+            work={work}
+            onItemTask={(hit, task) => void handleItemTask(hit, task)}
+            onPropose={handlePropose}
+          />
         )}
       </div>
     </div>

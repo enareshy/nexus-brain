@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { WriteRequest, WriteTarget } from "@/lib/api";
 
-type Action = WriteRequest["action"];
+type Action = Exclude<WriteRequest["action"], "create_subtask">;
 
 type Props = {
   targets: readonly WriteTarget[];

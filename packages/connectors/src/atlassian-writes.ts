@@ -13,6 +13,7 @@ const WRITE_SCOPE = "write:jira-work";
 const PROJECT_KEY = /^[A-Z][A-Z0-9_]+$/;
 const MAX_SITES = 3;
 const MAX_PROJECTS = 50;
+const PROJECTS_TOOL = "getVisibleJiraProjects";
 
 type Obj = Record<string, unknown>;
 
@@ -38,6 +39,32 @@ async function writableSites(session: ToolSession) {
   const result = await session.callTool(SITES_TOOL, {});
   if (result.isError) throw new AppError("UNAVAILABLE", "Could not list Atlassian sites");
   return parseSites(result.text).filter((site) => site.scopes.has(WRITE_SCOPE));
+}
+
+/** The name of a project's subtask issue type, or null when it has none the person can create. */
+export function parseSubtaskType(text: string, projectKey: string): string | null {
+  const data = parseJson(text);
+  const values = isObj(data) && Array.isArray(data.values) ? data.values : [];
+  const project = values.find((p): p is Obj => isObj(p) && p.key === projectKey);
+  const types = project && Array.isArray(project.issueTypes) ? project.issueTypes : [];
+  const subtask = types.find((t): t is Obj => isObj(t) && t.subtask === true && typeof t.name === "string");
+  return subtask ? (subtask.name as string) : null;
+}
+
+/** Subtasks must use the parent project's own subtask type, which can be named anything. */
+async function subtaskType(session: ToolSession, siteId: string, parentKey: string): Promise<string> {
+  const projectKey = parentKey.slice(0, parentKey.lastIndexOf("-"));
+  const result = await session.callTool(PROJECTS_TOOL, {
+    cloudId: siteId,
+    action: "create",
+    searchString: projectKey,
+    maxResults: MAX_PROJECTS,
+    expandIssueTypes: true,
+  });
+  if (result.isError) throw new AppError("UNAVAILABLE", "Could not list Jira projects");
+  const name = parseSubtaskType(result.text, projectKey);
+  if (!name) throw new AppError("VALIDATION", "You cannot add subtasks in that project");
+  return name;
 }
 
 function issueTypeNames(value: unknown): string[] {
@@ -66,7 +93,7 @@ export function parseProjects(text: string): WriteProject[] {
  * Arguments are built field by field, so nothing else in a request can reach the tool. Every text
  * field has its @Brain defused: Brain writes as the person, so its text must never read as a request.
  */
-function toolCall(request: WriteRequest): Pick<WriteDraft, "toolName" | "args"> {
+function toolCall(request: WriteRequest, subtaskTypeName = ""): Pick<WriteDraft, "toolName" | "args"> {
   const text = defuseMentions;
   const cloudId = request.siteId;
   switch (request.action) {
@@ -94,6 +121,19 @@ function toolCall(request: WriteRequest): Pick<WriteDraft, "toolName" | "args"> 
         args: { cloudId, issueIdOrKey: requireIssueKey(request.issueKey), fields, contentFormat: "markdown" },
       };
     }
+    case "create_subtask":
+      return {
+        toolName: CREATE_TOOL,
+        args: {
+          cloudId,
+          projectKey: request.parentKey.slice(0, request.parentKey.lastIndexOf("-")),
+          issueTypeName: subtaskTypeName,
+          summary: text(request.summary),
+          parent: request.parentKey,
+          ...(request.description ? { description: text(request.description) } : {}),
+          contentFormat: "markdown",
+        },
+      };
     case "add_comment":
       // commentId is never sent: with it, this tool would overwrite an existing comment.
       return {
@@ -120,7 +160,7 @@ export const atlassianWrites: WriteAdapter = {
     const sites = (await writableSites(session)).slice(0, MAX_SITES);
     return Promise.all(
       sites.map(async (site) => {
-        const result = await session.callTool("getVisibleJiraProjects", {
+        const result = await session.callTool(PROJECTS_TOOL, {
           cloudId: site.id,
           action: "create",
           maxResults: MAX_PROJECTS,
@@ -133,10 +173,13 @@ export const atlassianWrites: WriteAdapter = {
   },
 
   async draft(session, request) {
-    const call = toolCall(request);
+    if (request.action === "create_subtask") requireIssueKey(request.parentKey);
+    else toolCall(request);
     const site = (await writableSites(session)).find((s) => s.id === request.siteId);
     if (!site) throw new AppError("VALIDATION", "You cannot make changes on that Jira site");
-    return { action: request.action, siteOrigin: site.origin, ...call };
+    // Looked up only on a site the person can write to, so no other cloud id is ever sent.
+    const typeName = request.action === "create_subtask" ? await subtaskType(session, site.id, request.parentKey) : "";
+    return { action: request.action, siteOrigin: site.origin, ...toolCall(request, typeName) };
   },
 
   /** The link comes from the trusted site origin; only a well-formed key is taken from the result. */

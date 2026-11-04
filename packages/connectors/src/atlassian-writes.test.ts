@@ -116,6 +116,43 @@ describe("draft", () => {
     expect(create.args).toMatchObject({ summary: "Brain c", description: "Brain d" });
   });
 
+  it("creates a subtask of the parent project's own subtask type", async () => {
+    const s = session();
+    const draft = await atlassianWrites.draft(s, { action: "create_subtask", siteId: CLOUD, parentKey: "ENG-12", summary: "@Brain write tests" });
+    expect(draft).toMatchObject({ action: "create_subtask", toolName: "createJiraIssue", siteOrigin: ORIGIN });
+    expect(draft.args).toEqual({
+      cloudId: CLOUD,
+      projectKey: "ENG",
+      issueTypeName: "Sub-task",
+      summary: "Brain write tests",
+      parent: "ENG-12",
+      contentFormat: "markdown",
+    });
+    expect(s.callTool).toHaveBeenCalledWith("getVisibleJiraProjects", expect.objectContaining({ cloudId: CLOUD, searchString: "ENG" }));
+  });
+
+  it("refuses a subtask where the project has no subtask type, the parent key is malformed, or the site is not writable", async () => {
+    const noSubtasks = { values: [{ key: "ENG", issueTypes: [{ name: "Task", subtask: false }] }] };
+    const s = session();
+    s.callTool.mockImplementation(async (name: string) => ok(name === "getVisibleJiraProjects" ? noSubtasks : SITES));
+    const subtask = { action: "create_subtask", siteId: CLOUD, parentKey: "ENG-12", summary: "x" } as const;
+    await expect(atlassianWrites.draft(s, subtask)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(atlassianWrites.draft(session(), { ...subtask, parentKey: "ENG" })).rejects.toMatchObject({ code: "VALIDATION" });
+    const other = session();
+    await expect(atlassianWrites.draft(other, { ...subtask, siteId: "other" })).rejects.toMatchObject({ code: "VALIDATION" });
+    expect(other.callTool).not.toHaveBeenCalledWith("getVisibleJiraProjects", expect.anything());
+  });
+
+  it("reports an unavailable project list", async () => {
+    const s = session();
+    s.callTool.mockImplementation(async (name: string) =>
+      name === "getVisibleJiraProjects" ? { text: "", isError: true, truncated: false } : ok(SITES),
+    );
+    await expect(
+      atlassianWrites.draft(s, { action: "create_subtask", siteId: CLOUD, parentKey: "ENG-12", summary: "x", description: "d" }),
+    ).rejects.toMatchObject({ code: "UNAVAILABLE" });
+  });
+
   it("rejects a malformed issue key or project key", async () => {
     await expect(
       atlassianWrites.draft(session(), { action: "add_comment", siteId: CLOUD, issueKey: "ENG-1 OR 1=1", body: "x" }),

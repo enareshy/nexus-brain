@@ -7,6 +7,7 @@ import type { DocumentSource, ItemReference } from "../connections/connections.s
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
 import type { BudgetGuard } from "../usage/usage.service.js";
+import { canHaveSubtasks, itemTaskRequest, parseSubtasks, type ItemTask } from "./item-tasks.js";
 import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 
 const SEARCH_LIMIT = 10;
@@ -24,6 +25,8 @@ export type AnswerStreamEvent =
   | { readonly type: "text"; readonly text: string }
   /** `source` is the 1-based position in `hits`. */
   | { readonly type: "citation"; readonly source: number; readonly citedText: string }
+  /** Suggested subtask titles, sent instead of text when subtasks were asked for. */
+  | { readonly type: "subtasks"; readonly titles: readonly string[] }
   | {
       readonly type: "done";
       /** answered | no_documents | refused | incomplete */
@@ -46,18 +49,14 @@ export interface AnswersApi {
     /** Continues this conversation. Without it, a new one is started. */
     conversationId?: string,
   ): Promise<void>;
-  /** Summarises one item the person can read, citing it (FR-AST-06). Not saved to their history. */
-  summarise?(scope: UserScope, item: SummaryItem, emit: (event: AnswerStreamEvent) => void, signal: AbortSignal): Promise<void>;
+  /** Summarises, drafts from, or suggests subtasks for one item the person can read (FR-AST-06). Not saved to their history. */
+  itemTask?(scope: UserScope, item: SummaryItem, task: ItemTask, emit: (event: AnswerStreamEvent) => void, signal: AbortSignal): Promise<void>;
 }
 
 /** An item from the person's search results. The service's own access check decides whether it is read. */
 export interface SummaryItem extends ItemReference {
   readonly title: string;
 }
-
-/** The person's own request, so the answer instructions apply as they do to any question. */
-const SUMMARY_REQUEST =
-  "Summarise this for me in a few short bullet points: what it is about, where it stands now, any decisions or open questions, and who is involved.";
 
 export interface AnswersDeps {
   readonly pool: PoolLike;
@@ -75,7 +74,7 @@ export interface AnswersDeps {
   readonly memories?: MemorySource;
   /** Stops answers once the monthly budget is used up. Without one, there is no limit. */
   readonly budget?: BudgetGuard;
-  /** Reads one item with the person's own access, for summaries. Without one, there are none. */
+  /** Reads one item with the person's own access, for summaries, drafts and subtasks. Without one, there are none. */
   readonly items?: { readItem(scope: UserScope, item: ItemReference): Promise<string | null> };
 }
 
@@ -123,19 +122,30 @@ export class AnswersService implements AnswersApi {
     await this.guarded(scope, (gateway) => this.run(gateway, scope, question, emit, signal, conversationId));
   }
 
-  async summarise(scope: UserScope, item: SummaryItem, emit: (event: AnswerStreamEvent) => void, signal: AbortSignal): Promise<void> {
+  async itemTask(
+    scope: UserScope,
+    item: SummaryItem,
+    task: ItemTask,
+    emit: (event: AnswerStreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
     const items = this.deps.items;
-    if (!items) throw new AppError("UNAVAILABLE", "Summaries are not available here");
+    if (!items) throw new AppError("UNAVAILABLE", "This is not available here");
+    const { title, ...reference } = item;
+    if (task.kind === "subtasks" && !canHaveSubtasks(reference)) {
+      throw new AppError("VALIDATION", "Subtasks can only be suggested for a Jira issue");
+    }
     await this.guarded(scope, async (gateway) => {
-      const { title, ...reference } = item;
-      // Read with the person's own token: what they cannot open, Brain cannot summarise for them.
+      // Read with the person's own token: what they cannot open, Brain cannot use for them.
       // Bounded, so a stalled service or a person who left cannot hold one of their answer slots.
       const text = await withinReadTime(items.readItem(scope, reference), signal);
       if (!text) throw new AppError("NOT_FOUND", "Brain could not read this item with your access");
       const hit: RankedHit = { ...reference, title, snippet: "", updatedAt: null, score: 1 };
       emit({ type: "sources", hits: [hit], sources: [] });
+      // A subtask list is sent as titles to pick from once complete, not as text to read.
+      const streamsText = task.kind !== "subtasks";
 
-      let parts: readonly AnswerPart[] = [];
+      let written = "";
       let citationCount = 0;
       let usage: UsageReport | null = null;
       let outcome: AnswerOutcome | null = null;
@@ -143,18 +153,18 @@ export class AnswersService implements AnswersApi {
       try {
         outcome = await gateway.streamAnswer(
           {
-            question: SUMMARY_REQUEST,
+            question: itemTaskRequest(task),
             documents: [{ title, text: text.slice(0, MAX_DOCUMENT_CHARS) }],
             cacheScope: scope.tenantId,
             ...(memories.length ? { memories } : {}),
           },
           (event) => {
             if (event.type === "text") {
-              parts = appendText(parts, event.text);
-              emit(event);
+              written += event.text;
+              if (streamsText) emit(event);
             } else if (event.documentIndex === 0) {
               citationCount += 1;
-              emit({ type: "citation", source: 1, citedText: event.citedText });
+              if (streamsText) emit({ type: "citation", source: 1, citedText: event.citedText });
             }
           },
           signal,
@@ -163,14 +173,15 @@ export class AnswersService implements AnswersApi {
           },
         );
         const ended = outcome.stopReason === "refusal" ? "refused" : outcome.stopReason === "end_turn" ? "answered" : "incomplete";
+        if (!streamsText && ended === "answered") emit({ type: "subtasks", titles: parseSubtasks(written) });
         emit({ type: "done", outcome: ended, grounded: citationCount > 0, truncatedDocuments: text.length > MAX_DOCUMENT_CHARS ? 1 : 0, messageId: null });
       } finally {
-        await this.recordSummary(scope, reference, usage, outcome, citationCount);
+        await this.recordItemTask(scope, task, reference, usage, outcome, citationCount);
       }
     });
   }
 
-  /** What answers and summaries share: the AI must be configured, and rate, budget and concurrency allow it. */
+  /** What answers and item tasks share: the AI must be configured, and rate, budget and concurrency allow it. */
   private async guarded(scope: UserScope, work: (gateway: LlmGateway) => Promise<void>): Promise<void> {
     const gateway = this.deps.gateway;
     if (!gateway) {
@@ -354,8 +365,9 @@ export class AnswersService implements AnswersApi {
   }
 
   /** Runs on failure and abort too, as the provider may have billed. Never records the item's text. */
-  private async recordSummary(
+  private async recordItemTask(
     scope: UserScope,
+    task: ItemTask,
     item: ItemReference,
     usage: UsageReport | null,
     outcome: AnswerOutcome | null,
@@ -364,7 +376,7 @@ export class AnswersService implements AnswersApi {
     if (usage) {
       const { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, estimated } = usage;
       await appendUsage(this.deps.pool, scope, {
-        feature: estimated ? "summary_estimated" : "summary",
+        feature: estimated ? `${task.kind}_estimated` : task.kind,
         model,
         inputTokens,
         outputTokens,
@@ -376,7 +388,7 @@ export class AnswersService implements AnswersApi {
     await appendAudit(this.deps.pool, {
       tenantId: scope.tenantId,
       userId: scope.userId,
-      action: "summary",
+      action: task.kind,
       meta: {
         documents: [{ serverId: item.serverId, externalId: item.externalId }],
         model: outcome?.model ?? null,

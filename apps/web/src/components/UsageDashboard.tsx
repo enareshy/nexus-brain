@@ -7,6 +7,12 @@ const FEATURE_LABEL: Record<string, string> = {
   query_rewrite_estimated: "Search wording (cut short, estimated)",
   agent: "Agents",
   agent_estimated: "Agents (cut short, estimated)",
+  summary: "Summaries",
+  summary_estimated: "Summaries (cut short, estimated)",
+  draft: "Drafts",
+  draft_estimated: "Drafts (cut short, estimated)",
+  subtasks: "Subtask suggestions",
+  subtasks_estimated: "Subtask suggestions (cut short, estimated)",
 };
 
 const usd = (value: number) =>

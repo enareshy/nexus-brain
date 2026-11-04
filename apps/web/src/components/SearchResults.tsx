@@ -1,23 +1,24 @@
 import Link from "next/link";
-import type { AnswerState } from "@/lib/answer";
-import type { Hit, SearchResult, SourceStatus } from "@/lib/api";
+import type { Hit, ItemTask, SearchResult, SourceStatus, WriteRequest } from "@/lib/api";
 import { safeHttpUrl } from "@/lib/safe-url";
-import { AnswerPanel } from "./AnswerPanel";
+import { ItemActions, ItemResult, type ItemWorkState } from "./ItemWork";
 
 type Props = {
   result: SearchResult;
   query: string;
-  /** The summary being shown, for the hit with this key. */
-  summary?: { readonly key: string; readonly state: AnswerState } | null;
-  /** Without this, results offer no summaries. */
-  onSummarise?: (hit: Hit) => void;
+  /** The summary, draft or subtasks being shown, for the hit with its key. */
+  work?: ItemWorkState | null;
+  /** Without this, results offer no summaries, drafts or subtasks. */
+  onItemTask?: (hit: Hit, task: ItemTask) => void;
+  /** Sends a draft or subtasks for approval. Without it, they can only be read. */
+  onPropose?: (request: WriteRequest) => Promise<void>;
 };
 
 /** The site too, as one issue key can exist on two of a company's Jira sites. */
 export const hitKey = (hit: Pick<Hit, "serverId" | "externalId" | "siteId">) => `${hit.serverId}:${hit.siteId ?? ""}:${hit.externalId}`;
 
-/** Services whose search results Brain cannot read in full, so it cannot summarise them. */
-const NOT_SUMMARISABLE: ReadonlySet<string> = new Set(["slack"]);
+/** Services whose search results Brain cannot read in full, so it cannot summarise or draft from them. */
+const NOT_READABLE: ReadonlySet<string> = new Set(["slack"]);
 
 const SOURCE_PROBLEM: Record<string, string> = {
   RECONNECT_REQUIRED: "needs reconnecting",
@@ -51,8 +52,8 @@ function SourceNotice({ sources }: { sources: readonly SourceStatus[] }) {
  * Renders hits as plain text. Titles and snippets come from connected services and are
  * untrusted: React escapes them, and links are only rendered for safe https URLs.
  */
-export function SearchResults({ result, query, summary = null, onSummarise }: Props) {
-  const isSummarising = summary?.state.status === "streaming";
+export function SearchResults({ result, query, work = null, onItemTask, onPropose }: Props) {
+  const isWorking = work?.state.status === "streaming";
   const searched = result.sources.length;
   if (searched === 0) {
     return (
@@ -87,7 +88,7 @@ export function SearchResults({ result, query, summary = null, onSummarise }: Pr
           {result.hits.map((hit) => {
             const href = safeHttpUrl(hit.url);
             const key = hitKey(hit);
-            const shown = summary?.key === key ? summary.state : null;
+            const shown = work?.key === key ? work : null;
             return (
               <li key={key} className="group">
                 <div className="flex items-baseline gap-3">
@@ -107,21 +108,9 @@ export function SearchResults({ result, query, summary = null, onSummarise }: Pr
                   <span className="text-lg font-semibold">{hit.title}</span>
                 )}
                 {hit.snippet && <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">{hit.snippet}</p>}
-                {shown && (
-                  <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                    <AnswerPanel state={shown} />
-                  </div>
-                )}
-                {onSummarise && href && !NOT_SUMMARISABLE.has(hit.serverId) && (!shown || shown.status === "error") && (
-                  <button
-                    type="button"
-                    disabled={isSummarising}
-                    aria-label={`${shown ? "Try summarising" : "Summarise"} ${hit.title}${shown ? " again" : ""}`}
-                    onClick={() => onSummarise(hit)}
-                    className="mt-2 text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:underline disabled:opacity-40"
-                  >
-                    {shown ? "Try again" : "Summarise"}
-                  </button>
+                {shown && <ItemResult key={shown.run} hit={hit} work={shown} {...(onPropose ? { onPropose } : {})} />}
+                {onItemTask && href && !NOT_READABLE.has(hit.serverId) && (
+                  <ItemActions hit={hit} isBusy={isWorking} shown={shown} onItemTask={onItemTask} />
                 )}
               </li>
             );
