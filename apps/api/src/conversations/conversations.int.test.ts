@@ -305,6 +305,29 @@ describe("summaries (FR-AST-06)", () => {
     }
     expect(streamAnswer).not.toHaveBeenCalled();
   });
+
+  it("drafts what the person asked for from the item, metered and audited as a draft without the request or text", async () => {
+    const bob = await as("bob");
+    const res = await bob("POST", "/answers/draft", { ...item, request: "a reply\nconfirming the Q3 date‮" });
+    expect(res.body).toContain('"type":"done"');
+    expect(streamAnswer.mock.calls.at(-1)![0].question).toContain("a reply confirming the Q3 date");
+    const ledger = await owner.query("SELECT count(*)::int AS n FROM usage_ledger WHERE feature = 'draft' AND user_id = $1", [seedUser("bob").id]);
+    expect(ledger.rows[0].n).toBeGreaterThan(0);
+    const audit = await owner.query("SELECT meta::text AS meta FROM audit_log WHERE action = 'draft' AND user_id = $1 ORDER BY id DESC LIMIT 1", [seedUser("bob").id]);
+    expect(audit.rows[0].meta).toContain("Z-1");
+    expect(audit.rows[0].meta).not.toMatch(/Q3 date|launch in May/);
+  });
+
+  it("refuses a draft with no request, and subtasks for anything but a Jira issue, before reading or calling a model", async () => {
+    const bob = await as("bob");
+    for (const request of ["", " \n ", "x".repeat(501)]) {
+      expect((await bob("POST", "/answers/draft", { ...item, request })).statusCode).toBe(400);
+    }
+    const res = await bob("POST", "/answers/subtasks", item);
+    expect(res.body).toContain('"code":"VALIDATION"');
+    expect((await bob("POST", "/answers/subtasks", { ...item, request: "x" })).statusCode).toBe(400);
+    expect(streamAnswer).not.toHaveBeenCalled();
+  });
 });
 
 describe("a conversation", () => {

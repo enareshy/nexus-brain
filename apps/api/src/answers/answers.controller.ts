@@ -7,7 +7,15 @@ import { z } from "zod";
 import { Ctx, type RequestContext } from "../context/request-context.js";
 import { ANSWERS, LOGGER } from "../tokens.js";
 import type { AnswersApi, AnswerStreamEvent } from "./answers.service.js";
+import type { ItemTask } from "./item-tasks.js";
 
+function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new AppError("VALIDATION", "Invalid request parameters");
+  return result.data;
+}
+
+const UNSAFE_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
 const AnswerBodySchema = z.object({ q: z.string().trim().min(1).max(500), conversationId: UuidSchema.optional() });
 
 /** An item from the person's own search results. Only the service's access check decides if it is read. */
@@ -20,7 +28,15 @@ const SummaryBodySchema = z.strictObject({
   title: z
     .string()
     .max(300)
-    .transform((t) => t.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ").trim())
+    .transform((t) => t.replace(UNSAFE_CHARS, " ").trim())
+    .pipe(z.string().min(1)),
+});
+/** What the person wants drafted, in their own words; one plain line. */
+const DraftBodySchema = SummaryBodySchema.extend({
+  request: z
+    .string()
+    .max(500)
+    .transform((t) => t.replace(UNSAFE_CHARS, " ").replace(/\s+/g, " ").trim())
     .pipe(z.string().min(1)),
 });
 
@@ -48,13 +64,35 @@ export class AnswersController {
   /** Streams a summary of one item (FR-AST-06), in the same events as an answer. */
   @Post("summary")
   async summary(@Ctx() ctx: RequestContext, @Body() body: unknown, @Res() reply: FastifyReply): Promise<void> {
-    const summarise = this.answers.summarise?.bind(this.answers);
-    if (!summarise) throw new AppError("NOT_FOUND", "Summaries are not available here");
-    const parsed = SummaryBodySchema.safeParse(body);
-    if (!parsed.success) throw new AppError("VALIDATION", "Invalid request parameters");
-    const { siteId, ...item } = parsed.data;
-    await this.stream(ctx, reply, "Summary", (send, signal) =>
-      summarise({ tenantId: ctx.tenantId, userId: ctx.userId }, { ...item, ...(siteId ? { siteId } : {}) }, send, signal),
+    const item = parse(SummaryBodySchema, body);
+    await this.itemTask(ctx, reply, "Summary", item, { kind: "summary" });
+  }
+
+  /** Streams a draft the person asked for, written from one item (FR-AST-06). */
+  @Post("draft")
+  async draft(@Ctx() ctx: RequestContext, @Body() body: unknown, @Res() reply: FastifyReply): Promise<void> {
+    const { request, ...item } = parse(DraftBodySchema, body);
+    await this.itemTask(ctx, reply, "Draft", item, { kind: "draft", request });
+  }
+
+  /** Suggests subtasks for one Jira issue (FR-AST-06). Nothing is created: each becomes a proposal only if the person asks. */
+  @Post("subtasks")
+  async subtasks(@Ctx() ctx: RequestContext, @Body() body: unknown, @Res() reply: FastifyReply): Promise<void> {
+    const item = parse(SummaryBodySchema, body);
+    await this.itemTask(ctx, reply, "Subtasks", item, { kind: "subtasks" });
+  }
+
+  private async itemTask(
+    ctx: RequestContext,
+    reply: FastifyReply,
+    label: string,
+    { siteId, ...item }: z.infer<typeof SummaryBodySchema>,
+    task: ItemTask,
+  ): Promise<void> {
+    const run = this.answers.itemTask?.bind(this.answers);
+    if (!run) throw new AppError("NOT_FOUND", "This is not available here");
+    await this.stream(ctx, reply, label, (send, signal) =>
+      run({ tenantId: ctx.tenantId, userId: ctx.userId }, { ...item, ...(siteId ? { siteId } : {}) }, task, send, signal),
     );
   }
 

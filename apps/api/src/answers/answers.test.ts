@@ -317,11 +317,12 @@ describe("POST /answers", () => {
 });
 
 describe("summaries (FR-AST-06)", () => {
+  const SUMMARY = { kind: "summary" } as const;
   const item = { serverId: "atlassian", externalId: "KAN-1", url: "https://acme.atlassian.net/browse/KAN-1", title: "Login bug" };
 
   it("summarises the item's text with one citation, marking long items as shortened", async () => {
     const { service, events, emit, streamAnswer } = setup({ readItem: async () => "x".repeat(40_000) });
-    await service.summarise(scope, item, emit, signal);
+    await service.itemTask(scope, item, SUMMARY, emit, signal);
     expect(events.map((e) => e.type)).toEqual(["sources", "text", "citation", "done"]);
     expect(events.at(-1)).toMatchObject({ type: "done", outcome: "answered", truncatedDocuments: 1, messageId: null });
     expect(streamAnswer.mock.calls[0]![0].documents[0]!.text).toHaveLength(30_000);
@@ -329,7 +330,7 @@ describe("summaries (FR-AST-06)", () => {
 
   it("says plainly when the item cannot be read, and calls no model", async () => {
     const { service, emit, streamAnswer } = setup({ readItem: async () => null });
-    await expect(service.summarise(scope, item, emit, signal)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(service.itemTask(scope, item, SUMMARY, emit, signal)).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(streamAnswer).not.toHaveBeenCalled();
   });
 
@@ -338,18 +339,69 @@ describe("summaries (FR-AST-06)", () => {
     const readItem = () => (calls++ === 0 ? new Promise<string>(() => {}) : Promise.resolve("text"));
     const { service, emit } = setup({ readItem });
     const leaving = new AbortController();
-    const stuck = service.summarise(scope, item, emit, leaving.signal);
+    const stuck = service.itemTask(scope, item, SUMMARY, emit, leaving.signal);
     leaving.abort();
     await expect(stuck).rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "read_timeout" } });
-    await service.summarise(scope, item, emit, signal);
-    await service.summarise(scope, item, emit, signal);
+    await service.itemTask(scope, item, SUMMARY, emit, signal);
+    await service.itemTask(scope, item, SUMMARY, emit, signal);
   });
 
   it("is unavailable without a way to read items, or without the AI configured", async () => {
-    await expect(setup().service.summarise(scope, item, () => {}, signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
-    await expect(setup({ gateway: null, readItem: async () => "t" }).service.summarise(scope, item, () => {}, signal)).rejects.toMatchObject({
+    await expect(setup().service.itemTask(scope, item, SUMMARY, () => {}, signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(setup({ gateway: null, readItem: async () => "t" }).service.itemTask(scope, item, SUMMARY, () => {}, signal)).rejects.toMatchObject({
       code: "UNAVAILABLE",
     });
+  });
+});
+
+describe("drafts and subtasks (FR-AST-06)", () => {
+  const item = { serverId: "atlassian", externalId: "KAN-1", url: "https://acme.atlassian.net/browse/KAN-1", title: "Login bug" };
+  const listing = (text: string) =>
+    vi.fn<LlmGateway["streamAnswer"]>(async (_input, onEvent, _signal, onUsage) => {
+      onEvent({ type: "text", text });
+      onEvent({ type: "citation", documentIndex: 0, citedText: "t" });
+      onUsage({ ...OUTCOME, estimated: false });
+      return OUTCOME;
+    });
+  const withGateway = (streamAnswer: LlmGateway["streamAnswer"]) =>
+    setup({ readItem: async () => "issue text", gateway: { streamAnswer, rewriteQuery: noRewrite, agentTurn: unusedTurn } });
+
+  it("drafts what the person asked for, streamed with its citation, and meters and audits it as a draft", async () => {
+    const { service, events, emit, streamAnswer, queries } = setup({ readItem: async () => "issue text" });
+    await service.itemTask(scope, item, { kind: "draft", request: "a reply agreeing to Friday" }, emit, signal);
+    expect(events.map((e) => e.type)).toEqual(["sources", "text", "citation", "done"]);
+    expect(streamAnswer.mock.calls[0]![0].question).toContain("a reply agreeing to Friday");
+    expect(queries.join("\n")).toMatch(/usage_ledger/);
+  });
+
+  it("sends suggested subtasks as titles to pick from, not as text", async () => {
+    const streamAnswer = listing("- Write the fix\n- Add a test\nSome remark\n- Write the fix\n");
+    const { service, events, emit } = withGateway(streamAnswer);
+    await service.itemTask(scope, item, { kind: "subtasks" }, emit, signal);
+    expect(events.map((e) => e.type)).toEqual(["sources", "subtasks", "done"]);
+    expect(events[1]).toEqual({ type: "subtasks", titles: ["Write the fix", "Add a test"] });
+  });
+
+  it("sends no subtasks from an answer that was cut short or refused", async () => {
+    const streamAnswer = vi.fn<LlmGateway["streamAnswer"]>(async (_input, onEvent) => {
+      onEvent({ type: "text", text: "- Half" });
+      return { ...OUTCOME, stopReason: "max_tokens" };
+    });
+    const { service, events, emit } = withGateway(streamAnswer);
+    await service.itemTask(scope, item, { kind: "subtasks" }, emit, signal);
+    expect(events.map((e) => e.type)).toEqual(["sources", "done"]);
+    expect(events.at(-1)).toMatchObject({ outcome: "incomplete" });
+  });
+
+  it("suggests subtasks only for a Jira issue, before reading anything", async () => {
+    const readItem = vi.fn(async () => "text");
+    const { service, emit } = setup({ readItem });
+    const page = { ...item, externalId: "confluence:123" };
+    await expect(service.itemTask(scope, page, { kind: "subtasks" }, emit, signal)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(service.itemTask(scope, { ...item, serverId: "slack" }, { kind: "subtasks" }, emit, signal)).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    expect(readItem).not.toHaveBeenCalled();
   });
 });
 

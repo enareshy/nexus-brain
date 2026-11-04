@@ -30,6 +30,13 @@ const WriteRequestSchema = z.discriminatedUnion("action", [
     description: LongText.optional(),
   }),
   z.strictObject({ action: z.literal("add_comment"), siteId: SiteId, issueKey: IssueKey, body: LongText }),
+  z.strictObject({
+    action: z.literal("create_subtask"),
+    siteId: SiteId,
+    parentKey: IssueKey,
+    summary: Summary,
+    description: LongText.optional(),
+  }),
 ]);
 const ProposeBodySchema = z.object({ serverId: ServerIdSchema, request: WriteRequestSchema });
 const ApproveBodySchema = z.object({ argsHash: z.string().regex(/^[a-f0-9]{64}$/) });

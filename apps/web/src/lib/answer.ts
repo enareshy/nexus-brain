@@ -6,6 +6,7 @@ export const AnswerEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sources"), hits: z.array(HitSchema), sources: z.array(SourceStatusSchema) }),
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("citation"), source: z.number().int().positive(), citedText: z.string() }),
+  z.object({ type: z.literal("subtasks"), titles: z.array(z.string().max(200)).max(8) }),
   z.object({
     type: z.literal("done"),
     outcome: z.enum(["answered", "no_documents", "refused", "incomplete"]),
@@ -30,6 +31,8 @@ export interface AnswerState {
   readonly grounded: boolean;
   readonly truncatedDocuments: number;
   readonly error: string | null;
+  /** Suggested subtask titles, when subtasks were asked for. */
+  readonly subtasks: readonly string[];
 }
 
 export const INITIAL_ANSWER: AnswerState = Object.freeze({
@@ -41,6 +44,7 @@ export const INITIAL_ANSWER: AnswerState = Object.freeze({
   grounded: false,
   truncatedDocuments: 0,
   error: null,
+  subtasks: [],
 });
 
 /** Pure state transition, so streaming behaviour can be tested without a network. */
@@ -62,6 +66,8 @@ export function reduceAnswer(state: AnswerState, event: AnswerEvent): AnswerStat
       if (last?.kind === "cite" && last.source === event.source) return state;
       return { ...state, parts: [...state.parts, { kind: "cite", source: event.source }] };
     }
+    case "subtasks":
+      return { ...state, subtasks: event.titles };
     case "done":
       return {
         ...state,
@@ -86,6 +92,7 @@ export function answerStateFromSaved(answer: SavedAnswer): AnswerState {
     grounded: answer.grounded,
     truncatedDocuments: answer.truncatedDocuments,
     error: null,
+    subtasks: [],
   };
 }
 

@@ -73,6 +73,15 @@ export const WriteTargetSchema = z.object({
 });
 export type WriteTarget = z.infer<typeof WriteTargetSchema>;
 
+/** Work Brain does on one search result (FR-AST-06). */
+export type ItemTask = { kind: "summary" } | { kind: "draft"; request: string } | { kind: "subtasks" };
+
+const JIRA_ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
+
+/** A Jira issue, which can take comments and subtasks. */
+export const isJiraIssue = (hit: Hit): hit is Hit & { siteId: string } =>
+  hit.serverId === "atlassian" && Boolean(hit.siteId) && JIRA_ISSUE_KEY.test(hit.externalId);
+
 export type WriteRequest =
   | {
       action: "create_issue";
@@ -83,7 +92,8 @@ export type WriteRequest =
       description?: string;
     }
   | { action: "update_issue"; siteId: string; issueKey: string; summary?: string; description?: string }
-  | { action: "add_comment"; siteId: string; issueKey: string; body: string };
+  | { action: "add_comment"; siteId: string; issueKey: string; body: string }
+  | { action: "create_subtask"; siteId: string; parentKey: string; summary: string; description?: string };
 
 export const AuditEntrySchema = z.object({
   id: z.number(),
@@ -275,8 +285,8 @@ export interface ApiClient {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<SearchResult>;
   /** Opens the answer stream and returns its body. Resolves once headers arrive. */
   openAnswerStream(question: string, signal: AbortSignal, conversationId?: string): Promise<ReadableStream<Uint8Array>>;
-  /** Opens a summary of one search result, in the same events as an answer. */
-  openSummaryStream(hit: Hit, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
+  /** Opens a summary, draft or subtask suggestions for one search result, in the same events as an answer. */
+  openItemStream(task: ItemTask, hit: Hit, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
   conversations(): Promise<ConversationSummary[]>;
   conversation(id: string): Promise<ConversationDetail>;
   deleteConversation(id: string): Promise<{ deleted: true }>;
@@ -449,10 +459,17 @@ export function createApiClient(
       }),
     openAnswerStream: (question, signal, conversationId) =>
       openStream("/answers", { q: question, ...(conversationId ? { conversationId } : {}) }, signal),
-    openSummaryStream: (hit, signal) =>
+    openItemStream: (task, hit, signal) =>
       openStream(
-        "/answers/summary",
-        { serverId: hit.serverId, externalId: hit.externalId, url: hit.url, title: hit.title, ...(hit.siteId ? { siteId: hit.siteId } : {}) },
+        `/answers/${task.kind}`,
+        {
+          serverId: hit.serverId,
+          externalId: hit.externalId,
+          url: hit.url,
+          title: hit.title,
+          ...(hit.siteId ? { siteId: hit.siteId } : {}),
+          ...(task.kind === "draft" ? { request: task.request } : {}),
+        },
         signal,
       ),
   };

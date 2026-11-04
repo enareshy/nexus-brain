@@ -12,6 +12,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   create_issue: "Create a Jira issue",
   update_issue: "Update a Jira issue",
   add_comment: "Add a Jira comment",
+  create_subtask: "Create a Jira subtask",
 };
 
 function outcomeText(proposal: Proposal): string | null {

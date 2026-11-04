@@ -154,6 +154,19 @@ describe("proposing and approving a change", () => {
     expect(createdCount()).toBe(before + 1);
   });
 
+  it("records a subtask under an issue for approval, refusing any field beyond the subtask's own (FR-AST-06)", async () => {
+    const pat = await as("patAcme");
+    const before = createdCount();
+    const subtask = { action: "create_subtask", siteId: "site", parentKey: "ENG-1", summary: "Write the fix" };
+    const res = await pat("POST", "/proposals", { serverId: SERVER, request: subtask });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data).toMatchObject({ action: "create_subtask", status: "pending" });
+    for (const extra of [{ parent: "OTHER-9" }, { issueType: "Bug" }, { projectKey: "OPS" }]) {
+      expect((await pat("POST", "/proposals", { serverId: SERVER, request: { ...subtask, ...extra } })).statusCode).toBe(400);
+    }
+    expect(createdCount()).toBe(before);
+  });
+
   it("does not write twice when an approval is replayed, in sequence or at the same time", async () => {
     const pat = await as("patAcme");
     const before = createdCount();

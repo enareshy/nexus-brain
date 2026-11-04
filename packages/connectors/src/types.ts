@@ -48,7 +48,15 @@ export type WriteRequest =
       readonly summary?: string | undefined;
       readonly description?: string | undefined;
     }
-  | { readonly action: "add_comment"; readonly siteId: string; readonly issueKey: string; readonly body: string };
+  | { readonly action: "add_comment"; readonly siteId: string; readonly issueKey: string; readonly body: string }
+  /** A subtask under an existing issue, of its project's subtask type. */
+  | {
+      readonly action: "create_subtask";
+      readonly siteId: string;
+      readonly parentKey: string;
+      readonly summary: string;
+      readonly description?: string | undefined;
+    };
 
 /** The exact tool call an approval covers. */
 export interface WriteDraft {
