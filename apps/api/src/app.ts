@@ -27,6 +27,9 @@ import { PeopleController } from "./admin/people.controller.js";
 import type { PeopleApi } from "./admin/people.service.js";
 import { MemoryController } from "./memory/memory.controller.js";
 import type { MemoryApi } from "./memory/memory.service.js";
+import { DataController } from "./data/data.controller.js";
+import type { ExportApi } from "./data/export.service.js";
+import type { RetentionApi } from "./data/retention.service.js";
 import { SkillsController } from "./skills/skills.controller.js";
 import type { SkillsApi } from "./skills/skills.service.js";
 import { UsageController } from "./usage/usage.controller.js";
@@ -36,7 +39,7 @@ import type { ConversationsApi } from "./conversations/conversations.service.js"
 import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, MEMORY, PEOPLE, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, EXPORTS, MEMORY, PEOPLE, RETENTION, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -60,6 +63,8 @@ export interface AppDeps {
   readonly memory?: MemoryApi;
   /** Without this, there is no Skills page. */
   readonly skills?: SkillsApi;
+  /** Without both, there are no retention settings or data export. */
+  readonly data?: { readonly retention: RetentionApi; readonly exports: ExportApi };
   /** Without this, there is no spending dashboard and no budgets. */
   readonly usage?: UsageApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
@@ -77,6 +82,7 @@ class AppModule {
         ...(deps.people ? [PeopleController] : []),
         ...(deps.memory ? [MemoryController] : []),
         ...(deps.skills ? [SkillsController] : []),
+        ...(deps.data ? [DataController] : []),
         ...(deps.usage ? [UsageController] : []),
         HealthController,
         MeController,
@@ -104,6 +110,12 @@ class AppModule {
         ...(deps.people ? [{ provide: PEOPLE, useValue: deps.people }] : []),
         ...(deps.memory ? [{ provide: MEMORY, useValue: deps.memory }] : []),
         ...(deps.skills ? [{ provide: SKILLS, useValue: deps.skills }] : []),
+        ...(deps.data
+          ? [
+              { provide: RETENTION, useValue: deps.data.retention },
+              { provide: EXPORTS, useValue: deps.data.exports },
+            ]
+          : []),
         ...(deps.usage ? [{ provide: USAGE, useValue: deps.usage }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },

@@ -39,6 +39,8 @@ import { ConnectionsService } from "./connections/connections.service.js";
 import { ConversationsService } from "./conversations/conversations.service.js";
 import { McpToolsService } from "./mcp/mcp.service.js";
 import { MemoryService } from "./memory/memory.service.js";
+import { ExportService } from "./data/export.service.js";
+import { RetentionService } from "./data/retention.service.js";
 import { SkillsService } from "./skills/skills.service.js";
 import { UsageService } from "./usage/usage.service.js";
 import { ProposalsService } from "./proposals/proposals.service.js";
@@ -164,6 +166,21 @@ const triggers = new TriggersService({
   mentions: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, (session) => atlassianMentionRequests(session)) },
 });
 
+const retention = new RetentionService({ pool, logger });
+const exports = new ExportService({
+  pool,
+  logger,
+  sources: {
+    conversations,
+    memories: memory,
+    skills,
+    agentRuns: agents,
+    automaticAgents: triggers,
+    changes: proposals,
+    connections,
+  },
+});
+
 const keySet = createRemoteJWKSet(jwksUrl(env));
 
 const app = await createApp({
@@ -172,6 +189,7 @@ const app = await createApp({
   people: createPeopleService({ pool, logger, connections }),
   memory,
   skills,
+  data: { retention, exports },
   usage,
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
@@ -196,6 +214,7 @@ const app = await createApp({
 
 app.getHttpAdapter().getInstance().addHook("onClose", async () => {
   triggers.stop();
+  retention.stop();
   connections.close();
   await pool.end();
   await tracing.shutdown();
@@ -203,6 +222,7 @@ app.getHttpAdapter().getInstance().addHook("onClose", async () => {
 
 await app.listen({ host: env.API_HOST, port: env.API_PORT });
 triggers.start();
+retention.start();
 logger.info(
   { host: env.API_HOST, port: env.API_PORT, mcpServers: enabled.map((e) => e.def.id), tracing: tracing.enabled },
   "API listening",

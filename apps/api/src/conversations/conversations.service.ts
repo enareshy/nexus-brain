@@ -109,6 +109,17 @@ export class ConversationsService implements ConversationsApi, ConversationStore
     }));
   }
 
+  /** Every conversation the person has, with its messages, for their data export (FR-ADM-03). */
+  async exportAll(scope: UserScope): Promise<ReadonlyArray<{ id: string; title: string; updatedAt: string; messages: readonly MessageView[] }>> {
+    const rows = await listConversations(this.deps.pool, scope, MAX_CONVERSATIONS);
+    const all = [];
+    for (const row of rows) {
+      const { title, messages } = await this.get(scope, row.id);
+      all.push({ id: row.id, title, updatedAt: row.updatedAt.toISOString(), messages });
+    }
+    return all;
+  }
+
   async get(scope: UserScope, id: string) {
     const row = await getConversation(this.deps.pool, scope, id);
     if (!row) throw new AppError("NOT_FOUND", "Conversation not found");

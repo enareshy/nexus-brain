@@ -178,6 +178,14 @@ export const creditTopups = pgTable("credit_topups", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const tenantRetention = pgTable("tenant_retention", {
+  tenantId: uuid("tenant_id").primaryKey(),
+  conversationDays: integer("conversation_days"),
+  agentRunDays: integer("agent_run_days"),
+  updatedBy: uuid("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),

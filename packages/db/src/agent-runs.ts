@@ -156,6 +156,17 @@ export function addAgentStep(
   });
 }
 
+/** Steps for many runs at once, by run, in order. */
+export async function listAgentStepsForRuns(pool: PoolLike, scope: UserScope, runIds: readonly string[]): Promise<Map<string, StoredAgentStep[]>> {
+  const byRun = new Map<string, StoredAgentStep[]>();
+  if (runIds.length === 0) return byRun;
+  const rows = await withUser(pool, scope, (db) =>
+    db.select().from(agentSteps).where(inArray(agentSteps.runId, [...runIds])).orderBy(asc(agentSteps.runId), asc(agentSteps.seq)),
+  );
+  for (const row of rows) byRun.set(row.runId, [...(byRun.get(row.runId) ?? []), row]);
+  return byRun;
+}
+
 export function listAgentSteps(pool: PoolLike, scope: UserScope, runId: string): Promise<StoredAgentStep[]> {
   return withUser(pool, scope, (db) =>
     db.select().from(agentSteps).where(eq(agentSteps.runId, runId)).orderBy(asc(agentSteps.seq)),

@@ -529,6 +529,23 @@ describe("limits (FR-AGT-06)", () => {
   });
 });
 
+describe("exporting runs (FR-ADM-03)", () => {
+  it("gives the person every run with its steps, without moving any on or marking anything read", async () => {
+    const bob = await as("bob");
+    script(call("search_documents", { query: "rotate keys" }), say("Rotate the keys monthly."));
+    const id = await startRun(bob, "how do we rotate keys");
+    await agents.settled();
+    const exported = await agents.exportAll(bobScope(), 100);
+    expect(exported.find((r) => r.id === id)).toMatchObject({
+      goal: "how do we rotate keys",
+      result: "Rotate the keys monthly.",
+      steps: [expect.objectContaining({ tool: "search_documents", outcome: "ok" })],
+    });
+    expect(await agents.exportAll({ tenantId: TENANTS.acme.id, userId: seedUser("alice").id }, 100)).toEqual([]);
+    expect(await agents.exportAll(bobScope(), 0)).toEqual([]);
+  });
+});
+
 describe("privacy", () => {
   it("hides a run from colleagues, including admins and other companies", async () => {
     const bob = await as("bob");
