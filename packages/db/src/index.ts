@@ -8,6 +8,7 @@ export * from "./conversations.js";
 export * from "./directory.js";
 export * from "./memories.js";
 export * from "./skills.js";
+export * from "./credits.js";
 export * from "./migrator.js";
 export * from "./pool.js";
 export * from "./proposals.js";

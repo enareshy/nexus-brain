@@ -14,7 +14,9 @@
     "test:cov": "vitest run --coverage",
     "test:int": "vitest run --config vitest.int.config.ts",
     "migrate": "node --env-file-if-exists=../../.env --import tsx src/cli/migrate.ts",
-    "seed": "node --env-file-if-exists=../../.env --import tsx src/cli/seed.ts"
+    "seed": "node --env-file-if-exists=../../.env --import tsx src/cli/seed.ts",
+    "set-plan": "node --env-file-if-exists=../../.env --import tsx src/cli/set-plan.ts",
+    "reconcile": "node --env-file-if-exists=../../.env --import tsx src/cli/reconcile.ts"
   },
   "dependencies": {
     "@brain/core": "workspace:*",

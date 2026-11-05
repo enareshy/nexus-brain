@@ -117,6 +117,7 @@ describe("createApiClient", () => {
       summary: { monthStart: "2026-11-01", totalUsd: 1, calls: 2, unpricedCalls: 0, byFeature: [], byPerson: [], byDay: [] },
       budget,
       companyLevel: "ok",
+      credits: null,
     };
     const trigger = { id: "t1", kind: "schedule", goal: "g", schedule: "daily", enabled: true, pausedReason: null, nextRunAt: "t" };
     const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) => ok(null));
@@ -130,6 +131,13 @@ describe("createApiClient", () => {
       [() => api.usageStatus(), { level: "warn", limit: "person", percentUsed: 85 }, "GET", "/usage/status"],
       [() => api.usageOverview(), overview, "GET", "/admin/usage"],
       [() => api.setBudget(budget), budget, "POST", "/admin/budget", budget],
+      [
+        () => api.addCredits(500),
+        { plan: "team", planLabel: "Team", monthlyCredits: 1, topUpCredits: 500, usedCredits: 0, leftCredits: 501, level: "ok", topUps: [] },
+        "POST",
+        "/admin/credits",
+        { credits: 500 },
+      ],
       [() => api.people(), [person], "GET", "/admin/people"],
       [() => api.deactivatePerson("p1"), deactivation, "POST", "/admin/people/p1/deactivate"],
       [() => api.reactivatePerson("p1"), { changed: true }, "POST", "/admin/people/p1/reactivate"],

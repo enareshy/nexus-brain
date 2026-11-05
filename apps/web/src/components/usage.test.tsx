@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApiClient, UsageOverview } from "@/lib/api";
 import { BudgetBanner } from "./BudgetBanner";
 import { BudgetForm } from "./BudgetForm";
+import { CreditsPanel } from "./CreditsPanel";
 import { UsageDashboard } from "./UsageDashboard";
 
 const api = { usageStatus: vi.fn<ApiClient["usageStatus"]>() };
@@ -30,6 +31,7 @@ const overview = (over: Partial<UsageOverview> = {}): UsageOverview => ({
   },
   budget: { monthlyLimitUsd: 50, perPersonLimitUsd: null, warnAtPercent: 80 },
   companyLevel: "warn",
+  credits: null,
   ...over,
 });
 
@@ -116,5 +118,56 @@ describe("BudgetBanner", () => {
     api.usageStatus.mockResolvedValueOnce({ level: "stop", limit: "company", percentUsed: null });
     render(<BudgetBanner />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/company's AI budget for this month is used up/);
+  });
+});
+
+describe("credits (FR-MET-02)", () => {
+  const credits = {
+    plan: "team",
+    planLabel: "Team",
+    monthlyCredits: 20_000,
+    topUpCredits: 1_000,
+    usedCredits: 18_000,
+    leftCredits: 3_000,
+    level: "warn" as const,
+    topUps: [{ id: "t1", credits: 1_000, addedByEmail: "pat@acme.example", createdAt: "2026-11-03T10:00:00Z" }],
+  };
+
+  it("shows what is left of the plan and top-ups, and adds a whole number of credits", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(async () => true);
+    render(<CreditsPanel credits={credits} isAdding={false} onAdd={onAdd} />);
+    expect(screen.getByText("Team plan")).toBeInTheDocument();
+    expect(screen.getByText(/^3,000/)).toHaveTextContent("3,000 of 21,000 left");
+    expect(screen.getByRole("meter", { name: "Credits used this month" })).toHaveAttribute("aria-valuenow", "86");
+    expect(screen.getByText("Nov 3: 1,000 credits added by pat@acme.example")).toBeInTheDocument();
+    const add = screen.getByRole("button", { name: "Add credits" });
+    expect(add).toBeDisabled();
+    await user.type(screen.getByLabelText("Add credits for this month"), "5x00");
+    expect(screen.getByLabelText("Add credits for this month")).toHaveValue("500");
+    await user.click(add);
+    expect(onAdd).toHaveBeenCalledWith(500);
+    expect(screen.getByLabelText("Add credits for this month")).toHaveValue("");
+  });
+
+  it("refuses more than the top-up limit, and explains a company with no plan", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<CreditsPanel credits={credits} isAdding={false} onAdd={vi.fn()} />);
+    await user.type(screen.getByLabelText("Add credits for this month"), "1000001");
+    expect(screen.getByRole("button", { name: "Add credits" })).toBeDisabled();
+    unmount();
+    render(<CreditsPanel credits={null} isAdding={false} onAdd={vi.fn()} />);
+    expect(screen.getByText(/no plan yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("tells people agents are paused, and that answers still work, when credits run out", async () => {
+    api.usageStatus.mockResolvedValueOnce({ level: "stop", limit: "credits", percentUsed: null });
+    const { unmount } = render(<BudgetBanner />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("agents are paused. Answers still work.");
+    unmount();
+    api.usageStatus.mockResolvedValueOnce({ level: "warn", limit: "credits", percentUsed: null });
+    render(<BudgetBanner />);
+    expect(await screen.findByRole("status")).toHaveTextContent(/credits for this month are nearly used up/);
   });
 });
