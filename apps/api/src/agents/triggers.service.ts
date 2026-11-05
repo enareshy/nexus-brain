@@ -19,6 +19,7 @@ import {
 } from "@brain/db";
 import type { Logger } from "@brain/telemetry";
 import { randomUUID } from "node:crypto";
+import type { AiSettingsSource } from "../admin/ai-settings.service.js";
 import type { AgentNotification, AgentsApi } from "./agents.service.js";
 
 export const SCHEDULES = { hourly: 60, daily: 1_440, weekly: 10_080 } as const;
@@ -34,6 +35,7 @@ const TICK_MS = 60_000;
 /** One person's slow service must not hold up everyone else's triggers. */
 const JIRA_CHECK_TIMEOUT_MS = 30_000;
 const RETRY_AFTER_DAILY_LIMIT_MINUTES = 60;
+const TURNED_OFF: ReadonlySet<string> = new Set(["agents_off", "automatic_off"]);
 const NOTIFICATION_LIST_LIMIT = 30;
 const MAX_TITLE_CHARS = 100;
 const ONE_OF_KIND: Record<Exclude<StoredTrigger["kind"], "schedule">, string> = {
@@ -101,6 +103,8 @@ export interface TriggersDeps {
   /** The person's own @Brain comments, read with their own connection. */
   readonly mentions: { list(scope: UserScope): Promise<readonly MentionRequest[]> };
   readonly logger: Pick<Logger, "error">;
+  /** Whether the company allows automatic agents. Without one, it does. */
+  readonly aiSettings?: AiSettingsSource;
 }
 
 function withinTime<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -232,6 +236,9 @@ export class TriggersService implements TriggersApi {
   private async fire(scope: UserScope, id: string): Promise<void> {
     const trigger = await claimTrigger(this.deps.pool, scope, id, (row) => row.intervalMinutes);
     if (!trigger) return;
+    // Turned off by an admin: skip this time without reading any service. The claim set the next check.
+    const settings = await this.deps.aiSettings?.get(scope.tenantId);
+    if (settings && (!settings.agentsEnabled || !settings.automaticAgentsEnabled)) return;
     const goal = this.deps.box.open(trigger.goalCiphertext, this.goalContext(scope, id));
     if (trigger.kind === "schedule") {
       await this.startRun(scope, trigger, goal, goal);
@@ -246,6 +253,8 @@ export class TriggersService implements TriggersApi {
       await this.deps.agents.start(scope, goal, { triggerId: trigger.id });
       return true;
     } catch (err) {
+      // Turned off by an admin in the meantime: nothing to report, as the person can see it.
+      if (isAppError(err) && err.code === "FORBIDDEN" && TURNED_OFF.has(String(err.details?.limit))) return false;
       if (!isAppError(err) || (err.code !== "RATE_LIMITED" && err.code !== "BUDGET_EXCEEDED")) throw err;
       // An exhausted budget, like the daily limit, is reported once a day rather than retried soon.
       if (err.details?.limit === "triggered" || err.code === "BUDGET_EXCEEDED") {

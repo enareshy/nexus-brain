@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { createGateway, type AnswerEvent, type MessagesClient } from "./gateway.js";
-import { estimateCostUsd, MODELS } from "./models.js";
+import { estimateCostUsd, MODELS, TIERS } from "./models.js";
 
 const FINAL = {
   model: "claude-opus-5-5",
@@ -91,6 +91,15 @@ describe("streamAnswer", () => {
     });
     expect(content.at(-1)).toEqual({ type: "text", text: input.question });
     expect(stream.mock.calls[0]![1]).toMatchObject({ signal });
+  });
+
+  it("uses the company's chosen model, without refusal fallbacks that could pick another one", async () => {
+    const { client, stream } = fakeMessages([]);
+    await createGateway(client).streamAnswer({ ...input, modelChoice: "standard" }, () => {}, signal, () => {});
+    const params = stream.mock.calls[0]![0] as Record<string, unknown>;
+    expect(params.model).toBe(TIERS.standard);
+    expect(params.fallbacks).toBeUndefined();
+    expect(params.betas).toBeUndefined();
   });
 
   it("asks for no prompt caching, since its system prompt is too short to cache and everything after it changes", async () => {

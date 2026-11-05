@@ -223,7 +223,8 @@ describe("withAnswerCache", () => {
     await ask(gateway, { ...base, documents: [] });
     await ask(gateway, { ...base, question: "How often? " });
     await ask(gateway, { ...base, history: [{ role: "user", text: "earlier" }] });
-    expect(inner.calls()).toBe(6);
+    await ask(gateway, { ...base, modelChoice: "standard" });
+    expect(inner.calls()).toBe(7);
   });
 
   it("does not cache without a scope, an unfinished answer, an aborted one, or a very large one", async () => {

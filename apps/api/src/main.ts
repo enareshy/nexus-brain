@@ -25,6 +25,7 @@ import {
 } from "@brain/mcp-client";
 import { createLogger, startTracing } from "@brain/telemetry";
 import { createRemoteJWKSet } from "jose";
+import { AiSettingsService } from "./admin/ai-settings.service.js";
 import { createApp } from "./app.js";
 import { createJwtVerifier } from "./auth/jwt-verifier.js";
 import { createDbUserDirectory } from "./auth/user-directory.js";
@@ -124,7 +125,9 @@ const conversations = new ConversationsService({ pool, box });
 const memory = new MemoryService({ pool, box, logger });
 const skills = new SkillsService({ pool, box, logger });
 const usage = new UsageService({ pool });
+const aiSettings = new AiSettingsService({ pool });
 const answers = new AnswersService({
+  aiSettings,
   conversations,
   memories: memory,
   budget: usage,
@@ -155,6 +158,7 @@ const agents: AgentsService = new AgentsService({
   memories: memory,
   budget: usage,
   skills,
+  aiSettings,
   notify: (scope, notification) => triggers.notify(scope, notification),
 });
 const triggers = new TriggersService({
@@ -162,6 +166,7 @@ const triggers = new TriggersService({
   box,
   agents,
   logger,
+  aiSettings,
   assignments: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, atlassianAssignedIssues) },
   mentions: { list: (scope) => connections.readWithSession(scope, ATLASSIAN_SERVER.id, (session) => atlassianMentionRequests(session)) },
 });
@@ -191,6 +196,7 @@ const app = await createApp({
   skills,
   data: { retention, exports },
   usage,
+  aiSettings,
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
     tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),

@@ -187,6 +187,16 @@ export const tenantRetention = pgTable("tenant_retention", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const tenantAiSettings = pgTable("tenant_ai_settings", {
+  tenantId: uuid("tenant_id").primaryKey(),
+  modelChoice: text("model_choice").notNull().$type<"premium" | "standard">(),
+  agentsEnabled: boolean("agents_enabled").notNull(),
+  automaticAgentsEnabled: boolean("automatic_agents_enabled").notNull(),
+  automaticRunsPerDay: integer("automatic_runs_per_day").notNull(),
+  updatedBy: uuid("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),

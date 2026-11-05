@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AnswerEvent, AnswerOutcome, LlmGateway } from "./gateway.js";
-import { MODELS } from "./models.js";
+import { modelFor } from "./models.js";
 
 export interface AnswerCacheOptions {
   readonly ttlMs: number;
@@ -29,7 +29,7 @@ function keyFor(input: Parameters<LlmGateway["streamAnswer"]>[0]): string | null
     .update(
       JSON.stringify({
         scope: input.cacheScope,
-        model: MODELS.answer,
+        model: modelFor("answer", input.modelChoice),
         question: input.question,
         documents: input.documents,
         history: input.history ?? [],

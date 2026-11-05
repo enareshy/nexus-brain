@@ -30,6 +30,8 @@ function AgentsPage() {
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [skillId, setSkillId] = useState("");
   const [skillsFailed, setSkillsFailed] = useState(false);
+  /** Only a company that turned agents off blocks starting one. */
+  const [agentsOff, setAgentsOff] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,14 @@ function AgentsPage() {
   useEffect(() => {
     void loadSkills();
   }, [loadSkills]);
+
+  // Optional too: if the settings cannot be read, the server still refuses a run when agents are off.
+  useEffect(() => {
+    api.aiSettings().then(
+      (settings) => setAgentsOff(!settings.agentsEnabled),
+      () => setAgentsOff(false),
+    );
+  }, [api]);
 
   // Viewing a run is also what moves it on after a decision, so this keeps asking until it ends.
   useEffect(() => {
@@ -153,6 +163,12 @@ function AgentsPage() {
         Give an agent a task. It reads your connected tools as you, and asks you before it changes anything.
       </p>
 
+      {agentsOff && (
+        <p role="status" className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          An admin has turned agents off for your company, so new agents cannot start. Your earlier runs are still here.
+        </p>
+      )}
+
       <form onSubmit={(e) => void handleStart(e)} className="mt-8">
         <label htmlFor="agent-goal" className="text-sm font-medium">
           What should the agent do?
@@ -178,7 +194,7 @@ function AgentsPage() {
         )}
         <button
           type="submit"
-          disabled={isStarting || goal.trim().length === 0}
+          disabled={isStarting || agentsOff || goal.trim().length === 0}
           className="mt-3 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:translate-y-px disabled:opacity-50"
         >
           {isStarting ? "Starting…" : "Start agent"}

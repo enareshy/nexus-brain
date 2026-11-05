@@ -39,7 +39,9 @@ import type { ConversationsApi } from "./conversations/conversations.service.js"
 import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, EXPORTS, MEMORY, PEOPLE, RETENTION, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AiSettingsController } from "./admin/ai-settings.controller.js";
+import type { AiSettingsApi } from "./admin/ai-settings.service.js";
+import { AGENTS, AI_SETTINGS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, EXPORTS, MEMORY, PEOPLE, RETENTION, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -67,6 +69,8 @@ export interface AppDeps {
   readonly data?: { readonly retention: RetentionApi; readonly exports: ExportApi };
   /** Without this, there is no spending dashboard and no budgets. */
   readonly usage?: UsageApi;
+  /** Without this, there are no company AI settings, and the defaults apply. */
+  readonly aiSettings?: AiSettingsApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
   readonly webAppUrl: string;
 }
@@ -84,6 +88,7 @@ class AppModule {
         ...(deps.skills ? [SkillsController] : []),
         ...(deps.data ? [DataController] : []),
         ...(deps.usage ? [UsageController] : []),
+        ...(deps.aiSettings ? [AiSettingsController] : []),
         HealthController,
         MeController,
         ConnectionsController,
@@ -117,6 +122,7 @@ class AppModule {
             ]
           : []),
         ...(deps.usage ? [{ provide: USAGE, useValue: deps.usage }] : []),
+        ...(deps.aiSettings ? [{ provide: AI_SETTINGS, useValue: deps.aiSettings }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

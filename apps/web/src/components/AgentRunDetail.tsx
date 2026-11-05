@@ -25,6 +25,8 @@ const STOP_REASONS: Readonly<Record<string, string>> = {
   cost_limit: "Stopped because it reached its spending limit.",
   budget_limit: "Stopped because this month's AI budget is used up. An admin can raise it.",
   budget_unavailable: "Stopped because the budget could not be checked. Try again shortly.",
+  agents_off: "Stopped because an admin turned agents off for your company.",
+  settings_unavailable: "Stopped because your company's AI settings could not be checked. Try again shortly.",
   time_limit: "Stopped because it ran out of time.",
   model_unavailable: "Stopped because the AI service could not be reached. Nothing further was done.",
   refused: "The AI declined to continue with this.",

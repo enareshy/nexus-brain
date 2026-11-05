@@ -18,6 +18,13 @@ export const MODELS = Object.freeze({
   agent: TIERS[TASK_TIERS.agent],
 });
 
+/** Which model a company lets answers and agents use (FR-LLM-07). Search wording always uses the fast one. */
+export type ModelChoice = "premium" | "standard";
+
+export function modelFor(task: "answer" | "agent", choice: ModelChoice = "premium"): string {
+  return choice === "standard" ? TIERS.standard : MODELS[task];
+}
+
 export interface ModelPrice {
   readonly inputPerMTok: number;
   readonly outputPerMTok: number;

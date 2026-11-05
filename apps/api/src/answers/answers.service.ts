@@ -1,8 +1,9 @@
 import type { RankedHit, SourceStatus } from "@brain/connectors";
 import { AppError, type SecretBox } from "@brain/core";
 import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/db";
-import type { AnswerDocument, AnswerOutcome, LlmGateway, UsageReport } from "@brain/llm-gateway";
+import type { AnswerDocument, AnswerOutcome, LlmGateway, ModelChoice, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
+import type { AiSettingsSource } from "../admin/ai-settings.service.js";
 import type { DocumentSource, ItemReference } from "../connections/connections.service.js";
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
@@ -76,6 +77,8 @@ export interface AnswersDeps {
   readonly budget?: BudgetGuard;
   /** Reads one item with the person's own access, for summaries, drafts and subtasks. Without one, there are none. */
   readonly items?: { readItem(scope: UserScope, item: ItemReference): Promise<string | null> };
+  /** The company's choice of model. Without one, the most capable model. */
+  readonly aiSettings?: AiSettingsSource;
 }
 
 function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
@@ -111,6 +114,12 @@ export class AnswersService implements AnswersApi {
   private readonly inFlight = new Map<string, number>();
 
   constructor(private readonly deps: AnswersDeps) {}
+
+  /** Read for every answer, so an admin's change applies to the next one. */
+  private async modelChoice(scope: UserScope): Promise<{ modelChoice?: ModelChoice }> {
+    const settings = await this.deps.aiSettings?.get(scope.tenantId);
+    return settings ? { modelChoice: settings.modelChoice } : {};
+  }
 
   async answer(
     scope: UserScope,
@@ -150,6 +159,7 @@ export class AnswersService implements AnswersApi {
       let usage: UsageReport | null = null;
       let outcome: AnswerOutcome | null = null;
       const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
+      const modelChoice = await this.modelChoice(scope);
       try {
         outcome = await gateway.streamAnswer(
           {
@@ -157,6 +167,7 @@ export class AnswersService implements AnswersApi {
             documents: [{ title, text: text.slice(0, MAX_DOCUMENT_CHARS) }],
             cacheScope: scope.tenantId,
             ...(memories.length ? { memories } : {}),
+            ...modelChoice,
           },
           (event) => {
             if (event.type === "text") {
@@ -258,6 +269,7 @@ export class AnswersService implements AnswersApi {
     });
 
     const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
+    const modelChoice = await this.modelChoice(scope);
     let citationCount = 0;
     let parts: readonly AnswerPart[] = [];
     let usage: UsageReport | null = null;
@@ -271,6 +283,7 @@ export class AnswersService implements AnswersApi {
           cacheScope: scope.tenantId,
           ...(conversation?.history.length ? { history: conversation.history } : {}),
           ...(memories.length ? { memories } : {}),
+          ...modelChoice,
         },
         (event) => {
           if (event.type === "text") {

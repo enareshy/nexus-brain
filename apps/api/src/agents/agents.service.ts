@@ -14,12 +14,15 @@ import {
   markRunNotificationsRead,
   saveAgentRun,
   type PoolLike,
+  MAX_AUTOMATIC_RUNS_PER_DAY,
+  type AiSettings,
   type StoredAgentRun,
   type UserScope,
 } from "@brain/db";
-import type { AgentMessage, AgentTool, AgentToolCall, AgentTurn, LlmGateway, UsageReport } from "@brain/llm-gateway";
+import type { AgentMessage, AgentTool, AgentToolCall, AgentTurn, LlmGateway, ModelChoice, UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import { createHash, randomUUID } from "node:crypto";
+import type { AiSettingsSource } from "../admin/ai-settings.service.js";
 import type { DocumentSource } from "../connections/connections.service.js";
 import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.js";
 import type { MemorySource } from "../memory/memory.service.js";
@@ -34,8 +37,8 @@ const RUN_DEADLINE_MS = 24 * 60 * 60 * 1000;
 // Per person, to bound spending.
 const MAX_WORKING_RUNS = 2;
 const MAX_RUNS_PER_HOUR = 20;
-/** Automatic runs spend money with nobody watching, so they have a tighter limit of their own. */
-const MAX_TRIGGERED_RUNS_PER_DAY = 10;
+/** Automatic runs spend money with nobody watching, so they have a tighter limit; admins may lower it. */
+const MAX_TRIGGERED_RUNS_PER_DAY = MAX_AUTOMATIC_RUNS_PER_DAY;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const LIST_LIMIT = 50;
@@ -127,6 +130,19 @@ export interface AgentsDeps {
   readonly budget?: BudgetGuard;
   /** Reads a skill to start a run with. Without one, runs cannot use skills. */
   readonly skills?: { forRun(scope: UserScope, id: string, version: string): Promise<SkillForRun> };
+  /** The company's AI settings, read before a run starts and before every step. Without one, the defaults. */
+  readonly aiSettings?: AiSettingsSource;
+}
+
+/** Why the company's settings stop a run from starting, or null when they allow it. */
+function settingsRefusal(settings: AiSettings | undefined, automatic: boolean): AppError | null {
+  if (settings && !settings.agentsEnabled) {
+    return new AppError("FORBIDDEN", "Your company has turned agents off", { limit: "agents_off" });
+  }
+  if (settings && automatic && !settings.automaticAgentsEnabled) {
+    return new AppError("FORBIDDEN", "Your company has turned automatic agents off", { limit: "automatic_off" });
+  }
+  return null;
 }
 
 const ESCAPES: Readonly<Record<string, string>> = { "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -203,6 +219,9 @@ export class AgentsService implements AgentsApi {
     if (options.skill && !skills) throw new AppError("UNAVAILABLE", "Skills are not available here");
     // Copied now, so editing or deleting the skill later cannot change a run already going.
     const skill = options.skill && skills ? await skills.forRun(scope, options.skill.id, options.skill.version) : null;
+    const settings = await this.deps.aiSettings?.get(scope.tenantId);
+    const refusal = settingsRefusal(settings, Boolean(options.triggerId));
+    if (refusal) throw refusal;
     await this.deps.budget?.require(scope, "metered");
     const id = randomUUID();
     const state: RunState = { messages: [{ role: "user", content: firstMessage(goal, skill) }], ...(skill ? { tools: skill.tools } : {}) };
@@ -220,7 +239,7 @@ export class AgentsService implements AgentsApi {
         maxWorking: MAX_WORKING_RUNS,
         maxRecent: MAX_RUNS_PER_HOUR,
         recentSince: new Date(Date.now() - HOUR_MS),
-        maxTriggeredRecent: MAX_TRIGGERED_RUNS_PER_DAY,
+        maxTriggeredRecent: Math.min(settings?.automaticRunsPerDay ?? MAX_TRIGGERED_RUNS_PER_DAY, MAX_TRIGGERED_RUNS_PER_DAY),
         maxTriggeredWorking: MAX_WORKING_RUNS - 1,
         triggeredSince: new Date(Date.now() - DAY_MS),
       },
@@ -370,6 +389,10 @@ export class AgentsService implements AgentsApi {
     }
 
     for (;;) {
+      // Before anything else, so turning agents off stops even a tool call saved before a restart. A model
+      // call already under way when they are turned off still finishes, but its tool call never runs.
+      const allowed = await this.stepAllowed(scope, id);
+      if (typeof allowed === "string") return fail(allowed);
       // A tool call saved before a restart runs first, without asking the model again.
       if (state.pendingCall) {
         const call = state.pendingCall;
@@ -404,7 +427,7 @@ export class AgentsService implements AgentsApi {
       let turn;
       try {
         const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
-        turn = await modelTurnWithRetries(gateway, state.messages, toolsFor(state), memories, (usage) => {
+        turn = await modelTurnWithRetries(gateway, state.messages, toolsFor(state), memories, allowed, (usage) => {
           cost += usage.costUsd ?? 0;
           void this.meter(scope, usage);
         });
@@ -433,6 +456,21 @@ export class AgentsService implements AgentsApi {
         if (claimed.triggerId) await tell("run_finished", `run:${id}:done`);
       }
       return;
+    }
+  }
+
+  /**
+   * Whether the company still allows agents, and with which model. A check that cannot run stops the
+   * run, as with the budget: carrying on could go against what an admin just turned off.
+   */
+  private async stepAllowed(scope: UserScope, runId: string): Promise<{ modelChoice?: ModelChoice } | "agents_off" | "settings_unavailable"> {
+    if (!this.deps.aiSettings) return {};
+    try {
+      const settings = await this.deps.aiSettings.get(scope.tenantId);
+      return settings.agentsEnabled ? { modelChoice: settings.modelChoice } : "agents_off";
+    } catch (err) {
+      this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, runId, tenant_id: scope.tenantId }, "AI settings check failed");
+      return "settings_unavailable";
     }
   }
 
@@ -564,12 +602,13 @@ async function modelTurnWithRetries(
   messages: readonly AgentMessage[],
   tools: readonly AgentTool[],
   memories: readonly string[],
+  choice: { modelChoice?: ModelChoice },
   onUsage: (usage: UsageReport) => void,
 ): Promise<AgentTurn> {
   const signal = AbortSignal.timeout(MODEL_TIME_LIMIT_MS);
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await gateway.agentTurn({ messages, tools, ...(memories.length ? { memories } : {}) }, signal, onUsage);
+      return await gateway.agentTurn({ messages, tools, ...(memories.length ? { memories } : {}), ...choice }, signal, onUsage);
     } catch (err) {
       const reason = isAppError(err) ? String(err.details?.reason ?? "") : "";
       if (attempt >= MAX_TURN_ATTEMPTS || !reason.startsWith("provider_connection")) throw err;

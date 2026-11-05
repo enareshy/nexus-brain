@@ -17,4 +17,5 @@ export const SKILLS = Symbol("SKILLS");
 export const RETENTION = Symbol("RETENTION");
 export const EXPORTS = Symbol("EXPORTS");
 export const USAGE = Symbol("USAGE");
+export const AI_SETTINGS = Symbol("AI_SETTINGS");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");

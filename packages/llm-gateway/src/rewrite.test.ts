@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { createGateway, type MessagesClient, type UsageReport } from "./gateway.js";
-import { MODELS } from "./models.js";
+import { MODELS, TIERS } from "./models.js";
 
 const signal = new AbortController().signal;
 
@@ -39,6 +39,13 @@ describe("agentTurn", () => {
     expect((params.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["search_documents"]);
     expect(options.maxRetries).toBe(3);
     expect(JSON.stringify(params.system)).toContain("<untrusted>");
+  });
+
+  it("uses the company's chosen model", async () => {
+    const { gateway, stream } = gatewayReplying(reply("ok", { model: TIERS.standard }));
+    await gateway.agentTurn({ messages, tools, modelChoice: "standard" }, signal, () => {});
+    await gateway.agentTurn({ messages, tools, modelChoice: "premium" }, signal, () => {});
+    expect(stream.mock.calls.map(([params]) => params.model)).toEqual([TIERS.standard, MODELS.agent]);
   });
 
   it("caches the instructions and tools for every run, and each run's conversation as it grows", async () => {

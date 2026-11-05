@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AppError } from "@brain/core";
-import { estimateCostUsd, MODELS, type TokenCounts } from "./models.js";
+import { estimateCostUsd, modelFor, MODELS, type ModelChoice, type TokenCounts } from "./models.js";
 
 const MAX_OUTPUT_TOKENS = 8_000;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -132,6 +132,8 @@ export interface LlmGateway {
       readonly cacheScope?: string;
       /** What the person asked Brain to remember about them, in their own words (FR-AST-07). */
       readonly memories?: readonly string[];
+      /** The company's choice of model. Without it, the most capable one. */
+      readonly modelChoice?: ModelChoice;
     },
     onEvent: (event: AnswerEvent) => void,
     signal: AbortSignal,
@@ -144,6 +146,8 @@ export interface LlmGateway {
       readonly tools: readonly AgentTool[];
       /** Read fresh for each turn and never stored with the run, so a deleted memory stops at once. */
       readonly memories?: readonly string[];
+      /** The company's choice of model, read for each turn. Without it, the most capable one. */
+      readonly modelChoice?: ModelChoice;
     },
     signal: AbortSignal,
     onUsage: (usage: UsageReport) => void,
@@ -175,13 +179,15 @@ export function createGateway(messages: MessagesClient): LlmGateway {
         throw new AppError("VALIDATION", "An answer needs at least one document");
       }
       let seen = null as (TokenCounts & { model: string }) | null;
+      const model = modelFor("answer", input.modelChoice);
       try {
         const stream = messages.stream(
           {
-            model: MODELS.answer,
+            model,
             max_tokens: MAX_OUTPUT_TOKENS,
-            betas: [FALLBACK_BETA],
-            fallbacks: "default",
+            // Refusal fallbacks are for the most capable model, and a fallback could pick a model
+            // the company did not choose, so other models simply stop on a refusal.
+            ...(model === MODELS.answer ? { betas: [FALLBACK_BETA], fallbacks: "default" as const } : {}),
             output_config: { effort: "low" },
             system: ANSWER_SYSTEM,
             messages: [
@@ -239,7 +245,7 @@ export function createGateway(messages: MessagesClient): LlmGateway {
         onUsage({ ...tokens, model: message.model, costUsd, estimated: false });
         return { ...tokens, model: message.model, stopReason: message.stop_reason, costUsd };
       } catch (err) {
-        const partial = seen ?? (err instanceof Anthropic.APIUserAbortError ? estimateFromInput(input) : null);
+        const partial = seen ?? (err instanceof Anthropic.APIUserAbortError ? estimateFromInput(input, model) : null);
         if (partial) {
           onUsage({ ...partial, costUsd: estimateCostUsd(partial.model, partial), estimated: true });
         }
@@ -248,11 +254,12 @@ export function createGateway(messages: MessagesClient): LlmGateway {
     },
 
     async agentTurn(input, signal, onUsage) {
+      const model = modelFor("agent", input.modelChoice);
       try {
         // Streamed even though only the final message is used, as is advised for long requests.
         const stream = messages.stream(
           {
-            model: MODELS.agent,
+            model,
             max_tokens: AGENT_MAX_TOKENS,
             output_config: { effort: "low" },
             system: AGENT_SYSTEM_BLOCKS,
@@ -287,7 +294,7 @@ export function createGateway(messages: MessagesClient): LlmGateway {
         // A lost connection may still have been charged, so the run's cost limit counts an estimate.
         if (err instanceof Anthropic.APIUserAbortError || err instanceof Anthropic.APIConnectionError) {
           const tokens = estimateTokens(JSON.stringify(input.messages).length + AGENT_SYSTEM.length);
-          onUsage({ ...tokens, model: MODELS.agent, costUsd: estimateCostUsd(MODELS.agent, tokens), estimated: true });
+          onUsage({ ...tokens, model, costUsd: estimateCostUsd(model, tokens), estimated: true });
         }
         throw toAppError(err);
       }
@@ -394,12 +401,12 @@ function estimateTokens(chars: number): TokenCounts {
   };
 }
 
-function estimateFromInput(input: {
-  readonly question: string;
-  readonly documents: readonly AnswerDocument[];
-}): TokenCounts & { model: string } {
+function estimateFromInput(
+  input: { readonly question: string; readonly documents: readonly AnswerDocument[] },
+  model: string,
+): TokenCounts & { model: string } {
   const chars = input.question.length + input.documents.reduce((sum, doc) => sum + doc.text.length, 0);
-  return { model: MODELS.answer, ...estimateTokens(chars) };
+  return { model, ...estimateTokens(chars) };
 }
 
 /** fetch wraps the real failure in a TypeError, so this looks a few levels down for its code. */

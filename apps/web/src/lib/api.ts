@@ -249,6 +249,15 @@ export type Credits = z.infer<typeof CreditsSchema>;
 export const RetentionSchema = z.object({ conversationDays: z.number().nullable(), agentRunDays: z.number().nullable() });
 export type Retention = z.infer<typeof RetentionSchema>;
 
+export const MAX_AUTOMATIC_RUNS_PER_DAY = 10;
+export const AiSettingsSchema = z.object({
+  modelChoice: z.enum(["premium", "standard"]),
+  agentsEnabled: z.boolean(),
+  automaticAgentsEnabled: z.boolean(),
+  automaticRunsPerDay: z.number().int().min(1).max(MAX_AUTOMATIC_RUNS_PER_DAY),
+});
+export type AiSettings = z.infer<typeof AiSettingsSchema>;
+
 export const UsageOverviewSchema = z.object({
   summary: z.object({
     monthStart: z.string(),
@@ -354,6 +363,9 @@ export interface ApiClient {
   addCredits(credits: number): Promise<Credits>;
   retention(): Promise<Retention>;
   setRetention(retention: Retention): Promise<Retention>;
+  /** Everyone may read them; only admins may change them. */
+  aiSettings(): Promise<AiSettings>;
+  setAiSettings(settings: AiSettings): Promise<AiSettings>;
   /** Everything Brain holds for the signed-in person, as plain data. */
   exportMyData(): Promise<unknown>;
   people(): Promise<Person[]>;
@@ -474,6 +486,8 @@ export function createApiClient(
     addCredits: (credits) => request(CreditsSchema, "/admin/credits", { method: "POST", body: JSON.stringify({ credits }) }),
     retention: () => request(RetentionSchema, "/data/retention"),
     setRetention: (retention) => request(RetentionSchema, "/admin/retention", { method: "POST", body: JSON.stringify(retention) }),
+    aiSettings: () => request(AiSettingsSchema, "/ai-settings"),
+    setAiSettings: (settings) => request(AiSettingsSchema, "/admin/ai-settings", { method: "POST", body: JSON.stringify(settings) }),
     exportMyData: () => request(z.record(z.unknown()), "/me/export"),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
