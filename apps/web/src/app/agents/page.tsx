@@ -6,7 +6,8 @@ import { AgentTriggers } from "@/components/AgentTriggers";
 import { AgentNotifications } from "@/components/AgentNotifications";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
-import { describeError, type AgentRun, type AgentRunSummary, type Proposal } from "@/lib/api";
+import { SkillPicker } from "@/components/SkillPicker";
+import { describeError, type AgentRun, type AgentRunSummary, type Proposal, type Skill } from "@/lib/api";
 
 const POLL_MS = 2_000;
 const MAX_GOAL = 2_000;
@@ -26,6 +27,9 @@ function AgentsPage() {
   const [run, setRun] = useState<AgentRun | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [goal, setGoal] = useState("");
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [skillId, setSkillId] = useState("");
+  const [skillsFailed, setSkillsFailed] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +61,22 @@ function AgentsPage() {
   useEffect(() => {
     void loadRuns();
   }, [loadRuns]);
+
+  const loadSkills = useCallback(async () => {
+    try {
+      setSkills(await api.skills());
+    } catch {
+      setSkills(null);
+      setSkillsFailed(true);
+      return;
+    }
+    setSkillsFailed(false);
+  }, [api]);
+
+  // Optional: without skills the page still starts runs.
+  useEffect(() => {
+    void loadSkills();
+  }, [loadSkills]);
 
   // Viewing a run is also what moves it on after a decision, so this keeps asking until it ends.
   useEffect(() => {
@@ -94,12 +114,17 @@ function AgentsPage() {
     setIsStarting(true);
     setError(null);
     try {
-      const started = await api.startAgentRun(goal.trim());
+      // The version shown is sent, so a skill changed since is refused rather than followed unseen.
+      const skill = skills?.find((item) => item.id === skillId);
+      const started = await api.startAgentRun(goal.trim(), skill);
       setRuns((current) => [started, ...(current ?? [])]);
       setGoal("");
+      setSkillId("");
       select(started.id);
     } catch (e) {
       setError(describeError(e));
+      // A changed skill is shown again as it is now, for the person to read before trying again.
+      if (skillId) await loadSkills();
     } finally {
       setIsStarting(false);
     }
@@ -141,6 +166,16 @@ function AgentsPage() {
           placeholder="Find the open login bugs and draft a comment summarising them"
           className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-brand dark:border-slate-700 dark:bg-slate-900"
         />
+        {skillsFailed ? (
+          <p className="mt-3 text-sm text-slate-500">
+            Your skills could not be loaded.{" "}
+            <button type="button" onClick={() => void loadSkills()} className="font-medium text-brand underline underline-offset-2">
+              Try again
+            </button>
+          </p>
+        ) : (
+          skills && <SkillPicker skills={skills} selectedId={skillId} onSelect={setSkillId} />
+        )}
         <button
           type="submit"
           disabled={isStarting || goal.trim().length === 0}

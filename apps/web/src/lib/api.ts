@@ -204,6 +204,20 @@ export const MemorySchema = z.object({
 });
 export type Memory = z.infer<typeof MemorySchema>;
 
+export const SkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  instructions: z.string(),
+  tools: z.array(z.string()),
+  shared: z.boolean(),
+  mine: z.boolean(),
+  ownerName: z.string(),
+  readable: z.boolean(),
+  updatedAt: z.string(),
+});
+export type Skill = z.infer<typeof SkillSchema>;
+export type SkillInput = Pick<Skill, "name" | "instructions" | "tools" | "shared">;
+
 const BudgetLevelSchema = z.enum(["ok", "warn", "stop"]);
 
 export const BudgetStatusSchema = z.object({
@@ -301,6 +315,10 @@ export interface ApiClient {
   updateMemory(id: string, text: string): Promise<Memory>;
   deleteMemory(id: string): Promise<{ deleted: true }>;
   deleteAllMemories(): Promise<{ deleted: number }>;
+  skills(): Promise<Skill[]>;
+  addSkill(skill: SkillInput): Promise<Skill>;
+  updateSkill(id: string, skill: SkillInput): Promise<Skill>;
+  deleteSkill(id: string): Promise<{ deleted: true }>;
   usageStatus(): Promise<BudgetStatus>;
   usageOverview(): Promise<UsageOverview>;
   setBudget(budget: Budget): Promise<Budget>;
@@ -314,7 +332,8 @@ export interface ApiClient {
   markNotificationsRead(ids?: string[]): Promise<{ read: true }>;
   agentRuns(): Promise<AgentRunSummary[]>;
   agentRun(id: string): Promise<AgentRun>;
-  startAgentRun(goal: string): Promise<AgentRunSummary>;
+  /** With a skill, the run follows its instructions and uses only its tools. Pass the skill as it was shown. */
+  startAgentRun(goal: string, skill?: Pick<Skill, "id" | "updatedAt">): Promise<AgentRunSummary>;
   cancelAgentRun(id: string): Promise<{ cancelled: true }>;
   proposal(id: string): Promise<Proposal>;
   proposals(): Promise<Proposal[]>;
@@ -409,6 +428,10 @@ export function createApiClient(
     updateMemory: (id, text) => request(MemorySchema, `/memories/${enc(id)}`, { method: "POST", body: JSON.stringify({ text }) }),
     deleteMemory: (id) => request(z.object({ deleted: z.literal(true) }), `/memories/${enc(id)}`, { method: "DELETE" }),
     deleteAllMemories: () => request(z.object({ deleted: z.number() }), "/memories", { method: "DELETE" }),
+    skills: () => request(z.array(SkillSchema), "/skills"),
+    addSkill: (skill) => request(SkillSchema, "/skills", { method: "POST", body: JSON.stringify(skill) }),
+    updateSkill: (id, skill) => request(SkillSchema, `/skills/${enc(id)}`, { method: "POST", body: JSON.stringify(skill) }),
+    deleteSkill: (id) => request(z.object({ deleted: z.literal(true) }), `/skills/${enc(id)}`, { method: "DELETE" }),
     usageStatus: () => request(BudgetStatusSchema, "/usage/status"),
     usageOverview: () => request(UsageOverviewSchema, "/admin/usage"),
     setBudget: (budget) => request(BudgetSchema, "/admin/budget", { method: "POST", body: JSON.stringify(budget) }),
@@ -430,8 +453,11 @@ export function createApiClient(
       }),
     agentRuns: () => request(z.array(AgentRunSummarySchema), "/agent-runs"),
     agentRun: (id) => request(AgentRunSchema, `/agent-runs/${enc(id)}`),
-    startAgentRun: (goal) =>
-      request(AgentRunSummarySchema, "/agent-runs", { method: "POST", body: JSON.stringify({ goal }) }),
+    startAgentRun: (goal, skill) =>
+      request(AgentRunSummarySchema, "/agent-runs", {
+        method: "POST",
+        body: JSON.stringify({ goal, ...(skill ? { skillId: skill.id, skillVersion: skill.updatedAt } : {}) }),
+      }),
     cancelAgentRun: (id) =>
       request(z.object({ cancelled: z.literal(true) }), `/agent-runs/${enc(id)}/cancel`, { method: "POST" }),
     proposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}`),

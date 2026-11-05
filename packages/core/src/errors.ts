@@ -6,6 +6,8 @@ export const ERROR_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   RECONNECT_REQUIRED: 409,
+  /** What the request was based on has changed since the person read it. */
+  CONFLICT: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,

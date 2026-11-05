@@ -5,7 +5,10 @@ import { Ctx, type RequestContext } from "../context/request-context.js";
 import { AGENTS } from "../tokens.js";
 import type { AgentRunSummary, AgentRunView, AgentsApi } from "./agents.service.js";
 
-const StartSchema = z.strictObject({ goal: z.string().trim().min(1).max(2_000) });
+/** A skill comes with the version the person read, so one changed since is refused rather than followed unseen. */
+const StartSchema = z
+  .strictObject({ goal: z.string().trim().min(1).max(2_000), skillId: UuidSchema.optional(), skillVersion: z.string().max(40).optional() })
+  .refine((body) => !body.skillId === !body.skillVersion);
 
 function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -25,8 +28,9 @@ export class AgentsController {
   @Post()
   @HttpCode(201)
   async start(@Ctx() ctx: RequestContext, @Body() body: unknown): Promise<ApiSuccess<AgentRunSummary>> {
-    const { goal } = parse(StartSchema, body);
-    return ok(await this.agents.start(scopeOf(ctx), goal), { requestId: ctx.requestId });
+    const { goal, skillId, skillVersion } = parse(StartSchema, body);
+    const skill = skillId && skillVersion ? { skill: { id: skillId, version: skillVersion } } : {};
+    return ok(await this.agents.start(scopeOf(ctx), goal, skill), { requestId: ctx.requestId });
   }
 
   @Get()
