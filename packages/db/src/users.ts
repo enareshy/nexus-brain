@@ -13,6 +13,17 @@ export interface StoredPerson {
   readonly deactivatedAt: Date | null;
 }
 
+/** The signed-in person's own record. */
+export async function getProfile(pool: PoolLike, scope: UserScope): Promise<Pick<StoredPerson, "email" | "displayName" | "role"> | null> {
+  const [row] = await withTenant(pool, scope.tenantId, (db) =>
+    db
+      .select({ email: users.email, displayName: users.displayName, role: users.role })
+      .from(users)
+      .where(and(eq(users.tenantId, scope.tenantId), eq(users.id, scope.userId))),
+  );
+  return row ?? null;
+}
+
 /** Everyone in the company, active or not. Callers must have checked the user is an admin. */
 export function listPeople(pool: PoolLike, tenantId: string): Promise<StoredPerson[]> {
   return withTenant(pool, tenantId, (db) =>

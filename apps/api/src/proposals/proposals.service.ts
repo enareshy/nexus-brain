@@ -96,6 +96,11 @@ export class ProposalsService implements ProposalsApi {
     return this.deps.sessions.readWithSession(scope, serverId, (session) => adapter.targets(session));
   }
 
+  /** Up to `limit` of the person's proposals, newest first, for their data export. Changes nothing. */
+  async exportAll(scope: UserScope, limit: number): Promise<readonly ProposalView[]> {
+    return (await listProposals(this.deps.pool, scope, limit)).map((row) => this.view(row));
+  }
+
   async list(scope: UserScope): Promise<readonly ProposalView[]> {
     const stuck = await markStuckProposalsUnknown(this.deps.pool, scope, new Date(this.now() - STUCK_AFTER_MS));
     await Promise.all(stuck.map((row) => this.audit(scope, "write.unknown", row)));

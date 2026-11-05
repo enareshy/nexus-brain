@@ -14,5 +14,7 @@ export const TRIGGERS = Symbol("TRIGGERS");
 export const PEOPLE = Symbol("PEOPLE");
 export const MEMORY = Symbol("MEMORY");
 export const SKILLS = Symbol("SKILLS");
+export const RETENTION = Symbol("RETENTION");
+export const EXPORTS = Symbol("EXPORTS");
 export const USAGE = Symbol("USAGE");
 export const WEB_APP_URL = Symbol("WEB_APP_URL");

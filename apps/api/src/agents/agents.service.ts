@@ -10,6 +10,7 @@ import {
   getAgentRun,
   listAgentRuns,
   listAgentSteps,
+  listAgentStepsForRuns,
   markRunNotificationsRead,
   saveAgentRun,
   type PoolLike,
@@ -262,6 +263,35 @@ export class AgentsService implements AgentsApi {
         createdAt: step.createdAt.toISOString(),
       })),
     };
+  }
+
+  /**
+   * Every run the person has, with its steps, for their data export (FR-ADM-03). Unlike viewing a run,
+   * this never moves one on or marks anything read.
+   */
+  async exportAll(scope: UserScope, limit: number): Promise<readonly AgentRunView[]> {
+    const rows = await listAgentRuns(this.deps.pool, scope, limit);
+    // One query for every run's steps, rather than one per run.
+    const stepsByRun = await listAgentStepsForRuns(this.deps.pool, scope, rows.map((row) => row.id));
+    const all: AgentRunView[] = [];
+    for (const row of rows) {
+      const steps = stepsByRun.get(row.id) ?? [];
+      all.push({
+        ...this.summary(scope, row),
+        result: row.resultCiphertext ? this.open<string>(scope, row.id, row.resultCiphertext) : null,
+        costUsd: Number(row.costUsd),
+        turnCount: row.turnCount,
+        waitingProposalId: row.waitingProposalId,
+        steps: steps.map((step) => ({
+          seq: step.seq,
+          tool: step.toolName,
+          outcome: step.outcome,
+          ...this.open<Pick<StepView, "documents" | "proposalId">>(scope, row.id, step.detailCiphertext),
+          createdAt: step.createdAt.toISOString(),
+        })),
+      });
+    }
+    return all;
   }
 
   async cancel(scope: UserScope, id: string): Promise<void> {

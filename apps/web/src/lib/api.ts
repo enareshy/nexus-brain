@@ -246,6 +246,9 @@ export const CreditsSchema = z.object({
 });
 export type Credits = z.infer<typeof CreditsSchema>;
 
+export const RetentionSchema = z.object({ conversationDays: z.number().nullable(), agentRunDays: z.number().nullable() });
+export type Retention = z.infer<typeof RetentionSchema>;
+
 export const UsageOverviewSchema = z.object({
   summary: z.object({
     monthStart: z.string(),
@@ -336,6 +339,10 @@ export interface ApiClient {
   usageOverview(): Promise<UsageOverview>;
   setBudget(budget: Budget): Promise<Budget>;
   addCredits(credits: number): Promise<Credits>;
+  retention(): Promise<Retention>;
+  setRetention(retention: Retention): Promise<Retention>;
+  /** Everything Brain holds for the signed-in person, as plain data. */
+  exportMyData(): Promise<unknown>;
   people(): Promise<Person[]>;
   deactivatePerson(id: string): Promise<Deactivation>;
   reactivatePerson(id: string): Promise<{ changed: boolean }>;
@@ -450,6 +457,9 @@ export function createApiClient(
     usageOverview: () => request(UsageOverviewSchema, "/admin/usage"),
     setBudget: (budget) => request(BudgetSchema, "/admin/budget", { method: "POST", body: JSON.stringify(budget) }),
     addCredits: (credits) => request(CreditsSchema, "/admin/credits", { method: "POST", body: JSON.stringify({ credits }) }),
+    retention: () => request(RetentionSchema, "/data/retention"),
+    setRetention: (retention) => request(RetentionSchema, "/admin/retention", { method: "POST", body: JSON.stringify(retention) }),
+    exportMyData: () => request(z.record(z.unknown()), "/me/export"),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
     reactivatePerson: (id) =>
