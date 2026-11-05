@@ -27,6 +27,8 @@ import { PeopleController } from "./admin/people.controller.js";
 import type { PeopleApi } from "./admin/people.service.js";
 import { MemoryController } from "./memory/memory.controller.js";
 import type { MemoryApi } from "./memory/memory.service.js";
+import { SkillsController } from "./skills/skills.controller.js";
+import type { SkillsApi } from "./skills/skills.service.js";
 import { UsageController } from "./usage/usage.controller.js";
 import type { UsageApi } from "./usage/usage.service.js";
 import { ConversationsController } from "./conversations/conversations.controller.js";
@@ -34,7 +36,7 @@ import type { ConversationsApi } from "./conversations/conversations.service.js"
 import { McpController, type McpEndpointDeps } from "./mcp/mcp.controller.js";
 import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
-import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, MEMORY, PEOPLE, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, MEMORY, PEOPLE, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -56,6 +58,8 @@ export interface AppDeps {
   readonly people?: PeopleApi;
   /** Without this, there is no Memory page. */
   readonly memory?: MemoryApi;
+  /** Without this, there is no Skills page. */
+  readonly skills?: SkillsApi;
   /** Without this, there is no spending dashboard and no budgets. */
   readonly usage?: UsageApi;
   /** Browser origin of the web app: CORS allow-list and OAuth return target. */
@@ -72,6 +76,7 @@ class AppModule {
         ...(deps.triggers ? [TriggersController] : []),
         ...(deps.people ? [PeopleController] : []),
         ...(deps.memory ? [MemoryController] : []),
+        ...(deps.skills ? [SkillsController] : []),
         ...(deps.usage ? [UsageController] : []),
         HealthController,
         MeController,
@@ -98,6 +103,7 @@ class AppModule {
         ...(deps.triggers ? [{ provide: TRIGGERS, useValue: deps.triggers }] : []),
         ...(deps.people ? [{ provide: PEOPLE, useValue: deps.people }] : []),
         ...(deps.memory ? [{ provide: MEMORY, useValue: deps.memory }] : []),
+        ...(deps.skills ? [{ provide: SKILLS, useValue: deps.skills }] : []),
         ...(deps.usage ? [{ provide: USAGE, useValue: deps.usage }] : []),
         { provide: WEB_APP_URL, useValue: deps.webAppUrl },
         { provide: APP_GUARD, useClass: AuthGuard },

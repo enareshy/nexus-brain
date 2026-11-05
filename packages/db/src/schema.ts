@@ -238,6 +238,19 @@ export const memories = pgTable("memories", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const skills = pgTable("skills", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  /** The person who wrote it, who alone can change it. */
+  userId: uuid("user_id").notNull(),
+  nameCiphertext: text("name_ciphertext").notNull(),
+  instructionsCiphertext: text("instructions_ciphertext").notNull(),
+  tools: text("tools").array().notNull(),
+  shared: boolean("shared").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const mcpServerApps = pgTable(
   "mcp_server_apps",
   {

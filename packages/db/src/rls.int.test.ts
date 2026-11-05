@@ -19,6 +19,7 @@ import { assertRlsEnforced } from "./pool.js";
 import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
 import { getBudget, saveBudget, usageSummary } from "./budgets.js";
 import { addMemory, deleteAllMemories, deleteMemory, listMemories, updateMemory } from "./memories.js";
+import { addSkill, deleteSkill, getSkill, listSkills, updateSkill } from "./skills.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
   agentRuns,
@@ -29,6 +30,7 @@ import {
   mcpConnections,
   mcpServerApps,
   memories,
+  skills,
   messageFeedback,
   oauthStates,
   tenantBudgets,
@@ -418,6 +420,52 @@ describe("memories are private to one person", () => {
     );
     expect(added.filter(Boolean)).toHaveLength(3);
     expect(await deleteAllMemories(appPool, bob)).toBe(3);
+  });
+});
+
+describe("skills are the owner's, and shared only within their company (FR-AST-08)", () => {
+  const bob = { tenantId: ACME, userId: seedUser("bob").id };
+  const alice = { tenantId: ACME, userId: seedUser("alice").id };
+  const fields = (shared: boolean) => ({ nameCiphertext: "n", instructionsCiphertext: "i", tools: ["search_documents"], shared });
+
+  it("shows a private skill only to its owner, and a shared one to colleagues but never to another company", async () => {
+    const mine = randomUUID();
+    const shared = randomUUID();
+    await addSkill(appPool, bob, { id: mine, ...fields(false) }, 50);
+    await addSkill(appPool, bob, { id: shared, ...fields(true) }, 50);
+    expect((await listSkills(appPool, bob)).map((s) => s.id).sort()).toEqual([mine, shared].sort());
+    expect((await listSkills(appPool, alice)).map((s) => s.id)).toEqual([shared]);
+    expect(await getSkill(appPool, alice, mine)).toBeNull();
+    expect(await getSkill(appPool, alice, shared)).toMatchObject({ ownerId: bob.userId, ownerName: expect.any(String) });
+    const otherCompany = { tenantId: GLOBEX, userId: seedUser("patGlobex").id };
+    expect(await listSkills(appPool, otherCompany)).toEqual([]);
+    expect(await getSkill(appPool, otherCompany, shared)).toBeNull();
+    expect(await withTenant(appPool, GLOBEX, (db) => db.select().from(skills))).toEqual([]);
+    await deleteSkill(appPool, bob, mine);
+    await deleteSkill(appPool, bob, shared);
+  });
+
+  it("lets only the owner change or delete a skill, even a shared one, and nobody add one as someone else", async () => {
+    const id = randomUUID();
+    await addSkill(appPool, bob, { id, ...fields(true) }, 50);
+    expect(await updateSkill(appPool, alice, id, { ...fields(true), instructionsCiphertext: "evil" })).toBe(false);
+    expect(await deleteSkill(appPool, alice, id)).toBe(false);
+    await expect(
+      withUser(appPool, alice, (db) => db.update(skills).set({ instructionsCiphertext: "evil" }).where(eq(skills.id, id)).returning({ id: skills.id })),
+    ).resolves.toEqual([]);
+    await expect(
+      withUser(appPool, alice, (db) => db.insert(skills).values({ id: randomUUID(), tenantId: ACME, userId: bob.userId, ...fields(true) })),
+    ).rejects.toThrow(/row-level security/);
+    expect((await getSkill(appPool, bob, id))?.instructionsCiphertext).toBe("i");
+    expect(await updateSkill(appPool, bob, id, { ...fields(false), instructionsCiphertext: "new" })).toBe(true);
+    expect(await getSkill(appPool, alice, id)).toBeNull();
+    expect(await deleteSkill(appPool, bob, id)).toBe(true);
+  });
+
+  it("keeps to the limit even when added at the same time", async () => {
+    const added = await Promise.all(Array.from({ length: 5 }, () => addSkill(appPool, bob, { id: randomUUID(), ...fields(false) }, 3)));
+    expect(added.filter(Boolean)).toHaveLength(3);
+    for (const skill of await listSkills(appPool, bob)) await deleteSkill(appPool, bob, skill.id);
   });
 });
 
