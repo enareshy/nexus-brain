@@ -1,10 +1,10 @@
-import { AppError, ok, type ApiSuccess } from "@brain/core";
+import { AppError, MAX_TOP_UP_CREDITS, ok, type ApiSuccess } from "@brain/core";
 import type { Budget } from "@brain/db";
 import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Ctx, type RequestContext } from "../context/request-context.js";
 import { USAGE } from "../tokens.js";
-import type { BudgetStatus, UsageApi, UsageView } from "./usage.service.js";
+import type { BudgetStatus, CreditsView, UsageApi, UsageView } from "./usage.service.js";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
 const MAX_LIMIT_USD = 1_000_000;
@@ -15,6 +15,8 @@ const BudgetSchema = z.strictObject({
   perPersonLimitUsd: limit,
   warnAtPercent: z.number().int().min(1).max(100),
 });
+
+const TopUpSchema = z.strictObject({ credits: z.number().int().min(1).max(MAX_TOP_UP_CREDITS) });
 
 function scopeOf(ctx: RequestContext) {
   return { tenantId: ctx.tenantId, userId: ctx.userId };
@@ -38,6 +40,16 @@ export class UsageController {
   @Get("admin/usage")
   async overview(@Ctx() ctx: RequestContext): Promise<ApiSuccess<UsageView>> {
     return ok(await this.usage.overview(requireAdmin(ctx)), { requestId: ctx.requestId });
+  }
+
+  /** Adds credits for this month to the company's plan (FR-MET-04). Recorded, never changed afterwards. */
+  @Post("admin/credits")
+  @HttpCode(200)
+  async addCredits(@Ctx() ctx: RequestContext, @Body() body: unknown): Promise<ApiSuccess<CreditsView>> {
+    const scope = requireAdmin(ctx);
+    const parsed = TopUpSchema.safeParse(body);
+    if (!parsed.success) throw new AppError("VALIDATION", `Add a whole number of credits, up to ${MAX_TOP_UP_CREDITS.toLocaleString("en-US")}`);
+    return ok(await this.usage.addCredits(scope, parsed.data.credits), { requestId: ctx.requestId });
   }
 
   @Post("admin/budget")

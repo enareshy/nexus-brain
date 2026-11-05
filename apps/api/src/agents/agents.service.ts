@@ -202,7 +202,7 @@ export class AgentsService implements AgentsApi {
     if (options.skill && !skills) throw new AppError("UNAVAILABLE", "Skills are not available here");
     // Copied now, so editing or deleting the skill later cannot change a run already going.
     const skill = options.skill && skills ? await skills.forRun(scope, options.skill.id, options.skill.version) : null;
-    await this.deps.budget?.require(scope);
+    await this.deps.budget?.require(scope, "metered");
     const id = randomUUID();
     const state: RunState = { messages: [{ role: "user", content: firstMessage(goal, skill) }], ...(skill ? { tools: skill.tools } : {}) };
     const created = await createAgentRun(
@@ -360,7 +360,7 @@ export class AgentsService implements AgentsApi {
       if (cost >= MAX_COST_USD) return fail("cost_limit");
       if (this.deps.budget) {
         // A check that cannot run stops the run too: spending without knowing the budget is not safe.
-        const outcome = await this.deps.budget.require(scope).then(
+        const outcome = await this.deps.budget.require(scope, "metered").then(
           () => "ok" as const,
           (err: unknown) => {
             if (isAppError(err) && err.code === "BUDGET_EXCEEDED") return "budget_limit" as const;

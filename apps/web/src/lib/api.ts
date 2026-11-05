@@ -222,7 +222,7 @@ const BudgetLevelSchema = z.enum(["ok", "warn", "stop"]);
 
 export const BudgetStatusSchema = z.object({
   level: BudgetLevelSchema,
-  limit: z.enum(["company", "person"]).nullable(),
+  limit: z.enum(["company", "person", "credits"]).nullable(),
   percentUsed: z.number().nullable(),
 });
 export type BudgetStatus = z.infer<typeof BudgetStatusSchema>;
@@ -233,6 +233,18 @@ export const BudgetSchema = z.object({
   warnAtPercent: z.number(),
 });
 export type Budget = z.infer<typeof BudgetSchema>;
+
+export const CreditsSchema = z.object({
+  plan: z.string(),
+  planLabel: z.string(),
+  monthlyCredits: z.number(),
+  topUpCredits: z.number(),
+  usedCredits: z.number(),
+  leftCredits: z.number(),
+  level: BudgetLevelSchema,
+  topUps: z.array(z.object({ id: z.string(), credits: z.number(), addedByEmail: z.string().nullable(), createdAt: z.string() })),
+});
+export type Credits = z.infer<typeof CreditsSchema>;
 
 export const UsageOverviewSchema = z.object({
   summary: z.object({
@@ -246,6 +258,7 @@ export const UsageOverviewSchema = z.object({
   }),
   budget: BudgetSchema.nullable(),
   companyLevel: BudgetLevelSchema,
+  credits: CreditsSchema.nullable(),
 });
 export type UsageOverview = z.infer<typeof UsageOverviewSchema>;
 
@@ -322,6 +335,7 @@ export interface ApiClient {
   usageStatus(): Promise<BudgetStatus>;
   usageOverview(): Promise<UsageOverview>;
   setBudget(budget: Budget): Promise<Budget>;
+  addCredits(credits: number): Promise<Credits>;
   people(): Promise<Person[]>;
   deactivatePerson(id: string): Promise<Deactivation>;
   reactivatePerson(id: string): Promise<{ changed: boolean }>;
@@ -435,6 +449,7 @@ export function createApiClient(
     usageStatus: () => request(BudgetStatusSchema, "/usage/status"),
     usageOverview: () => request(UsageOverviewSchema, "/admin/usage"),
     setBudget: (budget) => request(BudgetSchema, "/admin/budget", { method: "POST", body: JSON.stringify(budget) }),
+    addCredits: (credits) => request(CreditsSchema, "/admin/credits", { method: "POST", body: JSON.stringify({ credits }) }),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
     reactivatePerson: (id) =>

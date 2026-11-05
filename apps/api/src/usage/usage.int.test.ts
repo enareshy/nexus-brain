@@ -1,7 +1,7 @@
 // Monthly AI budgets and the spending dashboard (FR-MET-03, FR-MET-04), on the real ledger and agent code.
 // Other tests and live checks also spend this month, so limits here are set relative to what is already spent.
 import { createSecretBox } from "@brain/core";
-import { appendUsage, applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, monthSpend, seed, type UserScope } from "@brain/db";
+import { appendUsage, applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, monthSpend, seed, setPlan, type UserScope } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import type { AgentTurn, LlmGateway } from "@brain/llm-gateway";
 import { createLogger } from "@brain/telemetry";
@@ -255,5 +255,98 @@ describe("limits", () => {
     }
     expect(agentTurn).not.toHaveBeenCalled();
     expect((await triggers.notifications(bob)).items.map((n) => n.kind)).toEqual(["trigger_skipped"]);
+  });
+});
+
+describe("credits (FR-MET-02, FR-MET-04)", () => {
+  let ownerPool: pg.Pool;
+  const admin = scopeOf("patAcme");
+  const clearCredits = async () => {
+    await owner.query("DELETE FROM tenant_plans WHERE tenant_id = ANY($1)", [[TENANTS.acme.id, TENANTS.globex.id]]);
+    await owner.query("DELETE FROM credit_topups WHERE tenant_id = ANY($1)", [[TENANTS.acme.id, TENANTS.globex.id]]);
+  };
+  /** A plan with `spare` credits beyond what this month's metered work has already used. */
+  const planWithSpare = async (spare: number) => {
+    await setPlan(ownerPool, TENANTS.acme.id, { plan: "team", monthlyCredits: 100_000_000 });
+    const used = (await usage.overview(admin)).credits!.usedCredits;
+    await setPlan(ownerPool, TENANTS.acme.id, { plan: "team", monthlyCredits: used + spare });
+    return used;
+  };
+
+  beforeAll(() => {
+    ownerPool = new pg.Pool({ connectionString: OWNER_URL, max: 1 });
+  });
+  beforeEach(clearCredits);
+  afterAll(async () => {
+    await clearCredits();
+    await ownerPool.end();
+  });
+
+  it("pauses agents once the company's credits are used, while answers keep working", async () => {
+    await planWithSpare(10);
+    await spend(bob, 0.11, "agent");
+    const bobCalls = await as("bob");
+    const started = await bobCalls("POST", "/agent-runs", { goal: "do it" });
+    expect(started.statusCode).toBe(402);
+    expect(started.json().error.message).toMatch(/credits, so agents are paused/);
+    expect(agentTurn).not.toHaveBeenCalled();
+
+    const answer = await bobCalls("POST", "/answers", { q: "status?" });
+    expect(answer.body).toContain('"type":"done"');
+    expect((await bobCalls("GET", "/usage/status")).json().data).toMatchObject({ level: "stop", limit: "credits" });
+    await owner.query("DELETE FROM usage_ledger WHERE feature = 'agent' AND cost_usd = 0.11 AND user_id = $1", [bob.userId]);
+  });
+
+  it("lets an admin add credits for this month, which resume agents, and shows them on the dashboard", async () => {
+    const used = await planWithSpare(0);
+    const patCalls = await as("patAcme");
+    const added = await patCalls("POST", "/admin/credits", { credits: 250 });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().data).toMatchObject({ planLabel: "Team", topUpCredits: 250, leftCredits: 250, usedCredits: used });
+
+    agentTurn.mockImplementationOnce(async (_input, _signal, onUsage) => {
+      onUsage({ model: "m", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, estimated: false });
+      return say("done");
+    });
+    expect((await (await as("bob"))("POST", "/agent-runs", { goal: "do it" })).statusCode).toBe(201);
+    await agents.settled();
+
+    const overview = (await patCalls("GET", "/admin/usage")).json().data;
+    expect(overview.credits).toMatchObject({ monthlyCredits: used, topUpCredits: 250, topUps: [expect.objectContaining({ credits: 250, addedByEmail: expect.any(String) })] });
+    const audit = await owner.query("SELECT meta FROM audit_log WHERE action = 'usage.credits_added' AND tenant_id = $1 ORDER BY id DESC LIMIT 1", [TENANTS.acme.id]);
+    expect(audit.rows[0].meta).toEqual({ credits: 250 });
+  });
+
+  it("lets only admins add credits, only whole amounts, and only to a company with a plan", async () => {
+    const patCalls = await as("patAcme");
+    expect((await patCalls("POST", "/admin/credits", { credits: 100 })).statusCode).toBe(400);
+    await planWithSpare(100);
+    for (const body of [{ credits: 0 }, { credits: 1.5 }, { credits: 1_000_001 }, { credits: "10" }, { credits: 1, extra: 1 }]) {
+      expect((await patCalls("POST", "/admin/credits", body)).statusCode).toBe(400);
+    }
+    expect((await (await as("bob"))("POST", "/admin/credits", { credits: 100 })).statusCode).toBe(403);
+    const topUps = await owner.query("SELECT count(*)::int AS n FROM credit_topups WHERE tenant_id = $1", [TENANTS.acme.id]);
+    expect(topUps.rows[0].n).toBe(0);
+  });
+
+  it("names a used-up spending limit before used-up credits, as adding credits would not help", async () => {
+    await planWithSpare(0);
+    await spend(bob, 0.05, "agent");
+    const spent = (await monthSpend(pool, bob)).company;
+    // Limits keep whole cents, so round down to be sure this one is reached.
+    await setBudget(Math.floor(spent * 100) / 100, null);
+    const bobCalls = await as("bob");
+    expect((await bobCalls("GET", "/usage/status")).json().data).toMatchObject({ level: "stop", limit: "company" });
+    const started = await bobCalls("POST", "/agent-runs", { goal: "do it" });
+    expect(started.json().error).toMatchObject({ code: "BUDGET_EXCEEDED" });
+    expect(started.json().error.message).toMatch(/AI budget/);
+    await owner.query("DELETE FROM usage_ledger WHERE feature = 'agent' AND cost_usd = 0.05 AND user_id = $1", [bob.userId]);
+  });
+
+  it("leaves a company with no plan limited only by its budget", async () => {
+    expect((await usage.overview(admin)).credits).toBeNull();
+    agentTurn.mockImplementationOnce(async () => say("done"));
+    expect((await (await as("bob"))("POST", "/agent-runs", { goal: "do it" })).statusCode).toBe(201);
+    await agents.settled();
   });
 });

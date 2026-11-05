@@ -17,9 +17,10 @@ import {
 import { addAgentStep, cancelAgentRun, claimAgentRun, createAgentRun, getAgentRun, listAgentSteps, saveAgentRun } from "./agent-runs.js";
 import { assertRlsEnforced } from "./pool.js";
 import { addMessage, createConversation, deleteConversation, getConversation, listMessages, saveFeedback } from "./conversations.js";
-import { getBudget, saveBudget, usageSummary } from "./budgets.js";
+import { getBudget, saveBudget, UNPRICED_CALL_USD, usageSummary } from "./budgets.js";
 import { addMemory, deleteAllMemories, deleteMemory, listMemories, updateMemory } from "./memories.js";
 import { addSkill, deleteSkill, getSkill, listSkills, updateSkill } from "./skills.js";
+import { addTopUp, creditMonth, getPlan, setPlan } from "./credits.js";
 import { claimProposal, createProposal, getProposal, rejectProposal } from "./proposals.js";
 import {
   agentRuns,
@@ -31,6 +32,8 @@ import {
   mcpServerApps,
   memories,
   skills,
+  tenantPlans,
+  creditTopups,
   messageFeedback,
   oauthStates,
   tenantBudgets,
@@ -676,5 +679,57 @@ describe("findUserBySubject", () => {
     const user = await findUserBySubject(appPool, ACME, seedUser("gina").subject);
     expect(user?.groupIds).toEqual([]);
     expect(user?.role).toBe("guest");
+  });
+});
+
+describe("plans and credits belong to one company (FR-MET-02)", () => {
+  const acmeAdmin = { tenantId: ACME, userId: seedUser("patAcme").id };
+  let ownerPool: pg.Pool;
+
+  beforeAll(() => {
+    ownerPool = new pg.Pool({ connectionString: OWNER_URL, max: 1 });
+  });
+  afterAll(async () => {
+    await ownerPool.query("DELETE FROM tenant_plans WHERE tenant_id = ANY($1)", [[ACME, GLOBEX]]);
+    await ownerPool.query("DELETE FROM credit_topups WHERE tenant_id = ANY($1)", [[ACME, GLOBEX]]);
+    await ownerPool.query("DELETE FROM usage_ledger WHERE feature LIKE 'credit-test%'");
+    await ownerPool.end();
+  });
+
+  it("lets only an operator set a plan, and keeps plans and top-ups from other companies", async () => {
+    await expect(
+      withTenant(appPool, ACME, (db) => db.insert(tenantPlans).values({ tenantId: ACME, plan: "business", monthlyCredits: 999_999 })),
+    ).rejects.toThrow(/permission denied/);
+    await setPlan(ownerPool, ACME, { plan: "team", monthlyCredits: 20_000 });
+    expect(await getPlan(appPool, ACME)).toEqual({ plan: "team", monthlyCredits: 20_000 });
+    expect(await getPlan(appPool, GLOBEX)).toBeNull();
+    await expect(withTenant(appPool, ACME, (db) => db.update(tenantPlans).set({ monthlyCredits: 1 }))).rejects.toThrow(/permission denied/);
+
+    await addTopUp(appPool, acmeAdmin, { id: randomUUID(), credits: 500 });
+    expect(await withTenant(appPool, GLOBEX, (db) => db.select().from(creditTopups))).toEqual([]);
+    await expect(
+      withTenant(appPool, GLOBEX, (db) => db.insert(creditTopups).values({ id: randomUUID(), tenantId: ACME, credits: 1, addedBy: acmeAdmin.userId })),
+    ).rejects.toThrow(/row-level security/);
+    await expect(withTenant(appPool, ACME, (db) => db.delete(creditTopups))).rejects.toThrow(/permission denied/);
+    const audit = await withTenant(appPool, ACME, (db) =>
+      db.select({ action: auditLog.action }).from(auditLog).where(eq(auditLog.action, "usage.credits_added")),
+    );
+    expect(audit.length).toBeGreaterThan(0);
+  });
+
+  it("counts only agent work against credits, never chat, even on another model", async () => {
+    const before = (await creditMonth(appPool, ACME))!.meteredUsd;
+    const call = (feature: string, model: string, costUsd: number | null) =>
+      appendUsage(appPool, acmeAdmin, { feature, model, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd });
+    await call("credit-test-answer", "claude-opus-5-5", 5);
+    await call("agent", "claude-opus-5-5", 0.25);
+    await call("agent_estimated", "claude-opus-5-5", null);
+    await call("credit-test-answer", "claude-opus-4-8", 1);
+    const month = (await creditMonth(appPool, ACME))!;
+    expect(month.meteredUsd - before).toBeCloseTo(0.25 + UNPRICED_CALL_USD);
+    expect(month.topUps.length).toBeGreaterThan(0);
+    expect(month.topUps[0]).toMatchObject({ credits: 500, addedByEmail: expect.any(String) });
+    expect(await creditMonth(appPool, GLOBEX)).toBeNull();
+    await ownerPool.query("DELETE FROM usage_ledger WHERE tenant_id = $1 AND feature LIKE 'agent%' AND created_at > now() - interval '1 minute'", [ACME]);
   });
 });

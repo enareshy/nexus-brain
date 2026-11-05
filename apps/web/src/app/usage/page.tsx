@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { BudgetForm } from "@/components/BudgetForm";
+import { CreditsPanel } from "@/components/CreditsPanel";
 import { UsageDashboard } from "@/components/UsageDashboard";
-import { ApiError, describeError, type Budget, type UsageOverview } from "@/lib/api";
+import { ApiError, describeError, type Budget, type Credits, type UsageOverview } from "@/lib/api";
 
 function UsagePage() {
   const { api } = useAuth();
@@ -28,6 +29,28 @@ function UsagePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const [isAddingCredits, setIsAddingCredits] = useState(false);
+
+  async function handleAddCredits(credits: number): Promise<boolean> {
+    setIsAddingCredits(true);
+    setNotice(null);
+    setError(null);
+    let added: Credits;
+    try {
+      added = await api.addCredits(credits);
+    } catch (e) {
+      setError(describeError(e));
+      setIsAddingCredits(false);
+      return false;
+    }
+    // Added, even if refreshing the page fails: saying otherwise would invite adding them twice.
+    setNotice(`${credits.toLocaleString("en-US")} credits added for this month.`);
+    setOverview((current) => (current ? { ...current, credits: added } : current));
+    setIsAddingCredits(false);
+    api.usageOverview().then(setOverview, () => {});
+    return true;
+  }
 
   async function handleSave(budget: Budget) {
     setIsSaving(true);
@@ -74,6 +97,7 @@ function UsagePage() {
         ) : (
           <>
             <UsageDashboard overview={overview} />
+            <CreditsPanel credits={overview.credits} isAdding={isAddingCredits} onAdd={handleAddCredits} />
             <section aria-labelledby="limits-heading" className="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
               <h2 id="limits-heading" className="text-xl font-semibold tracking-tight">
                 Monthly limits

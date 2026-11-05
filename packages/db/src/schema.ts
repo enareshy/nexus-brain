@@ -163,6 +163,21 @@ export const tenantBudgets = pgTable("tenant_budgets", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const tenantPlans = pgTable("tenant_plans", {
+  tenantId: uuid("tenant_id").primaryKey(),
+  plan: text("plan").notNull(),
+  monthlyCredits: integer("monthly_credits").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const creditTopups = pgTable("credit_topups", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  credits: integer("credits").notNull(),
+  addedBy: uuid("added_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const agentTriggers = pgTable("agent_triggers", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
