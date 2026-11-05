@@ -11,6 +11,7 @@ const person = (over: Partial<Person>): Person => ({
   role: "member",
   active: true,
   deactivatedAt: null,
+  erased: false,
   ...over,
 });
 
@@ -69,5 +70,45 @@ describe("PeopleList", () => {
     expect(screen.getByText("Turned off")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Turn Gina back on" }));
     expect(onReactivate).toHaveBeenCalledWith("gina");
+  });
+});
+
+describe("erasing someone (FR-ADM-03)", () => {
+  it("offers erase only for someone turned off, explains it, and asks before doing it", async () => {
+    const user = userEvent.setup();
+    const onErase = vi.fn();
+    render(
+      <PeopleList
+        people={[person({ id: "p1", active: false, deactivatedAt: "t" }), person({ id: "p2", displayName: "Alice" })]}
+        currentUserId="me"
+        isOwner={false}
+        busyId={null}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onErase={onErase}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Erase Alice" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Erase Bob" }));
+    expect(onErase).not.toHaveBeenCalled();
+    expect(screen.getByText(/cannot be undone/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm erasing Bob" }));
+    expect(onErase).toHaveBeenCalledWith("p1");
+  });
+
+  it("shows an erased person as erased, with nothing left to do", () => {
+    render(
+      <PeopleList
+        people={[person({ displayName: "Erased person", active: false, deactivatedAt: "t", erased: true })]}
+        currentUserId="me"
+        isOwner
+        busyId={null}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onErase={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Erased")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

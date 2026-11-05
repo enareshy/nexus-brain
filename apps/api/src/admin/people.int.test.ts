@@ -251,3 +251,23 @@ describe("turning someone off", () => {
     expect((await alice("POST", `/admin/people/${TEMP_ADMIN.id}/reactivate`)).statusCode).toBe(200);
   });
 });
+
+describe("erasing someone (FR-ADM-03)", () => {
+  it("erases only someone turned off, after which they cannot sign in or be turned back on", async () => {
+    const pat = await as("patAcme");
+    const before = await as("member");
+    expect((await pat("POST", `/admin/people/${MEMBER}/erase`)).statusCode).toBe(400);
+    expect((await (await as("alice"))("POST", `/admin/people/${MEMBER}/erase`)).statusCode).not.toBe(200);
+    expect((await pat("POST", `/admin/people/${MEMBER}/deactivate`)).statusCode).toBe(200);
+    expect((await before("POST", `/admin/people/${MEMBER}/erase`)).statusCode).toBe(403);
+
+    const erased = await pat("POST", `/admin/people/${MEMBER}/erase`);
+    expect(erased.statusCode).toBe(200);
+    expect(erased.json().data).toMatchObject({ erased: true, automaticAgents: 1 });
+    const listed = (await pat("GET", "/admin/people")).json().data as Array<{ id: string; erased: boolean; displayName: string; email: string }>;
+    expect(listed.find((p) => p.id === MEMBER)).toMatchObject({ erased: true, displayName: "Erased person", email: `erased-${MEMBER}@erased.invalid` });
+    expect([401, 403]).toContain((await before("GET", "/me")).statusCode);
+    expect((await pat("POST", `/admin/people/${MEMBER}/reactivate`)).statusCode).toBe(400);
+    expect((await pat("POST", `/admin/people/${MEMBER}/erase`)).json().data).toMatchObject({ erased: false });
+  });
+});
