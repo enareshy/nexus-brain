@@ -30,6 +30,7 @@ export const users = pgTable("users", {
   externalSubject: text("external_subject").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+  erasedAt: timestamp("erased_at", { withTimezone: true }),
 });
 
 export const groups = pgTable("groups", {

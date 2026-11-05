@@ -272,8 +272,21 @@ export const PersonSchema = z.object({
   role: z.enum(["owner", "admin", "member", "guest"]),
   active: z.boolean(),
   deactivatedAt: z.string().nullable(),
+  erased: z.boolean(),
 });
 export type Person = z.infer<typeof PersonSchema>;
+
+export const ErasureSchema = z.object({
+  erased: z.boolean(),
+  conversations: z.number(),
+  memories: z.number(),
+  skills: z.number(),
+  agentRuns: z.number(),
+  automaticAgents: z.number(),
+  changes: z.number(),
+  notifications: z.number(),
+});
+export type Erasure = z.infer<typeof ErasureSchema>;
 
 export const DeactivationSchema = z.object({
   changed: z.boolean(),
@@ -346,6 +359,8 @@ export interface ApiClient {
   people(): Promise<Person[]>;
   deactivatePerson(id: string): Promise<Deactivation>;
   reactivatePerson(id: string): Promise<{ changed: boolean }>;
+  /** Only for someone already turned off. Cannot be undone. */
+  erasePerson(id: string): Promise<Erasure>;
   agentTriggers(): Promise<AgentTrigger[]>;
   createAgentTrigger(trigger: NewAgentTrigger): Promise<AgentTrigger>;
   deleteAgentTrigger(id: string): Promise<{ deleted: true }>;
@@ -462,6 +477,7 @@ export function createApiClient(
     exportMyData: () => request(z.record(z.unknown()), "/me/export"),
     people: () => request(z.array(PersonSchema), "/admin/people"),
     deactivatePerson: (id) => request(DeactivationSchema, `/admin/people/${enc(id)}/deactivate`, { method: "POST" }),
+    erasePerson: (id) => request(ErasureSchema, `/admin/people/${enc(id)}/erase`, { method: "POST" }),
     reactivatePerson: (id) =>
       request(z.object({ changed: z.boolean() }), `/admin/people/${enc(id)}/reactivate`, { method: "POST" }),
     agentTriggers: () => request(z.array(AgentTriggerSchema), "/agent-triggers"),

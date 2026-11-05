@@ -46,14 +46,17 @@ function PeoplePage() {
     void load();
   }, [load]);
 
-  async function change(id: string, action: "deactivate" | "reactivate") {
+  async function change(id: string, action: "deactivate" | "reactivate" | "erase") {
     const name = people?.find((p) => p.id === id)?.displayName ?? "This person";
     setBusyId(id);
     setNotice(null);
     setError(null);
     try {
       if (action === "deactivate") setNotice(summary(name, await api.deactivatePerson(id)));
-      else {
+      else if (action === "erase") {
+        await api.erasePerson(id);
+        setNotice(`${name} was erased. Everything they owned is gone, and their name and email are removed.`);
+      } else {
         await api.reactivatePerson(id);
         setNotice(`${name} can sign in again. They will need to reconnect their services and turn their automatic agents back on.`);
       }
@@ -101,6 +104,7 @@ function PeoplePage() {
             busyId={busyId}
             onDeactivate={(id) => void change(id, "deactivate")}
             onReactivate={(id) => void change(id, "reactivate")}
+            onErase={(id) => void change(id, "erase")}
           />
         )}
       </div>

@@ -1,5 +1,5 @@
 import type { Role } from "@brain/core";
-import { deactivateUser, isDeadlockError, listPeople, reactivateUser, type PoolLike, type RemovedConnection, type UserScope } from "@brain/db";
+import { deactivateUser, eraseUser, isDeadlockError, listPeople, reactivateUser, type Erasure, type PoolLike, type RemovedConnection, type UserScope } from "@brain/db";
 import type { Logger } from "@brain/telemetry";
 
 export interface PersonView {
@@ -9,6 +9,8 @@ export interface PersonView {
   readonly role: Role;
   readonly active: boolean;
   readonly deactivatedAt: string | null;
+  /** Their name and email are placeholders, and nothing of theirs is left. */
+  readonly erased: boolean;
 }
 
 export interface DeactivationView {
@@ -27,6 +29,8 @@ export interface PeopleApi {
   list(scope: UserScope): Promise<readonly PersonView[]>;
   deactivate(scope: UserScope, personId: string): Promise<DeactivationView>;
   reactivate(scope: UserScope, personId: string): Promise<{ changed: boolean }>;
+  /** Deletes everything someone already turned off owns, and removes what names them (FR-ADM-03). */
+  erase(scope: UserScope, personId: string): Promise<Erasure>;
 }
 
 export interface PeopleDeps {
@@ -64,6 +68,7 @@ export function createPeopleService(deps: PeopleDeps): PeopleApi {
         role: p.role,
         active: p.deactivatedAt === null,
         deactivatedAt: p.deactivatedAt?.toISOString() ?? null,
+        erased: p.erasedAt !== null,
       }));
     },
 
@@ -90,5 +95,11 @@ export function createPeopleService(deps: PeopleDeps): PeopleApi {
     },
 
     reactivate: (scope, personId) => reactivateUser(deps.pool, scope, personId),
+
+    async erase(scope, personId) {
+      const result = await withDeadlockRetry(() => eraseUser(deps.pool, scope, personId));
+      deps.logger.info({ tenant_id: scope.tenantId, user_id: scope.userId, target_user_id: personId, erased: result.erased }, "Person erased");
+      return result;
+    },
   };
 }

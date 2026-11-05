@@ -1,5 +1,5 @@
 import { AppError, type Role } from "@brain/core";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { agentRuns, agentTriggers, auditLog, mcpConnections, oauthStates, users, writeProposals } from "./schema.js";
 import { withTenant, withUser, type PoolLike, type TenantDb, type UserScope } from "./tenant.js";
 
@@ -11,6 +11,8 @@ export interface StoredPerson {
   readonly displayName: string;
   readonly role: Role;
   readonly deactivatedAt: Date | null;
+  /** Set once the person has been erased; their name and email are then placeholders. */
+  readonly erasedAt: Date | null;
 }
 
 /** The signed-in person's own record. */
@@ -34,6 +36,7 @@ export function listPeople(pool: PoolLike, tenantId: string): Promise<StoredPers
         displayName: users.displayName,
         role: users.role,
         deactivatedAt: users.deactivatedAt,
+        erasedAt: users.erasedAt,
       })
       .from(users)
       .orderBy(asc(users.email)),
@@ -59,7 +62,7 @@ export interface Deactivation {
 
 interface LockedPair {
   readonly actor: { readonly role: Role };
-  readonly target: { readonly role: Role; readonly deactivatedAt: Date | null };
+  readonly target: { readonly role: Role; readonly deactivatedAt: Date | null; readonly erasedAt: Date | null };
 }
 
 /**
@@ -70,7 +73,7 @@ interface LockedPair {
 async function lockPair(db: TenantDb, actorId: string, targetId: string): Promise<LockedPair> {
   if (actorId === targetId) throw new AppError("VALIDATION", "You cannot turn yourself off");
   const rows = await db
-    .select({ id: users.id, role: users.role, deactivatedAt: users.deactivatedAt })
+    .select({ id: users.id, role: users.role, deactivatedAt: users.deactivatedAt, erasedAt: users.erasedAt })
     .from(users)
     .where(inArray(users.id, [actorId, targetId]))
     // Always the same order, so two admins acting on each other cannot deadlock.
@@ -152,10 +155,59 @@ export function deactivateUser(pool: PoolLike, actor: UserScope, targetId: strin
   });
 }
 
+export interface Erasure {
+  /** False when the person had already been erased, so nothing changed. */
+  readonly erased: boolean;
+  readonly conversations: number;
+  readonly memories: number;
+  readonly skills: number;
+  readonly agentRuns: number;
+  readonly automaticAgents: number;
+  readonly changes: number;
+  readonly notifications: number;
+}
+
+const ERASE_ERRORS: Readonly<Record<string, AppError>> = {
+  BR400: new AppError("VALIDATION", "You cannot erase yourself"),
+  BR403: new AppError("FORBIDDEN", "Only an admin can erase someone, and only an owner can erase an owner"),
+  BR404: new AppError("NOT_FOUND", "No such person in this workspace"),
+  BR409: new AppError("VALIDATION", "Turn this person off before erasing them, so their connections are revoked first"),
+  BR423: new AppError("CONFLICT", "A change this person approved is still being carried out. Try again in a few minutes"),
+};
+
+/**
+ * Erases one person (FR-ADM-03): everything they own is deleted and their name, email and sign-in
+ * identity are replaced, in one transaction, by a database function that checks every condition itself
+ * under a lock. The audit entry is written in the same transaction, with counts only.
+ */
+export async function eraseUser(pool: PoolLike, actor: UserScope, targetId: string): Promise<Erasure> {
+  try {
+    return await withUser(pool, actor, async (db) => {
+      const result = await db.execute(sql`SELECT * FROM app_erase_person(${actor.userId}::uuid, ${targetId}::uuid)`);
+      const row = result.rows[0] as Record<string, unknown>;
+      return {
+        erased: row.erased === true,
+        conversations: Number(row.conversations),
+        memories: Number(row.memories),
+        skills: Number(row.skills),
+        agentRuns: Number(row.agent_runs),
+        automaticAgents: Number(row.automatic_agents),
+        changes: Number(row.changes),
+        notifications: Number(row.notifications),
+      };
+    });
+  } catch (err) {
+    const known = Object.entries(ERASE_ERRORS).find(([code]) => hasSqlState(err, code));
+    if (known) throw known[1];
+    throw err;
+  }
+}
+
 /** Lets someone sign in again. Connections and schedules are not restored; they set those up again. */
 export function reactivateUser(pool: PoolLike, actor: UserScope, targetId: string): Promise<{ changed: boolean }> {
   return withTenant(pool, actor.tenantId, async (db) => {
     const { target } = await lockPair(db, actor.userId, targetId);
+    if (target.erasedAt) throw new AppError("VALIDATION", "This person was erased and cannot be turned back on");
     if (!target.deactivatedAt) return { changed: false };
     await db.update(users).set({ deactivatedAt: null }).where(eq(users.id, targetId));
     await db.insert(auditLog).values({ tenantId: actor.tenantId, userId: actor.userId, action: "user.reactivated", resource: targetId });

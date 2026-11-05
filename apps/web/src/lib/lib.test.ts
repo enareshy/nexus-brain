@@ -109,7 +109,7 @@ describe("createApiClient", () => {
 
   it("calls the right route with the right method and body for memory, people, agents and changes", async () => {
     const memory = { id: "m1", text: "Keep it short", readable: true, createdAt: "t", updatedAt: "t" };
-    const person = { id: "p1", email: "a@b.c", displayName: "A", role: "member", active: true, deactivatedAt: null };
+    const person = { id: "p1", email: "a@b.c", displayName: "A", role: "member", active: true, deactivatedAt: null, erased: false };
     const deactivation = { changed: true, connectionsRemoved: 0, connectionsRevoked: 0, triggersPaused: 0, runsCancelled: 0, proposalsRejected: 0, changesInProgress: 0 };
     const run = { id: "r1", goal: "g", status: "running", errorCode: null, createdAt: "t" };
     const budget = { monthlyLimitUsd: 100, perPersonLimitUsd: null, warnAtPercent: 80 };
@@ -141,6 +141,12 @@ describe("createApiClient", () => {
       [() => api.people(), [person], "GET", "/admin/people"],
       [() => api.deactivatePerson("p1"), deactivation, "POST", "/admin/people/p1/deactivate"],
       [() => api.reactivatePerson("p1"), { changed: true }, "POST", "/admin/people/p1/reactivate"],
+      [
+        () => api.erasePerson("p1"),
+        { erased: true, conversations: 1, memories: 0, skills: 0, agentRuns: 0, automaticAgents: 0, changes: 0, notifications: 0 },
+        "POST",
+        "/admin/people/p1/erase",
+      ],
       [() => api.agentRuns(), [run], "GET", "/agent-runs"],
       [() => api.startAgentRun("g"), run, "POST", "/agent-runs", { goal: "g" }],
       [() => api.cancelAgentRun("r1"), { cancelled: true }, "POST", "/agent-runs/r1/cancel"],

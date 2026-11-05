@@ -2,6 +2,7 @@ import { AppError, ok, UuidSchema, type ApiSuccess } from "@brain/core";
 import { Controller, Get, HttpCode, Inject, Param, Post } from "@nestjs/common";
 import { Ctx, type RequestContext } from "../context/request-context.js";
 import { PEOPLE } from "../tokens.js";
+import type { Erasure } from "@brain/db";
 import type { DeactivationView, PeopleApi, PersonView } from "./people.service.js";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
@@ -30,6 +31,13 @@ export class PeopleController {
   @HttpCode(200)
   async deactivate(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<DeactivationView>> {
     return ok(await this.people.deactivate(requireAdmin(ctx), personId(id)), { requestId: ctx.requestId });
+  }
+
+  /** Only for someone already turned off. Cannot be undone. */
+  @Post(":id/erase")
+  @HttpCode(200)
+  async erase(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<Erasure>> {
+    return ok(await this.people.erase(requireAdmin(ctx), personId(id)), { requestId: ctx.requestId });
   }
 
   @Post(":id/reactivate")
