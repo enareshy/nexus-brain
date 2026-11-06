@@ -1,7 +1,11 @@
 import type { AnswerState } from "@/lib/answer";
 import { safeHttpUrl } from "@/lib/safe-url";
 
-type Props = { state: AnswerState };
+type Props = {
+  state: AnswerState;
+  /** The search results are on the page already, so they are not listed again here. */
+  resultsShownElsewhere?: boolean;
+};
 
 function outcomeNote(state: AnswerState): string | null {
   if (state.status !== "done") return null;
@@ -12,6 +16,8 @@ function outcomeNote(state: AnswerState): string | null {
       return "The AI declined to answer this question. The search results are still available.";
     case "incomplete":
       return "This answer was cut off and may be incomplete.";
+    case "search_only":
+      return "The AI service is not available right now, so here is what the search found, without an answer. Try again in a minute.";
     default:
       return state.grounded ? null : "This answer has no citations. Check it against the sources.";
   }
@@ -21,12 +27,14 @@ function outcomeNote(state: AnswerState): string | null {
  * Renders the answer and its sources as plain text. Everything here derives from connected
  * services and is untrusted: React escapes it, and links exist only for safe URLs.
  */
-export function AnswerPanel({ state }: Props) {
+export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
   const note = outcomeNote(state);
   const hasText = state.parts.length > 0;
-  const citedSources = [
-    ...new Set(state.parts.flatMap((part) => (part.kind === "cite" ? [part.source] : []))),
-  ].sort((a, b) => a - b);
+  const isSearchOnly = state.status === "done" && state.outcome === "search_only" && !resultsShownElsewhere;
+  // With no answer to cite them, every result found is listed (NFR-AVAIL-01).
+  const citedSources = isSearchOnly
+    ? state.hits.map((_, index) => index + 1)
+    : [...new Set(state.parts.flatMap((part) => (part.kind === "cite" ? [part.source] : [])))].sort((a, b) => a - b);
 
   return (
     <section

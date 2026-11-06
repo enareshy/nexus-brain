@@ -165,7 +165,7 @@ function SearchPage() {
         {statusText}
       </p>
       <div className="mt-12 max-w-3xl">
-        {currentAnswer && <AnswerPanel state={currentAnswer} />}
+        {currentAnswer && <AnswerPanel state={currentAnswer} resultsShownElsewhere />}
         {canAnswer && (
           <button
             type="button"

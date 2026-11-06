@@ -1,7 +1,7 @@
 import type { RankedHit, SourceStatus } from "@brain/connectors";
-import { AppError, type SecretBox } from "@brain/core";
+import { AppError, isAppError, type SecretBox } from "@brain/core";
 import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/db";
-import type { AnswerDocument, AnswerOutcome, LlmGateway, ModelChoice, UsageReport } from "@brain/llm-gateway";
+import { isProviderOutage, type AnswerDocument, type AnswerOutcome, type LlmGateway, type ModelChoice, type UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import type { AiSettingsSource } from "../admin/ai-settings.service.js";
 import type { DocumentSource, ItemReference } from "../connections/connections.service.js";
@@ -30,8 +30,8 @@ export type AnswerStreamEvent =
   | { readonly type: "subtasks"; readonly titles: readonly string[] }
   | {
       readonly type: "done";
-      /** answered | no_documents | refused | incomplete */
-      readonly outcome: "answered" | "no_documents" | "refused" | "incomplete";
+      /** answered | no_documents | refused | incomplete | search_only (the AI was unavailable) */
+      readonly outcome: "answered" | "no_documents" | "refused" | "incomplete" | "search_only";
       /** False when the model produced text with no citation, so the UI can warn. */
       readonly grounded: boolean;
       /** Documents shortened to fit, so the answer may have missed later text. */
@@ -65,7 +65,7 @@ export interface AnswersDeps {
   readonly documents: DocumentSource;
   /** Null when no API key is configured: search still works, answers report it. */
   readonly gateway: LlmGateway | null;
-  readonly logger: Pick<Logger, "error">;
+  readonly logger: Pick<Logger, "error" | "warn">;
   readonly now?: () => number;
   /** Finds documents worded differently from the question. Without one, it searches as asked. */
   readonly expander?: QueryExpander;
@@ -275,6 +275,8 @@ export class AnswersService implements AnswersApi {
     let usage: UsageReport | null = null;
     let outcome: AnswerOutcome | null = null;
     let saved = false;
+    /** Why the AI could not answer, when the search results were the answer. */
+    let unavailableReason: string | null = null;
     try {
       outcome = await gateway.streamAnswer(
         {
@@ -307,6 +309,16 @@ export class AnswersService implements AnswersApi {
       const messageId = await this.saveAnswer(scope, conversation, { parts, hits: gathered.hits, ...summary });
       saved = true;
       emit({ type: "done", ...summary, messageId });
+    } catch (err) {
+      // NFR-AVAIL-01: with the AI down before it said anything, the search results already sent are
+      // the answer. Once text has arrived, a cut-off answer is reported as the error it is.
+      if (parts.length > 0 || signal.aborted || !isProviderOutage(err)) throw err;
+      unavailableReason = isAppError(err) ? String(err.details?.reason ?? "unknown") : "unknown";
+      this.deps.logger.warn({ reason: unavailableReason, tenant_id: scope.tenantId }, "AI unavailable; answered with search results only");
+      const summary = { outcome: "search_only", grounded: false, truncatedDocuments: 0 } as const;
+      const messageId = await this.saveAnswer(scope, conversation, { parts: [], hits: gathered.hits, ...summary });
+      saved = true;
+      emit({ type: "done", ...summary, messageId });
     } finally {
       // A stream that broke or was cancelled: keep what was said, marked as incomplete.
       if (!saved && parts.length > 0) {
@@ -319,7 +331,7 @@ export class AnswersService implements AnswersApi {
         });
       }
       // Runs on failure and abort too, because the provider may have billed for those calls.
-      await this.record(scope, question, gathered.hits, cited, usage, outcome, citationCount);
+      await this.record(scope, question, gathered.hits, cited, usage, outcome, citationCount, unavailableReason ? "ai_unavailable" : undefined, unavailableReason);
     }
   }
 
@@ -345,7 +357,9 @@ export class AnswersService implements AnswersApi {
     usage: UsageReport | null,
     outcome: AnswerOutcome | null,
     citations: number,
-    endedEarly?: "cancelled" | "no_documents" | "search_failed",
+    endedEarly?: "cancelled" | "no_documents" | "search_failed" | "ai_unavailable",
+    /** The provider's failure, such as provider_503 or circuit_open, when the AI was unavailable. */
+    unavailableReason: string | null = null,
   ): Promise<void> {
     if (usage) {
       const { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, estimated } = usage;
@@ -372,6 +386,7 @@ export class AnswersService implements AnswersApi {
         // A replay of a recent identical answer, so the model was not called.
         cached: outcome?.cached === true,
         stopReason: endedEarly ?? outcome?.stopReason ?? "not_completed",
+        ...(unavailableReason ? { unavailableReason } : {}),
         citations,
       },
     }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Audit write failed"));

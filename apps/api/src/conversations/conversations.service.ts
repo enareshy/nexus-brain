@@ -33,7 +33,7 @@ export type AnswerPart = { readonly kind: "text"; readonly text: string } | { re
 export interface StoredAnswer {
   readonly parts: readonly AnswerPart[];
   readonly hits: readonly RankedHit[];
-  readonly outcome: "answered" | "no_documents" | "refused" | "incomplete";
+  readonly outcome: "answered" | "no_documents" | "refused" | "incomplete" | "search_only";
   readonly grounded: boolean;
   readonly truncatedDocuments: number;
 }

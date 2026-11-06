@@ -114,7 +114,7 @@ export const SavedAnswerSchema = z.object({
     ]),
   ),
   hits: z.array(HitSchema),
-  outcome: z.enum(["answered", "no_documents", "refused", "incomplete"]),
+  outcome: z.enum(["answered", "no_documents", "refused", "incomplete", "search_only"]),
   grounded: z.boolean(),
   truncatedDocuments: z.number(),
 });

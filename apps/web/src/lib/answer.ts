@@ -9,7 +9,7 @@ export const AnswerEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("subtasks"), titles: z.array(z.string().max(200)).max(8) }),
   z.object({
     type: z.literal("done"),
-    outcome: z.enum(["answered", "no_documents", "refused", "incomplete"]),
+    outcome: z.enum(["answered", "no_documents", "refused", "incomplete", "search_only"]),
     grounded: z.boolean(),
     truncatedDocuments: z.number().int().nonnegative(),
     messageId: z.string().nullable().optional(),

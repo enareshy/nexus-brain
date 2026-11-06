@@ -60,10 +60,28 @@ describe("AnswerPanel", () => {
     ["no_documents", true, /Nothing you can access/],
     ["refused", true, /declined/],
     ["incomplete", true, /cut off/],
+    ["search_only", false, /AI service is not available/],
     ["answered", false, /no citations/],
   ] as const)("explains outcome %s", (outcome, grounded, pattern) => {
     render(<AnswerPanel state={{ ...base, status: "done", outcome, grounded }} />);
     expect(screen.getByText(pattern)).toBeInTheDocument();
+  });
+
+  it("lists every result found when the AI was unavailable, as there is no answer to cite them (NFR-AVAIL-01)", () => {
+    const hits = [
+      { serverId: "s", externalId: "1", title: "Runbook", url: "https://acme.example/1", snippet: "", updatedAt: null, score: 1 },
+      { serverId: "s", externalId: "2", title: "Bad link", url: "javascript:alert(1)", snippet: "", updatedAt: null, score: 1 },
+    ];
+    render(<AnswerPanel state={{ ...base, status: "done", outcome: "search_only", grounded: false, hits }} />);
+    expect(screen.getByRole("link", { name: "Runbook" })).toHaveAttribute("href", "https://acme.example/1");
+    expect(screen.getByText("Bad link")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Bad link" })).toBeNull();
+  });
+
+  it("does not list the results again where the page already shows them", () => {
+    render(<AnswerPanel state={{ ...base, status: "done", outcome: "search_only", grounded: false }} resultsShownElsewhere />);
+    expect(screen.queryAllByRole("listitem")).toEqual([]);
+    expect(screen.getByText(/AI service is not available/)).toBeInTheDocument();
   });
 
   it("reports partly read documents and errors", () => {

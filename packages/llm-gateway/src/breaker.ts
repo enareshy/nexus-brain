@@ -23,6 +23,21 @@ function isProviderFailure(err: unknown): boolean {
   return reason.startsWith("provider_") && !/^provider_4(0[0-9]|1[0-9]|2[0-8])$/.test(reason);
 }
 
+/** Our own setup is wrong, such as a revoked key or an unknown model: no wait will fix it. */
+const MISCONFIGURED: ReadonlySet<string> = new Set(["provider_auth", "provider_404"]);
+
+/**
+ * The AI provider is down, overloaded or being skipped by the breaker, so asking again now would not
+ * help (NFR-AVAIL-01). Callers can fall back to what works without it. A mistake in our own setup is
+ * not an outage: it is reported as an error, so it gets fixed rather than hidden.
+ */
+export function isProviderOutage(err: unknown): boolean {
+  if (!isAppError(err)) return false;
+  const reason = String(err.details?.reason ?? "");
+  if (MISCONFIGURED.has(reason)) return false;
+  return reason === "circuit_open" || isProviderFailure(err);
+}
+
 /** One task's state. Each change bumps the generation, so a call that started before it cannot undo it. */
 function createBreaker(task: string, options: BreakerOptions) {
   const now = options.now ?? Date.now;

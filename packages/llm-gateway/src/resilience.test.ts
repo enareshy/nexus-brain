@@ -1,7 +1,7 @@
 import { AppError } from "@brain/core";
 import { describe, expect, it, vi } from "vitest";
 import { withAnswerCache } from "./answer-cache.js";
-import { withCircuitBreaker } from "./breaker.js";
+import { isProviderOutage, withCircuitBreaker } from "./breaker.js";
 import type { AnswerEvent, AnswerOutcome, LlmGateway } from "./gateway.js";
 import { MODELS, TASK_TIERS, TIERS } from "./models.js";
 
@@ -189,6 +189,16 @@ describe("withCircuitBreaker", () => {
     await expect(turn()).rejects.toMatchObject({ details: { reason: "provider_529" } });
     await expect(turn()).rejects.toMatchObject({ details: { reason: "provider_529" } });
     await expect(turn()).rejects.toMatchObject({ details: { reason: "circuit_open" } });
+  });
+});
+
+describe("isProviderOutage (NFR-AVAIL-01)", () => {
+  it("counts a provider that is down, busy or paused, and not our own mistakes or a cancel", () => {
+    const err = (code: "UNAVAILABLE" | "RATE_LIMITED" | "INTERNAL", reason?: string) => new AppError(code, "x", reason ? { reason } : undefined);
+    expect([err("UNAVAILABLE", "provider_503"), err("UNAVAILABLE", "provider_connection_ECONNRESET"), err("RATE_LIMITED", "provider_429"), err("UNAVAILABLE", "circuit_open")].map(isProviderOutage)).toEqual([true, true, true, true]);
+    expect(
+      [err("UNAVAILABLE", "provider_auth"), err("UNAVAILABLE", "provider_404"), err("UNAVAILABLE", "provider_400"), err("UNAVAILABLE", "aborted"), err("UNAVAILABLE", "provider_unknown"), err("INTERNAL"), new Error("x")].map(isProviderOutage),
+    ).toEqual([false, false, false, false, false, false, false]);
   });
 });
 

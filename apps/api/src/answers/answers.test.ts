@@ -58,7 +58,7 @@ const unusedTurn: LlmGateway["agentTurn"] = async () => {
   throw new Error("Agents are not used here");
 };
 
-function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn> }; pool?: PoolLike; readItem?: (scope: unknown, item: unknown) => Promise<string | null> } = {}) {
+function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Map<string, string>; gateway?: LlmGateway | null; outcome?: Partial<AnswerOutcome>; now?: () => number; logger?: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> }; pool?: PoolLike; readItem?: (scope: unknown, item: unknown) => Promise<string | null> } = {}) {
   const gathered: GatheredDocuments = {
     hits: opts.hits ?? [hit(1), hit(2)],
     sources: [{ id: "atlassian", ok: true, hits: 2, ms: 10 }],
@@ -76,7 +76,7 @@ function setup(opts: { expander?: QueryExpander; hits?: RankedHit[]; bodies?: Ma
   const service = new AnswersService({
     pool: opts.pool ?? pool,
     box: { fingerprint: () => "f".repeat(64) },
-    logger: opts.logger ?? { error: vi.fn() },
+    logger: opts.logger ?? { error: vi.fn(), warn: vi.fn() },
     documents: { gatherDocuments },
     gateway: opts.gateway === undefined ? { streamAnswer, rewriteQuery: noRewrite, agentTurn: unusedTurn } : opts.gateway,
     now: opts.now,
@@ -174,6 +174,57 @@ describe("AnswersService", () => {
     expect(events.some((e) => e.type === "done")).toBe(false);
   });
 
+  describe("when the AI is unavailable (NFR-AVAIL-01)", () => {
+    const failing = (err: AppError, before?: (onEvent: Parameters<LlmGateway["streamAnswer"]>[1]) => void): LlmGateway => ({
+      agentTurn: unusedTurn,
+      rewriteQuery: noRewrite,
+      streamAnswer: async (_i, onEvent) => {
+        before?.(onEvent);
+        throw err;
+      },
+    });
+
+    it.each([
+      ["the provider is down", new AppError("UNAVAILABLE", "down", { reason: "provider_503" })],
+      ["the provider cannot be reached", new AppError("UNAVAILABLE", "down", { reason: "provider_connection_ECONNREFUSED" })],
+      ["the provider is overloaded", new AppError("RATE_LIMITED", "busy", { reason: "provider_429" })],
+      ["calls are paused after repeated failures", new AppError("UNAVAILABLE", "paused", { reason: "circuit_open" })],
+    ])("answers with the search results only when %s", async (_case, err) => {
+      const logger = { error: vi.fn(), warn: vi.fn() };
+      const { service, events, emit, queries } = setup({ gateway: failing(err), logger });
+      await service.answer(scope, "q", emit, signal);
+      expect(events.map((e) => e.type)).toEqual(["sources", "done"]);
+      expect(events[1]).toEqual({ type: "done", outcome: "search_only", grounded: false, truncatedDocuments: 0, messageId: null });
+      expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ tenant_id: scope.tenantId }), "AI unavailable; answered with search results only");
+      expect(queries.some((q) => q.includes("audit_log"))).toBe(true);
+    });
+
+    it("still reports an answer cut off part-way, and failures that are not an outage", async () => {
+      const outage = new AppError("UNAVAILABLE", "down", { reason: "provider_503" });
+      const cut = setup({ gateway: failing(outage, (onEvent) => onEvent({ type: "text", text: "Half an" })) });
+      await expect(cut.service.answer(scope, "q", cut.emit, signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      expect(cut.events.some((e) => e.type === "done")).toBe(false);
+
+      const invalid = setup({ gateway: failing(new AppError("UNAVAILABLE", "bad request", { reason: "provider_400" })) });
+      await expect(invalid.service.answer(scope, "q", invalid.emit, signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      const ours = setup({ gateway: failing(new AppError("INTERNAL", "bug")) });
+      await expect(ours.service.answer(scope, "q", ours.emit, signal)).rejects.toMatchObject({ code: "INTERNAL" });
+      // A wrong key or model name is our own mistake, so it shows as the error it is.
+      for (const reason of ["provider_auth", "provider_404"]) {
+        const misconfigured = setup({ gateway: failing(new AppError("UNAVAILABLE", "not available", { reason })) });
+        await expect(misconfigured.service.answer(scope, "q", misconfigured.emit, signal)).rejects.toMatchObject({ details: { reason } });
+      }
+    });
+
+    it("does not stand in for an answer the person cancelled", async () => {
+      const cancelled = new AbortController();
+      const gateway = failing(new AppError("UNAVAILABLE", "down", { reason: "provider_503" }), () => cancelled.abort());
+      const { service, events, emit } = setup({ gateway });
+      await expect(service.answer(scope, "q", emit, cancelled.signal)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      expect(events.some((e) => e.type === "done")).toBe(false);
+    });
+  });
+
   it("makes no paid call if the caller left during the search", async () => {
     const aborted = new AbortController();
     aborted.abort();
@@ -185,8 +236,8 @@ describe("AnswersService", () => {
   });
 
   it("still finishes the answer when bookkeeping fails, and logs it", async () => {
-    const logger = { error: vi.fn() };
-    const broken = { connect: async () => { throw new Error("db down"); } } as unknown as PoolLike;
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const broken ={ connect: async () => { throw new Error("db down"); } } as unknown as PoolLike;
     const { service, events, emit } = setup({ logger, pool: broken });
     await expect(service.answer(scope, "q", emit, signal)).resolves.toBeUndefined();
     expect(events.at(-1)).toMatchObject({ type: "done", outcome: "answered" });
@@ -411,7 +462,7 @@ describe("the audit trail", () => {
     const service = new AnswersService({
       pool,
       box: { fingerprint: () => "f".repeat(64) },
-      logger: { error: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn() },
       gateway: { streamAnswer: vi.fn(), rewriteQuery: noRewrite, agentTurn: unusedTurn },
       documents: {
         gatherDocuments: async () => {
