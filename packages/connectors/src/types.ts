@@ -93,4 +93,11 @@ export interface WriteAdapter {
   draft(session: ToolSession, request: WriteRequest): Promise<WriteDraft>;
   /** Reads the result of a call that succeeded. Result text is untrusted. */
   outcome(draft: WriteDraft, resultText: string): WriteOutcome;
+  /**
+   * Undo (FR-WR-06), for changes that can be put back. `readState` reads, without changing anything,
+   * the fields `draft` sets, or returns null when the change cannot be undone. `undoDraft` is the
+   * call that sets those fields back to `before`. Both see only data from the person's own access.
+   */
+  readState?(session: ToolSession, draft: WriteDraft): Promise<Record<string, unknown> | null>;
+  undoDraft?(draft: WriteDraft, before: Readonly<Record<string, unknown>>): WriteDraft;
 }

@@ -318,6 +318,10 @@ export const writeProposals = pgTable("write_proposals", {
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   agentRunId: uuid("agent_run_id"),
+  beforeState: jsonb("before_state").$type<Record<string, unknown>>(),
+  afterState: jsonb("after_state").$type<Record<string, unknown>>(),
+  undoOf: uuid("undo_of"),
+  expectedState: jsonb("expected_state").$type<Record<string, unknown>>(),
 });
 
 export type ProposalStatus = "pending" | "executing" | "succeeded" | "failed" | "unknown" | "rejected";

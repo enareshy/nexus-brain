@@ -6,6 +6,8 @@ type Props = {
   isBusy: boolean;
   onApprove: (proposal: Proposal) => void;
   onReject: (proposal: Proposal) => void;
+  /** Given only where undo is offered, and only for a change that can still be undone. */
+  onUndo?: (proposal: Proposal) => void;
 };
 
 const ACTION_LABELS: Readonly<Record<string, string>> = {
@@ -13,6 +15,12 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   update_issue: "Update a Jira issue",
   add_comment: "Add a Jira comment",
   create_subtask: "Create a Jira subtask",
+  undo_update: "Undo a Jira issue update",
+};
+
+const FAILURES: Readonly<Record<string, string>> = {
+  tool_not_allowed: "Not sent. This tool is no longer allowed.",
+  changed_since: "Not sent. The issue was changed again after Brain's change, so undoing it would overwrite those edits.",
 };
 
 function outcomeText(proposal: Proposal): string | null {
@@ -22,9 +30,7 @@ function outcomeText(proposal: Proposal): string | null {
     case "succeeded":
       return proposal.externalId ? `Done: ${proposal.externalId}` : "Done.";
     case "failed":
-      return proposal.errorCode === "tool_not_allowed"
-        ? "Not sent. This tool is no longer allowed."
-        : "Jira refused this change.";
+      return FAILURES[proposal.errorCode ?? ""] ?? "Jira refused this change.";
     case "unknown":
       return "The connection was lost while sending this, so it may or may not have happened. Check Jira before making this change again.";
     case "rejected":
@@ -37,7 +43,7 @@ function outcomeText(proposal: Proposal): string | null {
 }
 
 /** Shows exactly what will be sent, so an approval is an informed one (FR-WR-02). */
-export function ProposalCard({ proposal, isBusy, onApprove, onReject }: Props) {
+export function ProposalCard({ proposal, isBusy, onApprove, onReject, onUndo }: Props) {
   const label = ACTION_LABELS[proposal.action] ?? proposal.action;
   const outcome = outcomeText(proposal);
   const link = proposal.status === "succeeded" && proposal.url ? safeHttpUrl(proposal.url) : null;
@@ -51,6 +57,11 @@ export function ProposalCard({ proposal, isBusy, onApprove, onReject }: Props) {
           {proposal.serverId} · {proposal.toolName}
         </p>
       </div>
+      {proposal.action === "undo_update" && (
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          Puts back the fields as they were before Brain changed them. It is not sent if they were edited again since.
+        </p>
+      )}
       {proposal.toolClass === "external-effect" && (
         <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Other people will see this and may be notified.</p>
       )}
@@ -88,6 +99,17 @@ export function ProposalCard({ proposal, isBusy, onApprove, onReject }: Props) {
             <a href={link} target="_blank" rel="noopener noreferrer" className="font-medium text-brand underline underline-offset-4">
               Open in Jira
             </a>
+          )}
+          {onUndo && proposal.canUndo && (
+            <button
+              type="button"
+              disabled={isBusy}
+              aria-label={`Undo: ${label}`}
+              onClick={() => onUndo(proposal)}
+              className="ml-3 font-medium text-slate-700 underline underline-offset-4 disabled:opacity-50 dark:text-slate-200"
+            >
+              Undo
+            </button>
           )}
         </p>
       )}

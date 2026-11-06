@@ -68,6 +68,25 @@ function ChangesPage() {
     }
   }
 
+  async function handleUndo(id: string) {
+    setBusyId(id);
+    setActionError(null);
+    try {
+      const undo = await api.undoProposal(id);
+      setProposals((current) => [undo, ...(current ?? []).filter((p) => p.id !== undo.id)]);
+    } catch (e) {
+      setActionError(describeError(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // An undo that is waiting, running or done already covers its change.
+  const undone = new Set(
+    (proposals ?? [])
+      .filter((p) => p.undoOf && !["rejected", "expired", "failed"].includes(p.status))
+      .map((p) => p.undoOf),
+  );
   const waiting = proposals?.filter((p) => p.status === "pending") ?? [];
   const finished = proposals?.filter((p) => p.status !== "pending") ?? [];
   const list = (items: Proposal[]) => (
@@ -79,6 +98,7 @@ function ChangesPage() {
           isBusy={busyId !== null}
           onApprove={(item) => void decide(item.id, () => api.approveProposal(item.id, item.argsHash))}
           onReject={(item) => void decide(item.id, () => api.rejectProposal(item.id))}
+          {...(undone.has(p.id) ? {} : { onUndo: (item: Proposal) => void handleUndo(item.id) })}
         />
       ))}
     </ul>

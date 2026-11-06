@@ -38,6 +38,8 @@ export interface MockMcpServer {
     mcpCalls: number;
   };
   readonly createdIssues: Array<{ identity: string; summary: string }>;
+  /** Issues `get_issue` reads and `edit_issue` changes, by key. Tests may edit them "in the service". */
+  readonly editableIssues: Map<string, Record<string, unknown>>;
   /** Names of every tool called, in order. */
   readonly calledTools: string[];
   /** Identity the next /authorize call "logs in" as (simulates the user's consent). */
@@ -72,6 +74,7 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
   let mcpDelayMs = 0;
   const createdIssues: Array<{ identity: string; summary: string }> = [];
   const calledTools: string[] = [];
+  const editableIssues = new Map<string, Record<string, unknown>>();
   let nextIdentity = Object.keys(options.issuesByIdentity)[0] ?? "anonymous";
   let baseUrl = "";
 
@@ -241,6 +244,34 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
       },
     );
     mcp.registerTool(
+      "get_issue",
+      {
+        description: "Read fields of an issue",
+        inputSchema: { key: z.string(), fields: z.array(z.string()) },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ key, fields }) => {
+        const issue = editableIssues.get(key);
+        if (!issue) return { content: [{ type: "text", text: "Issue not found" }], isError: true };
+        const picked = Object.fromEntries(fields.map((f) => [f, issue[f] ?? null]));
+        return { content: [{ type: "text", text: JSON.stringify({ key, fields: picked }) }] };
+      },
+    );
+    mcp.registerTool(
+      "edit_issue",
+      {
+        description: "Change fields of an issue",
+        inputSchema: { key: z.string(), fields: z.record(z.string(), z.unknown()) },
+        annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      async ({ key, fields }) => {
+        const issue = editableIssues.get(key);
+        if (!issue) return { content: [{ type: "text", text: "Issue not found" }], isError: true };
+        editableIssues.set(key, { ...issue, ...fields });
+        return { content: [{ type: "text", text: JSON.stringify({ key }) }] };
+      },
+    );
+    mcp.registerTool(
       "delete_issue",
       {
         description: "Delete an issue",
@@ -270,6 +301,7 @@ export async function startMockMcpServer(options: MockMcpServerOptions): Promise
     },
     stats,
     createdIssues,
+    editableIssues,
     calledTools,
     setNextIdentity: (identity) => {
       nextIdentity = identity;

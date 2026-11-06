@@ -101,4 +101,11 @@ export class ProposalsController {
   async reject(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<ProposalView>> {
     return ok(await this.proposals.reject(scopeOf(ctx), parse(UuidSchema, id)), { requestId: ctx.requestId });
   }
+
+  /** Proposes putting back what this change replaced. Nothing happens until that is approved too. */
+  @Post(":id/undo")
+  @HttpCode(201)
+  async undo(@Ctx() ctx: RequestContext, @Param("id") id: string): Promise<ApiSuccess<ProposalView>> {
+    return ok(await this.proposals.undo(scopeOf(ctx), parse(UuidSchema, id)), { requestId: ctx.requestId });
+  }
 }

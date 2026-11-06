@@ -17,6 +17,9 @@ export interface NewProposal {
   readonly expiresAt: Date;
   /** The agent run that drafted this, if any. */
   readonly agentRunId?: string;
+  /** For an undo: the change it undoes, and the state it must find before putting things back. */
+  readonly undoOf?: string;
+  readonly expectedState?: Record<string, unknown>;
 }
 
 export interface ProposalResult {
@@ -166,4 +169,40 @@ export function rejectProposal(pool: PoolLike, scope: UserScope, id: string): Pr
       .returning();
     return row ?? null;
   });
+}
+
+/** Records what a change overwrites (before it is sent) or left behind (after it succeeded). */
+export function recordProposalState(
+  pool: PoolLike,
+  scope: UserScope,
+  id: string,
+  state: { readonly before: Record<string, unknown> } | { readonly after: Record<string, unknown> },
+): Promise<boolean> {
+  const set = "before" in state ? { beforeState: state.before } : { afterState: state.after };
+  const status = "before" in state ? ["executing"] : ["succeeded"];
+  return withUser(pool, scope, async (db) => {
+    const rows = await db
+      .update(writeProposals)
+      .set(set)
+      .where(and(eq(writeProposals.id, id), inArray(writeProposals.status, status as ProposalStatus[])))
+      .returning({ id: writeProposals.id });
+    return rows.length > 0;
+  });
+}
+
+/** Undos of this change that are waiting, running or done, newest first. */
+export function activeUndos(pool: PoolLike, scope: UserScope, undoOf: string): Promise<StoredProposal[]> {
+  return withUser(pool, scope, (db) =>
+    db
+      .select()
+      .from(writeProposals)
+      .where(
+        and(
+          eq(writeProposals.undoOf, undoOf),
+          sql`(${writeProposals.status} IN ('executing', 'succeeded', 'unknown')
+            OR (${writeProposals.status} = 'pending' AND ${writeProposals.expiresAt} > now()))`,
+        ),
+      )
+      .orderBy(desc(writeProposals.createdAt)),
+  );
 }

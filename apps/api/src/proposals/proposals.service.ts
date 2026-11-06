@@ -10,6 +10,7 @@ import {
   type WriteTarget,
 } from "@brain/connectors";
 import {
+  activeUndos,
   appendAudit,
   claimProposal,
   countPendingProposals,
@@ -18,6 +19,7 @@ import {
   getProposal,
   listProposals,
   markStuckProposalsUnknown,
+  recordProposalState,
   rejectProposal,
   releaseProposal,
   type PoolLike,
@@ -55,6 +57,10 @@ export interface ProposalView {
   readonly expiresAt: string;
   /** The agent run that drafted this, if any. */
   readonly agentRunId: string | null;
+  /** For an undo: the change it undoes. */
+  readonly undoOf: string | null;
+  /** Whether this change can be undone (FR-WR-06). */
+  readonly canUndo: boolean;
 }
 
 export interface ProposalsApi {
@@ -64,6 +70,7 @@ export interface ProposalsApi {
   propose(scope: UserScope, serverId: string, request: WriteRequest): Promise<ProposalView>;
   approve(scope: UserScope, id: string, approvedHash: string): Promise<ProposalView>;
   reject(scope: UserScope, id: string): Promise<ProposalView>;
+  undo(scope: UserScope, id: string): Promise<ProposalView>;
 }
 
 /** Implemented by ConnectionsService. */
@@ -79,6 +86,21 @@ export interface ProposalsDeps {
   readonly logger: Logger;
   readonly now?: () => number;
 }
+
+/** Key order does not matter: two reads of the same fields compare equal. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value === null || typeof value !== "object") return value;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return Object.fromEntries(entries.map(([k, v]) => [k, canonical(v)]));
+}
+
+function sameState(a: unknown, b: unknown): boolean {
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+}
+
+type Sent = { readonly result: Awaited<ReturnType<ToolSession["callTool"]>>; readonly after: Record<string, unknown> | null };
+type Attempt = Sent | "not_allowed" | "changed_since";
 
 function stateOf(row: StoredProposal, now: number): ProposalState {
   return row.status === "pending" && row.expiresAt.getTime() <= now ? "expired" : row.status;
@@ -98,7 +120,12 @@ export class ProposalsService implements ProposalsApi {
 
   /** Up to `limit` of the person's proposals, newest first, for their data export. Changes nothing. */
   async exportAll(scope: UserScope, limit: number): Promise<readonly ProposalView[]> {
-    return (await listProposals(this.deps.pool, scope, limit)).map((row) => this.view(row));
+    // What a change replaced and left behind is the person's data too (text they could read in Jira).
+    return (await listProposals(this.deps.pool, scope, limit)).map((row) => ({
+      ...this.view(row),
+      beforeState: row.beforeState,
+      afterState: row.afterState,
+    }));
   }
 
   async list(scope: UserScope): Promise<readonly ProposalView[]> {
@@ -122,6 +149,23 @@ export class ProposalsService implements ProposalsApi {
     return this.createProposal(scope, serverId, request, origin);
   }
 
+  /**
+   * Proposes putting back what a change Brain made overwrote. It is an ordinary change that needs
+   * approval, and it fails without writing if the fields were edited again since.
+   */
+  async undo(scope: UserScope, id: string): Promise<ProposalView> {
+    const row = await this.requireProposal(scope, id);
+    const adapter = this.adapter(row.serverId);
+    if (!this.canUndo(row) || !adapter.undoDraft || !row.beforeState || !row.afterState) {
+      throw new AppError("VALIDATION", "This change cannot be undone");
+    }
+    const [existing] = await activeUndos(this.deps.pool, scope, row.id);
+    if (existing) return this.view(existing);
+    await this.requireRoom(scope);
+    const draft = adapter.undoDraft(this.draftOf(row), row.beforeState);
+    return this.store(scope, adapter, draft, { id: randomUUID(), undoOf: row.id, expectedState: row.afterState });
+  }
+
   /** Records what would be done. Nothing changes in the connected service here. */
   propose(scope: UserScope, serverId: string, request: WriteRequest): Promise<ProposalView> {
     return this.createProposal(scope, serverId, request, { id: randomUUID() });
@@ -134,18 +178,36 @@ export class ProposalsService implements ProposalsApi {
     origin: { readonly id: string; readonly agentRunId?: string },
   ): Promise<ProposalView> {
     const adapter = this.adapter(serverId);
-    if ((await countPendingProposals(this.deps.pool, scope)) >= MAX_PENDING) {
-      throw new AppError("RATE_LIMITED", "Too many changes are waiting. Approve or reject some first");
-    }
+    await this.requireRoom(scope);
     const draft = await this.deps.sessions.readWithSession(scope, serverId, (session) =>
       adapter.draft(session, request),
     );
+    return this.store(scope, adapter, draft, origin);
+  }
+
+  private async requireRoom(scope: UserScope): Promise<void> {
+    if ((await countPendingProposals(this.deps.pool, scope)) >= MAX_PENDING) {
+      throw new AppError("RATE_LIMITED", "Too many changes are waiting. Approve or reject some first");
+    }
+  }
+
+  private async store(
+    scope: UserScope,
+    adapter: WriteAdapter,
+    draft: WriteDraft,
+    origin: {
+      readonly id: string;
+      readonly agentRunId?: string;
+      readonly undoOf?: string;
+      readonly expectedState?: Record<string, unknown>;
+    },
+  ): Promise<ProposalView> {
     const toolClass = classifyTool(adapter.manifest, { name: draft.toolName, annotations: {} });
     if (!isApprovable(toolClass)) throw new AppError("FORBIDDEN", "This kind of change is not allowed");
 
     const row = await createProposal(this.deps.pool, scope, {
       ...origin,
-      serverId,
+      serverId: adapter.serverId,
       action: draft.action,
       toolName: draft.toolName,
       toolClass,
@@ -195,26 +257,23 @@ export class ProposalsService implements ProposalsApi {
    * Once sent, a failure means the change may or may not have happened, so it is never retried.
    */
   private async execute(scope: UserScope, row: StoredProposal): Promise<ProposalView> {
-    const adapter = this.adapter(row.serverId);
     let sent = false;
-    let allowed = true;
     try {
-      const result = await this.deps.sessions.writeWithSession(scope, row.serverId, async (session) => {
-        const tool = (await session.listTools()).find((t) => t.name === row.toolName);
-        // The server may have changed the tool since this was proposed (FR-WR-03).
-        allowed = tool !== undefined && isApprovable(classifyTool(adapter.manifest, tool));
-        if (!allowed) return null;
-        sent = true;
-        return session.callTool(row.toolName, row.args);
-      });
-      if (!result) return await this.finish(scope, row, { status: "failed", errorCode: "tool_not_allowed" });
-      if (result.isError) return await this.finish(scope, row, { status: "failed", errorCode: "tool_refused" });
-      const outcome = adapter.outcome(this.draftOf(row), result.text);
-      return await this.finish(scope, row, {
+      const attempt = await this.deps.sessions.writeWithSession(scope, row.serverId, (session) =>
+        this.attempt(scope, row, session, () => {
+          sent = true;
+        }),
+      );
+      if (attempt === "not_allowed") return await this.finish(scope, row, { status: "failed", errorCode: "tool_not_allowed" });
+      if (attempt === "changed_since") return await this.finish(scope, row, { status: "failed", errorCode: "changed_since" });
+      if (attempt.result.isError) return await this.finish(scope, row, { status: "failed", errorCode: "tool_refused" });
+      const outcome = this.adapter(row.serverId).outcome(this.draftOf(row), attempt.result.text);
+      const finished = await this.finish(scope, row, {
         status: "succeeded",
         externalId: outcome.externalId,
         resultUrl: outcome.url,
       });
+      return await this.saveAfter(scope, finished, row.id, attempt.after);
     } catch (err) {
       if (!sent) {
         await releaseProposal(this.deps.pool, scope, row.id);
@@ -223,6 +282,49 @@ export class ProposalsService implements ProposalsApi {
       this.logFailure(err, row.id, "Write outcome unknown");
       return this.finish(scope, row, { status: "unknown", errorCode: "outcome_unknown" });
     }
+  }
+
+  /** The change is done and recorded: failing to save what it left only means it cannot be undone. */
+  private async saveAfter(
+    scope: UserScope,
+    finished: ProposalView,
+    id: string,
+    after: Record<string, unknown> | null,
+  ): Promise<ProposalView> {
+    if (!after) return finished;
+    try {
+      if (!(await recordProposalState(this.deps.pool, scope, id, { after }))) return finished;
+      return this.view(await this.requireProposal(scope, id));
+    } catch (err) {
+      this.logFailure(err, id, "Could not save a change's result for undo");
+      return finished;
+    }
+  }
+
+  /**
+   * Inside the write session: re-checks the tool, reads what the change will overwrite and saves it
+   * before sending, and for an undo refuses if that is not what Brain left behind.
+   */
+  private async attempt(scope: UserScope, row: StoredProposal, session: ToolSession, markSent: () => void): Promise<Attempt> {
+    const adapter = this.adapter(row.serverId);
+    const tool = (await session.listTools()).find((t) => t.name === row.toolName);
+    // The server may have changed the tool since this was proposed (FR-WR-03).
+    if (tool === undefined || !isApprovable(classifyTool(adapter.manifest, tool))) return "not_allowed";
+    const draft = this.draftOf(row);
+    const before = adapter.readState ? await adapter.readState(session, draft) : null;
+    if (row.expectedState && (!before || !sameState(before, row.expectedState))) return "changed_since";
+    if (before && !(await recordProposalState(this.deps.pool, scope, row.id, { before }))) {
+      throw new AppError("INTERNAL", "Could not record what this change replaces");
+    }
+    markSent();
+    const result = await session.callTool(row.toolName, row.args);
+    if (result.isError || !before || !adapter.readState) return { result, after: null };
+    // The change is made: failing to read it back only means it cannot be undone.
+    const after = await adapter.readState(session, draft).catch((err: unknown) => {
+      this.logFailure(err, row.id, "Could not read a change back");
+      return null;
+    });
+    return { result, after };
   }
 
   private async finish(scope: UserScope, row: StoredProposal, result: ProposalResult): Promise<ProposalView> {
@@ -264,7 +366,14 @@ export class ProposalsService implements ProposalsApi {
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
       agentRunId: row.agentRunId,
+      undoOf: row.undoOf,
+      canUndo: this.canUndo(row),
     };
+  }
+
+  private canUndo(row: StoredProposal): boolean {
+    const adapter = this.deps.adapters.get(row.serverId);
+    return row.status === "succeeded" && row.beforeState !== null && row.afterState !== null && !!adapter?.undoDraft;
   }
 
   /** FR-WR-05. The change itself is never logged, only its hash. */
@@ -281,6 +390,7 @@ export class ProposalsService implements ProposalsApi {
         approver: scope.userId,
         externalId: row.externalId,
         errorCode: row.errorCode,
+        ...(row.undoOf ? { undoOf: row.undoOf } : {}),
       },
     });
   }

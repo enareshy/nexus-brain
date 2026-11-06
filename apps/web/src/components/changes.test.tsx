@@ -167,6 +167,37 @@ describe("ProposalCard", () => {
     expect(screen.getByText(/may or may not have happened/)).toBeInTheDocument();
   });
 
+  it("offers undo only for a finished change that can be undone, when the page allows it", async () => {
+    const user = userEvent.setup();
+    const onUndo = vi.fn();
+    const done = { ...proposal, status: "succeeded" as const, action: "update_issue", canUndo: true };
+    const { unmount } = render(
+      <ProposalCard proposal={done} isBusy={false} onApprove={vi.fn()} onReject={vi.fn()} onUndo={onUndo} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Undo: Update a Jira issue" }));
+    expect(onUndo).toHaveBeenCalledWith(done);
+    unmount();
+
+    render(<ProposalCard proposal={{ ...done, canUndo: false }} isBusy={false} onApprove={vi.fn()} onReject={vi.fn()} onUndo={onUndo} />);
+    expect(screen.queryByRole("button", { name: /Undo/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer undo where the page gives no handler, such as an agent run", () => {
+    renderCard({ status: "succeeded", action: "update_issue", canUndo: true });
+    expect(screen.queryByRole("button", { name: /Undo/ })).not.toBeInTheDocument();
+  });
+
+  it("explains an undo, and why one was not sent", () => {
+    renderCard({ action: "undo_update", toolName: "editJiraIssue" });
+    expect(screen.getByText(/Puts back the fields as they were/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve: Undo a Jira issue update" })).toBeInTheDocument();
+  });
+
+  it("says an undo was not sent because the issue changed again", () => {
+    renderCard({ action: "undo_update", status: "failed", errorCode: "changed_since" });
+    expect(screen.getByText(/changed again after Brain's change/)).toBeInTheDocument();
+  });
+
   it("renders hostile argument text as text", () => {
     renderCard({ args: { summary: "<img src=x onerror=alert(1)>" } });
     expect(screen.queryByRole("img")).not.toBeInTheDocument();

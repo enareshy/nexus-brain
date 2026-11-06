@@ -14,6 +14,11 @@ const PROJECT_KEY = /^[A-Z][A-Z0-9_]+$/;
 const MAX_SITES = 3;
 const MAX_PROJECTS = 50;
 const PROJECTS_TOOL = "getVisibleJiraProjects";
+const ISSUE_TOOL = "getJiraIssue";
+/** The only fields an edit can set, so the only ones an undo can put back. */
+const UNDOABLE_FIELDS: ReadonlySet<string> = new Set(["summary", "description"]);
+/** Bigger than this and the saved state is not worth keeping: undo is then not offered. */
+const MAX_STATE_BYTES = 64 * 1024;
 
 type Obj = Record<string, unknown>;
 
@@ -148,6 +153,32 @@ function toolCall(request: WriteRequest, subtaskTypeName = ""): Pick<WriteDraft,
   }
 }
 
+/** The fields an edit sets, if every one of them can be put back. */
+function editedFields(draft: WriteDraft): string[] | null {
+  if (draft.toolName !== EDIT_TOOL || !isObj(draft.args.fields)) return null;
+  const keys = Object.keys(draft.args.fields);
+  return keys.length > 0 && keys.every((key) => UNDOABLE_FIELDS.has(key)) ? keys : null;
+}
+
+/**
+ * The fields as Jira holds them, in its own document format so formatting survives a round trip.
+ * Anything unexpected gives null: the change can still be made, only not undone.
+ */
+export function parseIssueState(text: string, keys: readonly string[]): Record<string, unknown> | null {
+  if (text.length > MAX_STATE_BYTES) return null;
+  const data = parseJson(text);
+  const fields = isObj(data) && isObj(data.fields) ? data.fields : null;
+  if (!fields) return null;
+  const state: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = fields[key] ?? null;
+    if (key === "summary" && typeof value !== "string") return null;
+    if (key === "description" && value !== null && !(isObj(value) && value.type === "doc")) return null;
+    state[key] = value;
+  }
+  return state;
+}
+
 export const atlassianWrites: WriteAdapter = {
   serverId: "atlassian",
   manifest: {
@@ -188,5 +219,32 @@ export const atlassianWrites: WriteAdapter = {
     const key = draft.toolName === CREATE_TOOL ? (isObj(data) ? data.key : null) : draft.args.issueIdOrKey;
     if (typeof key !== "string" || !ISSUE_KEY.test(key)) return { externalId: null, url: null };
     return { externalId: key, url: `${draft.siteOrigin}/browse/${key}` };
+  },
+
+  /** Only edits can be undone: undoing a new issue or comment would mean deleting it, which stays disabled. */
+  async readState(session, draft) {
+    const keys = editedFields(draft);
+    if (!keys) return null;
+    const result = await session.callTool(ISSUE_TOOL, {
+      cloudId: draft.args.cloudId,
+      issueIdOrKey: draft.args.issueIdOrKey,
+      fields: keys,
+      responseContentFormat: "adf",
+    });
+    if (result.isError) throw new AppError("UNAVAILABLE", "Could not read the issue before changing it");
+    return parseIssueState(result.text, keys);
+  },
+
+  /** Puts back exactly what was there, on the same site and issue. A null clears a field that was empty. */
+  undoDraft(draft, before) {
+    const keys = editedFields(draft);
+    if (!keys || !keys.every((key) => key in before)) throw new AppError("VALIDATION", "This change cannot be undone");
+    const fields = Object.fromEntries(keys.map((key) => [key, before[key]]));
+    return {
+      action: "undo_update",
+      toolName: EDIT_TOOL,
+      args: { cloudId: draft.args.cloudId, issueIdOrKey: draft.args.issueIdOrKey, fields, contentFormat: "adf" },
+      siteOrigin: draft.siteOrigin,
+    };
   },
 };

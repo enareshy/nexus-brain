@@ -24,4 +24,5 @@ export const unusedProposals: ProposalsApi = {
   propose: unused,
   approve: unused,
   reject: unused,
+  undo: unused,
 };

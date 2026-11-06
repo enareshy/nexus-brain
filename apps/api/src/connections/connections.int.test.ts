@@ -243,7 +243,7 @@ describe("connect Jira (mock) and search as that user", () => {
   it("lists live tools for the ADR capture", async () => {
     const pat = await as("patAcme");
     const res = await pat("GET", `/connections/${SERVER}/tools`);
-    expect(res.json().data.map((t: { name: string }) => t.name)).toEqual(["search_issues", "create_issue", "delete_issue"]);
+    expect(res.json().data.map((t: { name: string }) => t.name)).toEqual(["search_issues", "create_issue", "get_issue", "edit_issue", "delete_issue"]);
   });
 
   it("writes audit rows with a keyed query fingerprint, never the raw query", async () => {

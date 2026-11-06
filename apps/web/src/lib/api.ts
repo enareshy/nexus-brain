@@ -63,6 +63,8 @@ export const ProposalSchema = z.object({
   createdAt: z.string(),
   expiresAt: z.string(),
   agentRunId: z.string().nullable().optional(),
+  undoOf: z.string().nullable().optional(),
+  canUndo: z.boolean().optional(),
 });
 export type Proposal = z.infer<typeof ProposalSchema>;
 
@@ -389,6 +391,7 @@ export interface ApiClient {
   propose(serverId: string, request: WriteRequest): Promise<Proposal>;
   approveProposal(id: string, argsHash: string): Promise<Proposal>;
   rejectProposal(id: string): Promise<Proposal>;
+  undoProposal(id: string): Promise<Proposal>;
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -529,6 +532,7 @@ export function createApiClient(
         body: JSON.stringify({ argsHash }),
       }),
     rejectProposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}/reject`, { method: "POST" }),
+    undoProposal: (id) => request(ProposalSchema, `/proposals/${enc(id)}/undo`, { method: "POST" }),
     conversations: () => request(z.array(ConversationSummarySchema), "/conversations"),
     conversation: (id) => request(ConversationDetailSchema, `/conversations/${enc(id)}`),
     deleteConversation: (id) =>

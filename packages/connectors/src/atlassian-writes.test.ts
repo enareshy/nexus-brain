@@ -1,6 +1,6 @@
 import type { ToolResult } from "@brain/mcp-client";
 import { describe, expect, it, vi } from "vitest";
-import { atlassianWrites, parseProjects } from "./atlassian-writes.js";
+import { atlassianWrites, parseIssueState, parseProjects } from "./atlassian-writes.js";
 import type { ToolSession } from "./types.js";
 
 const CLOUD = "11111111-2222-3333-4444-555555555555";
@@ -239,5 +239,66 @@ describe("parseProjects", () => {
     const text = JSON.stringify({ values: [{ key: "bad key", name: "x" }, { key: "OK", name: "Fine" }, 3] });
     expect(parseProjects(text)).toEqual([{ key: "OK", name: "Fine", issueTypes: [] }]);
     expect(parseProjects("nope")).toEqual([]);
+  });
+});
+
+describe("undo (FR-WR-06)", () => {
+  const EDIT = {
+    action: "update_issue",
+    toolName: "editJiraIssue",
+    siteOrigin: ORIGIN,
+    args: { cloudId: CLOUD, issueIdOrKey: "ENG-1", fields: { summary: "New", description: "Body" }, contentFormat: "markdown" },
+  } as const;
+  const DOC = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Old body" }] }] };
+
+  function reading(result: ToolResult): ToolSession & { callTool: ReturnType<typeof vi.fn> } {
+    return { listTools: async () => [], callTool: vi.fn(async () => result) };
+  }
+
+  it("reads only the edited fields, in Jira's own format, from the same site and issue", async () => {
+    const s = reading(ok({ key: "ENG-1", fields: { summary: "Old", description: DOC, status: { name: "Open" } } }));
+    expect(await atlassianWrites.readState?.(s, EDIT)).toEqual({ summary: "Old", description: DOC });
+    expect(s.callTool).toHaveBeenCalledWith("getJiraIssue", {
+      cloudId: CLOUD,
+      issueIdOrKey: "ENG-1",
+      fields: ["summary", "description"],
+      responseContentFormat: "adf",
+    });
+  });
+
+  it("keeps an empty description as null, so undo clears it again", async () => {
+    const s = reading(ok({ fields: { summary: "Old", description: null } }));
+    expect(await atlassianWrites.readState?.(s, EDIT)).toEqual({ summary: "Old", description: null });
+  });
+
+  it("does not offer undo for new issues and comments, or when the issue looks unexpected", async () => {
+    const s = reading(ok({ fields: { summary: "Old" } }));
+    expect(await atlassianWrites.readState?.(s, { ...EDIT, toolName: "createJiraIssue" })).toBeNull();
+    expect(await atlassianWrites.readState?.(s, { ...EDIT, toolName: "addCommentToJiraIssue" })).toBeNull();
+    expect(s.callTool).not.toHaveBeenCalled();
+    expect(parseIssueState("not json", ["summary"])).toBeNull();
+    expect(parseIssueState(JSON.stringify({ fields: { summary: 7 } }), ["summary"])).toBeNull();
+    expect(parseIssueState(JSON.stringify({ fields: { description: "plain" } }), ["description"])).toBeNull();
+    expect(parseIssueState("x".repeat(70_000), ["summary"])).toBeNull();
+  });
+
+  it("stops before the change when Jira refuses the read", async () => {
+    const s = reading({ text: "nope", isError: true, truncated: false });
+    await expect(atlassianWrites.readState?.(s, EDIT)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+  });
+
+  it("builds an edit that sets exactly the saved fields back on the same issue", () => {
+    const undo = atlassianWrites.undoDraft?.(EDIT, { summary: "Old", description: DOC });
+    expect(undo).toEqual({
+      action: "undo_update",
+      toolName: "editJiraIssue",
+      siteOrigin: ORIGIN,
+      args: { cloudId: CLOUD, issueIdOrKey: "ENG-1", fields: { summary: "Old", description: DOC }, contentFormat: "adf" },
+    });
+  });
+
+  it("refuses an undo for anything but an edit, or with a field missing", () => {
+    expect(() => atlassianWrites.undoDraft?.({ ...EDIT, toolName: "createJiraIssue" }, { summary: "Old" })).toThrow();
+    expect(() => atlassianWrites.undoDraft?.(EDIT, { summary: "Old" })).toThrow();
   });
 });
