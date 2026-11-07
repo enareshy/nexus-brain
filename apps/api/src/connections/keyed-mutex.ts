@@ -1,7 +1,7 @@
 /**
  * Serialises async work per key inside this process. Used per (tenant, user, server)
  * so concurrent requests cannot race a rotating refresh token (security review M2).
- * Multi-instance deployments additionally need a Postgres advisory lock around refresh.
+ * Across API servers, ConnectionsService adds a Postgres advisory lock (withSharedLock).
  */
 export class KeyedMutex {
   private readonly tails = new Map<string, Promise<unknown>>();

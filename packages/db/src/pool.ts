@@ -12,7 +12,16 @@ export interface AppPoolOptions {
   readonly max?: number;
   /** Idle-client errors (e.g. database restart) must be handled or Node crashes. */
   readonly onError: (err: Error) => void;
+  /**
+   * For connections that hold locks: both ends check the link often, so if a server dies without
+   * closing its connections, Postgres drops them (and their locks) within about a minute rather
+   * than after the system default of two hours or more.
+   */
+  readonly detectDeadPeers?: boolean;
 }
+
+/** Postgres probes after 30 s of silence, every 10 s, and gives up after 3 misses or 60 s unacknowledged. */
+const DEAD_PEER_SETTINGS = "-c tcp_keepalives_idle=30 -c tcp_keepalives_interval=10 -c tcp_keepalives_count=3 -c tcp_user_timeout=60000";
 
 /** Application pool with bounded waits so a slow database cannot hang every request. */
 export function createAppPool(options: AppPoolOptions): pg.Pool {
@@ -21,7 +30,10 @@ export function createAppPool(options: AppPoolOptions): pg.Pool {
     max: options.max ?? 10,
     connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
     idleTimeoutMillis: IDLE_TIMEOUT_MS,
-    options: `-c statement_timeout=${STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=${IDLE_IN_TX_TIMEOUT_MS}`,
+    options: `-c statement_timeout=${STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=${IDLE_IN_TX_TIMEOUT_MS}${
+      options.detectDeadPeers ? ` ${DEAD_PEER_SETTINGS}` : ""
+    }`,
+    ...(options.detectDeadPeers ? { keepAlive: true, keepAliveInitialDelayMillis: 10_000 } : {}),
   });
   pool.on("error", options.onError);
   return pool;

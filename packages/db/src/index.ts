@@ -1,5 +1,6 @@
 export * from "./agent-runs.js";
 export * from "./agent-triggers.js";
+export * from "./advisory-lock.js";
 export * from "./audit.js";
 export * from "./budgets.js";
 export * from "./config.js";

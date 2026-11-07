@@ -12,7 +12,7 @@ import {
   type SearchAdapter,
   type WriteAdapter,
 } from "@brain/connectors";
-import { assertRlsEnforced, createAppPool } from "@brain/db";
+import { assertRlsEnforced, createAppPool, withSharedLock } from "@brain/db";
 import { createAnthropicGateway, withAnswerCache, withCircuitBreaker } from "@brain/llm-gateway";
 import {
   ATLASSIAN_SERVER,
@@ -78,11 +78,24 @@ const KNOWN_SERVERS: Readonly<Record<string, () => KnownServer>> = {
   slack: () => ({ def: createSlackServer(), adapter: slackSearch }),
 };
 
+/** Connections used at once by one server; more wait their turn in this process first. */
+const LOCK_POOL_SIZE = 20;
+const CONNECTION_LOCK_WAIT_MS = 8_000;
+
 const tracing = startTracing("brain-api", env.OTEL_EXPORTER_OTLP_ENDPOINT);
 const logger = createLogger({ service: "brain-api", level: env.LOG_LEVEL });
 const pool = createAppPool({
   connectionString: env.DATABASE_APP_ROLE_URL,
   onError: (err) => logger.error({ err }, "Idle database client error"),
+});
+
+// Kept apart from the main pool: a server waiting for a connection's lock holds one of these, and
+// must never take the connections that the work holding the lock needs.
+const lockPool = createAppPool({
+  connectionString: env.DATABASE_APP_ROLE_URL,
+  max: LOCK_POOL_SIZE,
+  detectDeadPeers: true,
+  onError: (err) => logger.error({ err }, "Idle lock client error"),
 });
 
 // Tenant isolation depends on RLS; never start with a role that bypasses it.
@@ -119,6 +132,8 @@ const connections = new ConnectionsService({
   adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
   onBackgroundError: (err) => logger.warn({ err }, "MCP session housekeeping failed"),
+  // Under the pool's 10 s statement limit, so a long wait ends as "busy" rather than a timeout.
+  sharedLock: (key, work) => withSharedLock(lockPool, key, CONNECTION_LOCK_WAIT_MS, work),
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
@@ -228,6 +243,7 @@ app.getHttpAdapter().getInstance().addHook("onClose", async () => {
   retention.stop();
   connections.close();
   await pool.end();
+  await lockPool.end();
   await tracing.shutdown();
 });
 

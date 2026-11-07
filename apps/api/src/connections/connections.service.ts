@@ -119,7 +119,15 @@ export interface ConnectionsDeps {
   readonly onBackgroundError?: (err: unknown) => void;
   /** Suggests other words when a search finds nothing. Without one, an empty search stays empty. */
   readonly expander?: QueryExpander;
+  /**
+   * Holds a lock shared by every API server while a connection is used, so two servers cannot
+   * refresh one rotating token at once. Without one, the lock covers only this process.
+   */
+  readonly sharedLock?: SharedLock;
 }
+
+/** Runs `work` while no other server runs work for the same key. */
+export type SharedLock = <T>(key: string, work: () => Promise<T>) => Promise<T>;
 
 function appContext(tenantId: string, serverId: string): string {
   return `app|${tenantId}|${serverId}`;
@@ -270,7 +278,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     const def = await this.definitionFor(scope, pending.serverId);
     // Same lock as all session work: a request still using the previous account finishes
     // first, so it cannot re-populate the caches or pool after this reset.
-    await this.sessions.run(this.lockKey(scope, def.id), async () => {
+    await this.exclusive(this.lockKey(scope, def.id), async () => {
       const store = createVaultStore(this.deps.pool, this.deps.box, scope, def.id);
       await completeAuthorization(def, store, this.deps.client, {
         code,
@@ -288,7 +296,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     serverId: string,
   ): Promise<{ disconnected: boolean; revoked: boolean }> {
     const def = await this.definitionFor(scope, serverId);
-    return this.sessions.run(this.lockKey(scope, serverId), async () => {
+    return this.exclusive(this.lockKey(scope, serverId), async () => {
       const tokens = await readStoredTokens(this.deps.pool, this.deps.box, scope, serverId);
       const revoked = tokens
         ? await revokeAuthorization(def, this.deps.client, tokens, await readClientInfo(this.deps.pool, this.deps.box, serverId))
@@ -346,7 +354,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     work: (session: ToolSession) => Promise<T>,
   ): Promise<T> {
     const key = this.lockKey(scope, serverId);
-    return this.sessions.run(key, async () => {
+    return this.exclusive(key, async () => {
       await this.requireActive(scope, serverId);
       this.idleSessions.evict(key);
       const session = await this.openFresh(scope, serverId);
@@ -452,6 +460,15 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   /**
+   * One piece of work at a time per connection: first within this process, so only one request
+   * here waits on the shared lock, then across servers.
+   */
+  private exclusive<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const shared = this.deps.sharedLock;
+    return this.sessions.run(key, () => (shared ? shared(`mcp-connection|${key}`, work) : work()));
+  }
+
+  /**
    * Results are never cached (FR-RET-03): asking the service with the user's own token each time
    * is what checks their access, so removed access and revoked accounts take effect at once.
    */
@@ -508,7 +525,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     signal?: AbortSignal,
   ): Promise<T> {
     const key = this.lockKey(scope, serverId);
-    return this.sessions.run(key, async () => {
+    return this.exclusive(key, async () => {
       if (signal?.aborted) throw new AppError("UNAVAILABLE", "Search budget exceeded");
       // Checked again here, since an admin may have turned the service off while this waited its turn.
       await this.requireAllowed(scope, serverId);

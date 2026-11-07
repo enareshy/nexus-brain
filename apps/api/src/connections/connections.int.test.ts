@@ -1,7 +1,7 @@
 // Full path: API -> vault (Postgres RLS) -> OAuth + MCP against a local mock server.
 import { createSecretBox } from "@brain/core";
 import { mockSearch } from "@brain/connectors";
-import { applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
+import { applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, seed, withSharedLock } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import { createRegistry } from "@brain/mcp-client";
 import { simulateConsent, startMockMcpServer, type MockMcpServer } from "@brain/mcp-client/testing";
@@ -27,6 +27,9 @@ let app: NestFastifyApplication;
 let pool: pg.Pool;
 let mock: MockMcpServer;
 let keys: TestKeys;
+let lockPool: pg.Pool;
+/** A second API server: its own process state, the same database and lock. */
+let otherServer: ConnectionsService;
 
 beforeAll(async () => {
   const owner = new pg.Client({ connectionString: OWNER_URL });
@@ -49,7 +52,17 @@ beforeAll(async () => {
     },
   });
   pool = createAppPool({ connectionString: APP_URL, onError: () => {} });
+  lockPool = createAppPool({ connectionString: APP_URL, onError: () => {} });
   keys = await createTestKeys();
+  const serverOptions = {
+    pool,
+    box: createSecretBox(randomBytes(32).toString("base64")),
+    registry: createRegistry([mock.definition]),
+    adapters: new Map([[SERVER, { ...mockSearch, serverId: SERVER }]]),
+    client: { redirectUrl: "http://127.0.0.1:3001/oauth/callback", clientName: "Nexus Brain (int test)" },
+    sharedLock: <T>(key: string, work: () => Promise<T>) => withSharedLock(lockPool, key, 8_000, work),
+  };
+  otherServer = new ConnectionsService(serverOptions);
 
   app = await createApp({
     logger: createLogger({ service: "t", destination: new Writable({ write: (_c, _e, d) => d() }) }),
@@ -61,13 +74,7 @@ beforeAll(async () => {
     conversations: unusedConversations,
     agents: unusedAgents,
     answers: { answer: async () => {} },
-    connections: new ConnectionsService({
-      pool,
-      box: createSecretBox(randomBytes(32).toString("base64")),
-      registry: createRegistry([mock.definition]),
-      adapters: new Map([[SERVER, { ...mockSearch, serverId: SERVER }]]),
-      client: { redirectUrl: "http://127.0.0.1:3001/oauth/callback", clientName: "Nexus Brain (int test)" },
-    }),
+    connections: new ConnectionsService(serverOptions),
   });
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
@@ -76,6 +83,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await pool?.end();
+  await lockPool?.end();
   await mock?.close();
 });
 
@@ -171,6 +179,22 @@ describe("connect Jira (mock) and search as that user", () => {
     // Distinct queries, because a repeated query would be answered from the cache.
     const results = await Promise.all(["sso", "bug", "on"].map((q) => pat("GET", `/search?q=${q}`)));
     for (const res of results) expect(res.json().data.sources[0]).toMatchObject({ ok: true });
+    expect((await pat("GET", "/connections")).json().data[0].status).toBe("active");
+  });
+
+  it("does not race the refresh token across two API servers either", async () => {
+    mock.expireAccessTokens();
+    const refreshesBefore = mock.stats.refreshGrants;
+    const pat = await as("patAcme");
+    const scope = { tenantId: ACME, userId: seedUser("patAcme").id };
+    // Each server has its own sessions and caches; only the database and its lock are shared.
+    const [here, there] = await Promise.all([
+      Promise.all(["two-a", "two-b"].map((q) => pat("GET", `/search?q=${q}`))),
+      Promise.all(["two-c", "two-d"].map((q) => otherServer.search(scope, q, 5))),
+    ]);
+    for (const res of here) expect(res.json().data.sources[0]).toMatchObject({ ok: true });
+    for (const result of there) expect(result.sources[0]).toMatchObject({ ok: true });
+    expect(mock.stats.refreshGrants).toBeGreaterThan(refreshesBefore);
     expect((await pat("GET", "/connections")).json().data[0].status).toBe("active");
   });
 
