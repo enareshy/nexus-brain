@@ -39,6 +39,51 @@ describe("AnswerPanel", () => {
     expect(screen.getByRole("link", { name: "Runbook" })).toHaveAttribute("href", hit.url);
   });
 
+  it("shows the passage each source was cited for, under that source", () => {
+    const state: AnswerState = {
+      ...base,
+      status: "done",
+      outcome: "answered",
+      grounded: true,
+      parts: [
+        { kind: "text", text: "Rotate monthly." },
+        { kind: "cite", source: 1, quotes: ["Passwords rotate monthly."] },
+        { kind: "text", text: " Use the vault." },
+        { kind: "cite", source: 1, quotes: ["Passwords rotate monthly.", "Keep them in the vault."] },
+      ],
+    };
+    render(<AnswerPanel state={state} />);
+    const list = screen.getByRole("list", { name: "Sources" });
+    expect(within(list).getAllByText("Passwords rotate monthly.")).toHaveLength(1);
+    expect(within(list).getByText("Keep them in the vault.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Source 1: Runbook" })[0]).toHaveAttribute(
+      "title",
+      "Passwords rotate monthly.",
+    );
+  });
+
+  it("shows saved answers without passages as before", () => {
+    const state: AnswerState = { ...base, status: "done", outcome: "answered", grounded: true, parts: [{ kind: "cite", source: 1 }] };
+    render(<AnswerPanel state={state} />);
+    expect(screen.queryByRole("blockquote")).toBeNull();
+    expect(screen.getByRole("link", { name: "Runbook" })).toBeInTheDocument();
+  });
+
+  it("marks bracketed numbers the AI wrote itself, which are not checked citations", () => {
+    const state: AnswerState = {
+      ...base,
+      status: "done",
+      outcome: "answered",
+      grounded: true,
+      parts: [{ kind: "text", text: "Rotate monthly [2] and [12]." }, { kind: "cite", source: 1, quotes: [] }],
+    };
+    render(<AnswerPanel state={state} />);
+    const written = screen.getAllByTitle("Written by the AI, not a checked citation");
+    expect(written.map((el) => el.textContent)).toEqual(["[2]", "[12]"]);
+    expect(screen.queryByRole("link", { name: /Source 2/ })).toBeNull();
+    expect(screen.getByText(/Grey numbers in brackets were written by the AI/)).toBeInTheDocument();
+  });
+
   it("does not link unsafe URLs or missing sources, and renders hostile text as text", () => {
     const hostile = { ...hit, title: "<img src=x onerror=alert(1)>", url: "javascript:alert(1)" };
     const state: AnswerState = {

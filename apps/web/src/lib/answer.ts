@@ -20,7 +20,32 @@ export type AnswerEvent = z.infer<typeof AnswerEventSchema>;
 
 export type AnswerPart =
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "cite"; readonly source: number };
+  /** `quotes` is the cited passage; answers saved before it was kept have none. */
+  | { readonly kind: "cite"; readonly source: number; readonly quotes?: readonly string[] };
+
+/** Enough to recognise the passage; the source link has the rest. */
+const MAX_QUOTE_CHARS = 300;
+const MAX_QUOTES_PER_MARKER = 3;
+
+function toQuote(citedText: string): string | null {
+  const flat = citedText.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  // Cut by character, not UTF-16 unit, so an emoji is never split in half.
+  const chars = Array.from(flat);
+  return chars.length > MAX_QUOTE_CHARS ? `${chars.slice(0, MAX_QUOTE_CHARS - 1).join("")}…` : flat;
+}
+
+/** Repeated citations of one source in a row read better as a single marker, with each passage kept. */
+function appendCitation(parts: readonly AnswerPart[], source: number, citedText: string): readonly AnswerPart[] {
+  const quote = toQuote(citedText);
+  const last = parts.at(-1);
+  if (last?.kind !== "cite" || last.source !== source) {
+    return [...parts, { kind: "cite", source, quotes: quote ? [quote] : [] }];
+  }
+  const quotes = last.quotes ?? [];
+  if (!quote || quotes.includes(quote) || quotes.length >= MAX_QUOTES_PER_MARKER) return parts;
+  return [...parts.slice(0, -1), { ...last, quotes: [...quotes, quote] }];
+}
 
 export interface AnswerState {
   readonly status: "streaming" | "done" | "error";
@@ -61,10 +86,8 @@ export function reduceAnswer(state: AnswerState, event: AnswerEvent): AnswerStat
         : { ...state, parts: [...state.parts, { kind: "text", text: event.text }] };
     }
     case "citation": {
-      // Repeated citations of one source in a row read better as a single marker.
-      const last = state.parts.at(-1);
-      if (last?.kind === "cite" && last.source === event.source) return state;
-      return { ...state, parts: [...state.parts, { kind: "cite", source: event.source }] };
+      const parts = appendCitation(state.parts, event.source, event.citedText);
+      return parts === state.parts ? state : { ...state, parts };
     }
     case "subtasks":
       return { ...state, subtasks: event.titles };

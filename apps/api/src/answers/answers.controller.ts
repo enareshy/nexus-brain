@@ -8,6 +8,7 @@ import { Ctx, type RequestContext } from "../context/request-context.js";
 import { ANSWERS, LOGGER } from "../tokens.js";
 import type { AnswersApi, AnswerStreamEvent } from "./answers.service.js";
 import type { ItemTask } from "./item-tasks.js";
+import { formatEvent, startHeartbeat } from "./sse.js";
 
 function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -117,9 +118,11 @@ export class AnswersController {
     raw.on("close", () => {
       if (!raw.writableEnded) controller.abort();
     });
-    const send = (event: AnswerStreamEvent) => {
-      if (!raw.writableEnded) raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    const write = (chunk: string) => {
+      if (!raw.writableEnded) raw.write(chunk);
     };
+    const send = (event: AnswerStreamEvent) => write(formatEvent(event));
+    const stopHeartbeat = startHeartbeat(write);
 
     try {
       await work(send, controller.signal);
@@ -133,6 +136,7 @@ export class AnswersController {
         send({ type: "error", code: "INTERNAL", message: "Something went wrong. Please try again." });
       }
     } finally {
+      stopHeartbeat();
       raw.end();
     }
   }

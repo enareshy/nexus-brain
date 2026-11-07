@@ -18,7 +18,7 @@ describe("reduceAnswer", () => {
     ]);
     expect(state.parts).toEqual([
       { kind: "text", text: "Rotate monthly." },
-      { kind: "cite", source: 1 },
+      { kind: "cite", source: 1, quotes: ["x"] },
       { kind: "text", text: " Yes." },
     ]);
   });
@@ -29,7 +29,24 @@ describe("reduceAnswer", () => {
       { type: "citation", source: 1, citedText: "b" },
       { type: "citation", source: 2, citedText: "c" },
     ]);
-    expect(state.parts).toEqual([{ kind: "cite", source: 1 }, { kind: "cite", source: 2 }]);
+    expect(state.parts).toEqual([
+      { kind: "cite", source: 1, quotes: ["a", "b"] },
+      { kind: "cite", source: 2, quotes: ["c"] },
+    ]);
+  });
+
+  it("keeps each cited passage short, flat and unrepeated", () => {
+    const state = run([
+      { type: "citation", source: 1, citedText: `  line
+${"y".repeat(400)}` },
+      { type: "citation", source: 1, citedText: "   " },
+      { type: "citation", source: 1, citedText: `  line
+${"y".repeat(400)}` },
+    ]);
+    const quotes = (state.parts[0] as { quotes: readonly string[] }).quotes;
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0]).toHaveLength(300);
+    expect(quotes[0]?.startsWith("line yyy")).toBe(true);
   });
 
   it("records sources, completion and errors, without mutating the initial state", () => {

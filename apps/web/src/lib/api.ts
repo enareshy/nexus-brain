@@ -112,7 +112,7 @@ export const SavedAnswerSchema = z.object({
   parts: z.array(
     z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("text"), text: z.string() }),
-      z.object({ kind: z.literal("cite"), source: z.number() }),
+      z.object({ kind: z.literal("cite"), source: z.number(), quotes: z.array(z.string().max(700)).max(5).optional() }),
     ]),
   ),
   hits: z.array(HitSchema),

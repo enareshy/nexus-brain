@@ -28,7 +28,10 @@ const MAX_PREVIOUS_QUESTIONS = 3;
 /** Storage limits per person. Retention rules come with plans and admin settings. */
 const MAX_CONVERSATIONS = 500;
 
-export type AnswerPart = { readonly kind: "text"; readonly text: string } | { readonly kind: "cite"; readonly source: number };
+/** `quotes` is the cited passage; answers saved before it was kept have none. */
+export type AnswerPart =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "cite"; readonly source: number; readonly quotes?: readonly string[] };
 
 export interface StoredAnswer {
   readonly parts: readonly AnswerPart[];

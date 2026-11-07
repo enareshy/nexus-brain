@@ -1,5 +1,44 @@
-import type { AnswerState } from "@/lib/answer";
+import type { ReactNode } from "react";
+import type { AnswerPart, AnswerState } from "@/lib/answer";
 import { safeHttpUrl } from "@/lib/safe-url";
+
+/** "[n]" the model typed into its text. Real citations arrive as their own parts. */
+const WRITTEN_MARKER = /\[\d{1,3}\]/g;
+const WRITTEN_TITLE = "Written by the AI, not a checked citation";
+const QUOTES_SHOWN_PER_SOURCE = 3;
+
+/** Shows typed "[n]" greyed out, so it is not mistaken for a linked citation. */
+function renderText(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let from = 0;
+  for (const match of text.matchAll(WRITTEN_MARKER)) {
+    nodes.push(text.slice(from, match.index));
+    nodes.push(
+      <span key={match.index} title={WRITTEN_TITLE} className="text-slate-400 dark:text-slate-500">
+        {match[0]}
+      </span>,
+    );
+    from = match.index + match[0].length;
+  }
+  nodes.push(text.slice(from));
+  return nodes;
+}
+
+function hasWrittenMarkers(parts: readonly AnswerPart[]): boolean {
+  return parts.some((part) => part.kind === "text" && new RegExp(WRITTEN_MARKER.source).test(part.text));
+}
+
+/** Distinct passages cited from each source, in the order they were cited. */
+function quotesBySource(parts: readonly AnswerPart[]): ReadonlyMap<number, readonly string[]> {
+  const result = new Map<number, readonly string[]>();
+  for (const part of parts) {
+    if (part.kind !== "cite") continue;
+    const seen = result.get(part.source) ?? [];
+    const added = (part.quotes ?? []).filter((quote, index, all) => !seen.includes(quote) && all.indexOf(quote) === index);
+    result.set(part.source, [...seen, ...added].slice(0, QUOTES_SHOWN_PER_SOURCE));
+  }
+  return result;
+}
 
 type Props = {
   state: AnswerState;
@@ -29,6 +68,8 @@ function outcomeNote(state: AnswerState): string | null {
  */
 export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
   const note = outcomeNote(state);
+  const quotes = quotesBySource(state.parts);
+  const writtenMarkers = hasWrittenMarkers(state.parts);
   const hasText = state.parts.length > 0;
   const isSearchOnly = state.status === "done" && state.outcome === "search_only" && !resultsShownElsewhere;
   // With no answer to cite them, every result found is listed (NFR-AVAIL-01).
@@ -52,7 +93,7 @@ export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
       {hasText && (
         <p className="mt-3 whitespace-pre-wrap text-lg leading-relaxed">
           {state.parts.map((part, index) => {
-            if (part.kind === "text") return <span key={index}>{part.text}</span>;
+            if (part.kind === "text") return <span key={index}>{renderText(part.text)}</span>;
             const hit = state.hits[part.source - 1];
             const href = hit ? safeHttpUrl(hit.url) : null;
             const label = `[${part.source}]`;
@@ -63,6 +104,7 @@ export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`Source ${part.source}: ${hit?.title}`}
+                title={part.quotes?.[0]}
                 className="mx-0.5 align-super font-mono text-xs font-semibold text-brand hover:underline"
               >
                 {label}
@@ -76,6 +118,11 @@ export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
         </p>
       )}
 
+      {writtenMarkers && (
+        <p className="mt-3 text-sm text-slate-500">
+          Grey numbers in brackets were written by the AI and are not checked citations. Only the linked numbers are.
+        </p>
+      )}
       {note && <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">{note}</p>}
       {state.status === "done" && state.truncatedDocuments > 0 && (
         <p className="mt-2 text-sm text-slate-500">
@@ -89,7 +136,7 @@ export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
       )}
 
       {citedSources.length > 0 && (
-        <ol className="mt-5 space-y-1 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
+        <ol aria-label="Sources" className="mt-5 space-y-1 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
           {citedSources.map((source) => {
             const hit = state.hits[source - 1];
             if (!hit) return null;
@@ -97,13 +144,23 @@ export function AnswerPanel({ state, resultsShownElsewhere = false }: Props) {
             return (
               <li key={source} className="flex gap-2">
                 <span className="font-mono text-xs text-slate-500">[{source}]</span>
-                {href ? (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
-                    {hit.title}
-                  </a>
-                ) : (
-                  <span>{hit.title}</span>
-                )}
+                <div className="min-w-0">
+                  {href ? (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+                      {hit.title}
+                    </a>
+                  ) : (
+                    <span>{hit.title}</span>
+                  )}
+                  {(quotes.get(source) ?? []).map((quote) => (
+                    <blockquote
+                      key={quote}
+                      className="mt-1 break-words border-l-2 border-slate-200 pl-2 text-xs italic text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                    >
+                      {quote}
+                    </blockquote>
+                  ))}
+                </div>
               </li>
             );
           })}

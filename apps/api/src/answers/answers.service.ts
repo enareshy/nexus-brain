@@ -6,6 +6,7 @@ import type { Logger } from "@brain/telemetry";
 import type { AiSettingsSource } from "../admin/ai-settings.service.js";
 import type { DocumentSource, ItemReference } from "../connections/connections.service.js";
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
+import { appendCitation, appendText } from "./answer-parts.js";
 import type { MemorySource } from "../memory/memory.service.js";
 import type { BudgetGuard } from "../usage/usage.service.js";
 import { canHaveSubtasks, itemTaskRequest, parseSubtasks, type ItemTask } from "./item-tasks.js";
@@ -79,19 +80,6 @@ export interface AnswersDeps {
   readonly items?: { readItem(scope: UserScope, item: ItemReference): Promise<string | null> };
   /** The company's choice of model. Without one, the most capable model. */
   readonly aiSettings?: AiSettingsSource;
-}
-
-function appendText(parts: readonly AnswerPart[], text: string): readonly AnswerPart[] {
-  const last = parts.at(-1);
-  return last?.kind === "text"
-    ? [...parts.slice(0, -1), { kind: "text", text: last.text + text }]
-    : [...parts, { kind: "text", text }];
-}
-
-/** Repeated citations of one source in a row read better as a single marker. */
-function appendCitation(parts: readonly AnswerPart[], source: number): readonly AnswerPart[] {
-  const last = parts.at(-1);
-  return last?.kind === "cite" && last.source === source ? parts : [...parts, { kind: "cite", source }];
 }
 
 /** Stops waiting for a read when it takes too long or the person leaves. The read itself may finish later. */
@@ -294,7 +282,7 @@ export class AnswersService implements AnswersApi {
           } else if (event.documentIndex >= 0 && event.documentIndex < cited.length) {
             // Only documents we actually sent can be cited.
             citationCount += 1;
-            parts = appendCitation(parts, event.documentIndex + 1);
+            parts = appendCitation(parts, event.documentIndex + 1, event.citedText);
             emit({ type: "citation", source: event.documentIndex + 1, citedText: event.citedText });
           }
         },

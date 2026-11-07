@@ -344,7 +344,7 @@ describe("a conversation", () => {
     expect(stored.messages[1].role).toBe("assistant");
     expect(stored.messages[1].answer.parts).toEqual([
       { kind: "text", text: "It launches " },
-      { kind: "cite", source: 1 },
+      { kind: "cite", source: 1, quotes: ["launch"] },
       { kind: "text", text: "in May." },
     ]);
     expect(stored.messages[1].answer.hits[0].externalId).toBe("Z-1");
