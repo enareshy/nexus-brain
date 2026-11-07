@@ -448,6 +448,42 @@ describe("undo (FR-WR-06)", () => {
     expect(rows.rows[0].n).toBe(1);
   });
 
+  it("gives one undo when several are requested at the same time", async () => {
+    const pat = await as("patAcme");
+    const done = await edit(pat, "Raced");
+    const results = await Promise.all([1, 2, 3, 4].map(() => pat("POST", `/proposals/${done.id}/undo`)));
+    expect(new Set(results.map((r) => r.json().data.id)).size).toBe(1);
+    const { rows } = await owner.query("SELECT count(*)::int AS n FROM write_proposals WHERE undo_of = $1", [done.id]);
+    expect(rows[0].n).toBe(1);
+    const audit = await owner.query(
+      "SELECT count(*)::int AS n FROM audit_log WHERE action = 'write.proposed' AND meta->>'undoOf' = $1",
+      [done.id],
+    );
+    expect(audit.rows[0].n).toBe(1);
+  });
+
+  it("saves what an undo would put back once, and never lets it change", async () => {
+    const pat = await as("patAcme");
+    const done = await edit(pat, "Write once");
+    const pending = await propose(pat, "Still pending");
+    for (const [sql, id] of [
+      ["UPDATE write_proposals SET before_state = '{\"summary\":\"forged\"}' WHERE id = $1", done.id],
+      ["UPDATE write_proposals SET after_state = NULL WHERE id = $1", done.id],
+      ["UPDATE write_proposals SET after_state = '{\"summary\":\"forged\"}' WHERE id = $1", pending.id],
+      ["UPDATE write_proposals SET before_state = '{\"summary\":\"forged\"}' WHERE id = $1", pending.id],
+      // Claiming and saving in one statement is refused: the change must already be being sent.
+      ["UPDATE write_proposals SET status = 'executing', before_state = '{\"summary\":\"forged\"}' WHERE id = $1", pending.id],
+      [
+        "INSERT INTO write_proposals (id, tenant_id, user_id, server_id, action, tool_name, tool_class, args, args_hash, site_origin, status, expires_at, before_state) SELECT gen_random_uuid(), tenant_id, user_id, server_id, action, tool_name, tool_class, args, args_hash, site_origin, 'pending', expires_at, '{}'::jsonb FROM write_proposals WHERE id = $1",
+        pending.id,
+      ],
+    ] as const) {
+      await expect(owner.query(sql, [id])).rejects.toThrow(/saved once|no saved state/);
+    }
+    const { rows } = await owner.query("SELECT before_state FROM write_proposals WHERE id = $1", [done.id]);
+    expect(rows[0].before_state).toEqual({ summary: "Original title" });
+  });
+
   it("allows a new undo after one was rejected", async () => {
     const pat = await as("patAcme");
     const done = await edit(pat, "Rejected undo");

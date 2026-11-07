@@ -36,6 +36,11 @@ export function createProposal(pool: PoolLike, scope: UserScope, proposal: NewPr
       await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`proposal|${scope.tenantId}|${scope.userId}`}, 0))`);
       const [same] = await db.select().from(writeProposals).where(eq(writeProposals.id, proposal.id)).limit(1);
       if (same) return same;
+      // Checked under the lock, so two quick undo requests give one undo, not two.
+      if (proposal.undoOf) {
+        const [active] = await db.select().from(writeProposals).where(activeUndoOf(proposal.undoOf)).limit(1);
+        if (active) return active;
+      }
       const [pending] = await db
         .select({ value: count() })
         .from(writeProposals)
@@ -190,19 +195,18 @@ export function recordProposalState(
   });
 }
 
+/** An undo of this change that is waiting, running or done. */
+function activeUndoOf(undoOf: string) {
+  return and(
+    eq(writeProposals.undoOf, undoOf),
+    sql`(${writeProposals.status} IN ('executing', 'succeeded', 'unknown')
+      OR (${writeProposals.status} = 'pending' AND ${writeProposals.expiresAt} > now()))`,
+  );
+}
+
 /** Undos of this change that are waiting, running or done, newest first. */
 export function activeUndos(pool: PoolLike, scope: UserScope, undoOf: string): Promise<StoredProposal[]> {
   return withUser(pool, scope, (db) =>
-    db
-      .select()
-      .from(writeProposals)
-      .where(
-        and(
-          eq(writeProposals.undoOf, undoOf),
-          sql`(${writeProposals.status} IN ('executing', 'succeeded', 'unknown')
-            OR (${writeProposals.status} = 'pending' AND ${writeProposals.expiresAt} > now()))`,
-        ),
-      )
-      .orderBy(desc(writeProposals.createdAt)),
+    db.select().from(writeProposals).where(activeUndoOf(undoOf)).orderBy(desc(writeProposals.createdAt)),
   );
 }
