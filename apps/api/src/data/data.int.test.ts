@@ -16,7 +16,8 @@ import { MemoryService } from "../memory/memory.service.js";
 import { SkillsService } from "../skills/skills.service.js";
 import { unusedAudit, unusedConversations, unusedProposals } from "../test-support/fake-proposals.js";
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
-import { ExportService } from "./export.service.js";
+import { createPgRateLimiter } from "../common/rate-limiter.js";
+import { ExportService, type ExportSources } from "./export.service.js";
 import { RetentionService } from "./retention.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
@@ -28,6 +29,7 @@ let pool: pg.Pool;
 let owner: pg.Client;
 let keys: TestKeys;
 let conversations: ConversationsService;
+let secondServer: { exports: ExportService; pool: pg.Pool };
 
 type Person = "bob" | "alice" | "patAcme";
 const scopeOf = (person: Person) => ({ tenantId: TENANTS.acme.id, userId: seedUser(person).id });
@@ -42,6 +44,7 @@ async function as(person: Person) {
 const people = () => [seedUser("bob").id, seedUser("alice").id];
 const cleanup = async () => {
   await owner.query("DELETE FROM tenant_retention WHERE tenant_id = $1", [TENANTS.acme.id]);
+  await owner.query("DELETE FROM rate_limit_uses WHERE user_id = ANY($1)", [people()]);
   for (const table of ["memories", "skills", "conversations"]) await owner.query(`DELETE FROM ${table} WHERE user_id = ANY($1)`, [people()]);
 };
 
@@ -59,19 +62,19 @@ beforeAll(async () => {
   const memory = new MemoryService({ pool, box, logger });
   const skills = new SkillsService({ pool, box, logger });
   const none = { list: async () => [] };
-  const exports = new ExportService({
-    pool,
-    logger,
-    sources: {
-      conversations,
-      memories: memory,
-      skills,
-      agentRuns: { exportAll: async () => [] },
-      automaticAgents: none,
-      changes: { exportAll: async () => [] },
-      connections: { list: async () => [{ serverId: "atlassian", displayName: "Atlassian", status: "connected", lastUsedAt: null, setup: "ready" }] as never },
-    },
-  });
+  const sources: ExportSources = {
+    conversations,
+    memories: memory,
+    skills,
+    agentRuns: { exportAll: async () => [] },
+    automaticAgents: none,
+    changes: { exportAll: async () => [] },
+    connections: { list: async () => [{ serverId: "atlassian", displayName: "Atlassian", status: "connected", lastUsedAt: null, setup: "ready" }] as never },
+  };
+  const exports = new ExportService({ pool, logger, sources, limiter: createPgRateLimiter(pool) });
+  // Another API server, with its own connections, sharing the same database.
+  const otherPool = createAppPool({ connectionString: APP_URL, onError: () => {} });
+  secondServer = { pool: otherPool, exports: new ExportService({ pool: otherPool, logger, sources, limiter: createPgRateLimiter(otherPool) }) };
   app = await createApp({
     logger,
     directory: createDbUserDirectory(pool),
@@ -96,6 +99,7 @@ afterAll(async () => {
   await owner?.end();
   await app?.close();
   await pool?.end();
+  await secondServer?.pool.end();
 });
 
 describe("exporting your own data (FR-ADM-03)", () => {
@@ -131,6 +135,21 @@ describe("exporting your own data (FR-ADM-03)", () => {
     const audit = await owner.query("SELECT meta::text AS meta FROM audit_log WHERE action = 'data.exported' AND user_id = $1 ORDER BY id DESC LIMIT 1", [seedUser("bob").id]);
     expect(audit.rows[0].meta).not.toContain("Falcon");
     expect((await bob("GET", "/me/export")).statusCode).toBe(429);
+    // The limit is the person's, not one server's.
+    await expect(secondServer.exports.exportFor(scopeOf("bob"))).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    await expect(secondServer.exports.exportFor(scopeOf("alice"))).resolves.toMatchObject({ truncated: false });
+  });
+
+  it("does not count an export that failed, so it can be tried again at once", async () => {
+    await owner.query("DELETE FROM rate_limit_uses WHERE user_id = ANY($1)", [people()]);
+    const failing = new ExportService({
+      pool,
+      logger: { error: () => {} },
+      limiter: createPgRateLimiter(pool),
+      sources: { ...({} as ExportSources), memories: { list: async () => { throw new Error("down"); } } } as ExportSources,
+    });
+    await expect(failing.exportFor(scopeOf("bob"))).rejects.toThrow();
+    await expect(secondServer.exports.exportFor(scopeOf("bob"))).resolves.toMatchObject({ truncated: false });
   });
 });
 

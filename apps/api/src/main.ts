@@ -34,6 +34,7 @@ import { createDbAuditApi } from "./admin/audit.service.js";
 import { createPeopleService } from "./admin/people.service.js";
 import { AgentsService } from "./agents/agents.service.js";
 import { TriggersService } from "./agents/triggers.service.js";
+import { createPgRateLimiter } from "./common/rate-limiter.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -126,7 +127,10 @@ const memory = new MemoryService({ pool, box, logger });
 const skills = new SkillsService({ pool, box, logger });
 const usage = new UsageService({ pool });
 const aiSettings = new AiSettingsService({ pool });
+// Per-person limits, shared by every API server and kept across restarts.
+const limiter = createPgRateLimiter(pool);
 const answers = new AnswersService({
+  limiter,
   aiSettings,
   conversations,
   memories: memory,
@@ -173,6 +177,7 @@ const triggers = new TriggersService({
 
 const retention = new RetentionService({ pool, logger });
 const exports = new ExportService({
+  limiter,
   pool,
   logger,
   sources: {

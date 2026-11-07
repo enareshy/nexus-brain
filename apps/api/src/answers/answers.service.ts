@@ -8,6 +8,7 @@ import type { DocumentSource, ItemReference } from "../connections/connections.s
 import type { AnswerPart, ConversationStart, ConversationStore } from "../conversations/conversations.service.js";
 import { appendCitation, appendText } from "./answer-parts.js";
 import type { MemorySource } from "../memory/memory.service.js";
+import { createMemoryRateLimiter, releaseQuietly, type RateLimit, type RateLimiter } from "../common/rate-limiter.js";
 import type { BudgetGuard } from "../usage/usage.service.js";
 import { canHaveSubtasks, itemTaskRequest, parseSubtasks, type ItemTask } from "./item-tasks.js";
 import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
@@ -15,10 +16,13 @@ import { withExpandedTerms, type QueryExpander } from "./query-rewriter.js";
 const SEARCH_LIMIT = 10;
 const MAX_DOCUMENTS = 5;
 const MAX_DOCUMENT_CHARS = 30_000;
-const RATE_WINDOW_MS = 60_000;
-/** In-process cost guard per user; plan budgets come with FR-MET-02/03. */
-const MAX_ANSWERS_PER_WINDOW = 10;
-const MAX_CONCURRENT_ANSWERS = 2;
+/** A cost guard per person, besides the monthly budget: at most 10 answers a minute. */
+const ANSWER_RATE: RateLimit = { bucket: "answer", max: 10, windowMs: 60_000 };
+/**
+ * At most 2 answers running at once per person. A running answer holds its place until it ends; if a
+ * server stops mid-answer, the place frees itself after this long, well past any answer's run time.
+ */
+const ANSWER_RUNNING: RateLimit = { bucket: "answer_running", max: 2, windowMs: 5 * 60_000 };
 const READ_TIME_LIMIT_MS = 20_000;
 
 export type AnswerStreamEvent =
@@ -80,6 +84,8 @@ export interface AnswersDeps {
   readonly items?: { readItem(scope: UserScope, item: ItemReference): Promise<string | null> };
   /** The company's choice of model. Without one, the most capable model. */
   readonly aiSettings?: AiSettingsSource;
+  /** Per-person limits. The running API shares them through Postgres; without one, they are per process. */
+  readonly limiter?: RateLimiter;
 }
 
 /** Stops waiting for a read when it takes too long or the person leaves. The read itself may finish later. */
@@ -93,15 +99,12 @@ function withinReadTime<T>(read: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-function userKey(scope: UserScope): string {
-  return `${scope.tenantId}|${scope.userId}`;
-}
-
 export class AnswersService implements AnswersApi {
-  private readonly recent = new Map<string, number[]>();
-  private readonly inFlight = new Map<string, number>();
+  private readonly limiter: RateLimiter;
 
-  constructor(private readonly deps: AnswersDeps) {}
+  constructor(private readonly deps: AnswersDeps) {
+    this.limiter = deps.limiter ?? createMemoryRateLimiter(deps.now);
+  }
 
   /** Read for every answer, so an admin's change applies to the next one. */
   private async modelChoice(scope: UserScope): Promise<{ modelChoice?: ModelChoice }> {
@@ -186,21 +189,22 @@ export class AnswersService implements AnswersApi {
     if (!gateway) {
       throw new AppError("UNAVAILABLE", "AI answers are not configured yet. Search still works.");
     }
-    this.enforceRate(scope);
+    if (!(await this.limiter.take(scope, ANSWER_RATE))) {
+      throw new AppError("RATE_LIMITED", "Too many answers in a short time. Wait a minute and try again.");
+    }
     // Before any search or read too, since rewriting the question is also a paid call.
     await this.deps.budget?.require(scope);
-    const key = userKey(scope);
-    const running = this.inFlight.get(key) ?? 0;
-    if (running >= MAX_CONCURRENT_ANSWERS) {
+    const running = await this.limiter.take(scope, ANSWER_RUNNING);
+    if (!running) {
       throw new AppError("RATE_LIMITED", "Another answer is still running. Wait for it to finish.");
     }
-    this.inFlight.set(key, running + 1);
     try {
       await work(gateway);
     } finally {
-      const left = (this.inFlight.get(key) ?? 1) - 1;
-      if (left > 0) this.inFlight.set(key, left);
-      else this.inFlight.delete(key);
+      // The answer is already given; a place not given back frees itself when it expires.
+      await releaseQuietly(this.limiter, scope, running, (err) =>
+        this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Could not free an answer slot"),
+      );
     }
   }
 
@@ -413,19 +417,5 @@ export class AnswersService implements AnswersApi {
         citations,
       },
     }).catch((err: unknown) => this.deps.logger.error({ err, tenant_id: scope.tenantId }, "Audit write failed"));
-  }
-
-  private enforceRate(scope: UserScope): void {
-    const now = (this.deps.now ?? Date.now)();
-    const key = userKey(scope);
-    // Drop users with no recent calls so the map cannot grow without bound.
-    for (const [other, times] of this.recent) {
-      if (times.every((t) => now - t >= RATE_WINDOW_MS)) this.recent.delete(other);
-    }
-    const inWindow = (this.recent.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-    if (inWindow.length >= MAX_ANSWERS_PER_WINDOW) {
-      throw new AppError("RATE_LIMITED", "Too many answers in a short time. Wait a minute and try again.");
-    }
-    this.recent.set(key, [...inWindow, now]);
   }
 }

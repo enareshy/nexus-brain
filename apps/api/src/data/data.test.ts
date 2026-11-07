@@ -112,6 +112,27 @@ describe("ExportService and the data routes", () => {
     expect((await service.exportFor(scope)).profile.email).toBe("b@x");
   });
 
+  it("runs one export at a time per person, however long it takes", async () => {
+    let finish = () => {};
+    const slow = { ...sources, memories: { list: () => new Promise<never[]>((r) => { finish = () => r([]); }) } };
+    let now = 0;
+    const service = new ExportService({ pool: {} as never, sources: slow, logger, now: () => now });
+    db.getProfile.mockResolvedValue({ email: "b@x", displayName: "B", role: "member" });
+    db.appendAudit.mockResolvedValue(undefined);
+    const first = service.exportFor(scope);
+    await vi.waitFor(() => expect(db.getProfile).toHaveBeenCalled());
+    now += 5 * 60_000;
+    await expect(service.exportFor(scope)).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    finish();
+    await first;
+    now += 60_000;
+    db.getProfile.mockClear();
+    const next = service.exportFor(scope);
+    await vi.waitFor(() => expect(db.getProfile).toHaveBeenCalled());
+    finish();
+    await expect(next).resolves.toMatchObject({ profile: { email: "b@x" } });
+  });
+
   it("lets only admins change retention, and passes reads and exports through", async () => {
     const retention = { get: vi.fn(async () => ({ conversationDays: null, agentRunDays: null })), set: vi.fn(async (_s, r) => r) };
     const exports = { exportFor: vi.fn(async () => ({ exportedAt: "x" }) as never) };

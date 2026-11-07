@@ -298,6 +298,16 @@ export const mcpServerApps = pgTable(
   (table) => [primaryKey({ columns: [table.tenantId, table.serverId] })],
 );
 
+/** One use counted against a per-person rate limit, until it expires (migration 0025). */
+export const rateLimitUses = pgTable("rate_limit_uses", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  bucket: text("bucket").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const writeProposals = pgTable("write_proposals", {
   id: uuid("id").primaryKey(),
   tenantId: uuid("tenant_id").notNull(),
@@ -340,6 +350,7 @@ export const schema = {
   memories,
   mcpServerApps,
   writeProposals,
+  rateLimitUses,
   usageLedger,
   tenants,
   users,

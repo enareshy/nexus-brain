@@ -1,10 +1,13 @@
 import { AppError } from "@brain/core";
 import { appendAudit, getProfile, type PoolLike, type UserScope } from "@brain/db";
 import type { Logger } from "@brain/telemetry";
+import { createMemoryRateLimiter, releaseQuietly, type RateLimit, type RateLimiter } from "../common/rate-limiter.js";
 
-/** Exporting reads and decrypts everything a person has, so it is allowed once a minute per server. */
-const EXPORT_INTERVAL_MS = 60_000;
-const MAX_TRACKED = 5_000;
+/** Exporting reads and decrypts everything a person has, so it is allowed once a minute per person. */
+const EXPORT_RATE: RateLimit = { bucket: "export", max: 1, windowMs: 60_000 };
+/** And one at a time, however long it takes. A place left by a stopped server frees itself. */
+const EXPORT_RUNNING: RateLimit = { bucket: "export_running", max: 1, windowMs: 10 * 60_000 };
+const BUSY = "You exported your data a moment ago. Try again in a minute.";
 /** Far more runs or changes than anyone keeps; reaching it marks the export as cut short, never silently. */
 export const EXPORT_LIMIT = 10_000;
 
@@ -44,7 +47,7 @@ export interface ExportApi {
  * is theirs: nothing about colleagues, and no secrets. Usage costs are the company's, so are left out.
  */
 export class ExportService implements ExportApi {
-  private readonly recent = new Map<string, number>();
+  private readonly limiter: RateLimiter;
 
   constructor(
     private readonly deps: {
@@ -52,17 +55,37 @@ export class ExportService implements ExportApi {
       readonly sources: ExportSources;
       readonly logger: Pick<Logger, "error">;
       readonly now?: () => number;
+      /** Shared through Postgres in the running API; without one, the limit is per process. */
+      readonly limiter?: RateLimiter;
     },
-  ) {}
+  ) {
+    this.limiter = deps.limiter ?? createMemoryRateLimiter(deps.now);
+  }
 
   async exportFor(scope: UserScope): Promise<PersonalExport> {
-    const now = (this.deps.now ?? Date.now)();
-    const key = `${scope.tenantId}|${scope.userId}`;
-    const last = this.recent.get(key);
-    if (last !== undefined && now - last < EXPORT_INTERVAL_MS) {
-      throw new AppError("RATE_LIMITED", "You exported your data a moment ago. Try again in a minute.");
+    const running = await this.limiter.take(scope, EXPORT_RUNNING);
+    if (!running) throw new AppError("RATE_LIMITED", BUSY);
+    const free = (id: string) =>
+      releaseQuietly(this.limiter, scope, id, (err) =>
+        this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, tenant_id: scope.tenantId }, "Could not free an export"),
+      );
+    try {
+      const use = await this.limiter.take(scope, EXPORT_RATE);
+      if (!use) throw new AppError("RATE_LIMITED", BUSY);
+      try {
+        return await this.collect(scope);
+      } catch (err) {
+        // Only a finished export counts toward the limit, so a failed one can be tried again at once.
+        await free(use);
+        throw err;
+      }
+    } finally {
+      await free(running);
     }
+  }
 
+  private async collect(scope: UserScope): Promise<PersonalExport> {
+    const now = (this.deps.now ?? Date.now)();
     const profile = await getProfile(this.deps.pool, scope);
     if (!profile) throw new AppError("NOT_FOUND", "Your account could not be found");
     const s = this.deps.sources;
@@ -80,9 +103,6 @@ export class ExportService implements ExportApi {
       this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, tenant_id: scope.tenantId }, "Audit write failed");
       throw new AppError("UNAVAILABLE", "Your data could not be exported just now. Please try again.");
     });
-    // Only a finished export counts toward the limit, so a failed one can be tried again at once.
-    if (this.recent.size >= MAX_TRACKED) this.recent.clear();
-    this.recent.set(key, now);
     return {
       exportedAt: new Date(now).toISOString(),
       truncated: agentRuns.length >= EXPORT_LIMIT || changes.length >= EXPORT_LIMIT,

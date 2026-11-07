@@ -244,6 +244,20 @@ describe("AnswersService", () => {
     expect(logger.error).toHaveBeenCalledTimes(2);
   });
 
+  it("frees the running slot when an answer fails", async () => {
+    const gateway: LlmGateway = {
+      agentTurn: unusedTurn,
+      rewriteQuery: noRewrite,
+      streamAnswer: async () => {
+        throw new Error("boom");
+      },
+    };
+    const { service, emit } = setup({ gateway });
+    for (let i = 0; i < 3; i += 1) {
+      await expect(service.answer(scope, "q", emit, signal)).rejects.toThrow("boom");
+    }
+  });
+
   it("caps concurrent answers per user and frees the slot afterwards", async () => {
     let release = () => {};
     const gate = new Promise<void>((r) => { release = r; });
