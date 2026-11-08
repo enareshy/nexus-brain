@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
-    "test:int": "vitest run --config vitest.int.config.ts --coverage"
+    "test:int": "vitest run --config vitest.int.config.ts --coverage",
+    "ranker:train": "node --env-file-if-exists=../../.env --import tsx scripts/train-rankers.ts"
   },
   "dependencies": {
     "@brain/connectors": "workspace:*",

@@ -24,6 +24,8 @@ export interface SourceStatus {
 }
 
 export interface RankedHit extends SearchHit {
+  /** Its place in the search's own order, before any personal reordering. */
+  readonly searchRank?: number;
   readonly score: number;
 }
 

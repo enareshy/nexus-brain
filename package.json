@@ -15,7 +15,7 @@
     "test": "turbo run test",
     "test:int": "turbo run test:int --concurrency=1",
     "test:cov": "turbo run test:cov",
-    "test:leak": "pnpm --filter @brain/db test:int && pnpm --filter @brain/api exec vitest run --config vitest.int.config.ts src/leak.int.test.ts src/graph/graph.int.test.ts",
+    "test:leak": "pnpm --filter @brain/db test:int && pnpm --filter @brain/api exec vitest run --config vitest.int.config.ts src/leak.int.test.ts src/graph/graph.int.test.ts src/ranking/ranker.int.test.ts",
     "eval": "pnpm --filter @brain/evals eval",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",

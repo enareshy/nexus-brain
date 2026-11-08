@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareRanking, corpusRetriever, CorpusSchema, graphHelps, type Corpus } from "./corpus.js";
 import { GoldenSetSchema, runEval } from "./harness.js";
+import { replayLearnedRanker } from "./learned.js";
 import { buildPersonalSet, historyLinks } from "./personal.js";
 
 const corpus: Corpus = CorpusSchema.parse({
@@ -202,5 +203,20 @@ describe("graphHelps", () => {
   it("fails a graph that does nothing where it could have helped", () => {
     expect(graphHelps({ withoutGraph: report(0.79, 0.79), withGraph: report(0.79, 0.79) })).toBe(false);
     expect(graphHelps({ withoutGraph: report(1, 1), withGraph: report(1, 1) })).toBe(true);
+  });
+});
+
+describe("replayLearnedRanker (FR-RET-08)", () => {
+  it("trains only on questions it is not scored on, and leaves ranking unchanged when it learns nothing", async () => {
+    const golden = GoldenSetSchema.parse({
+      version: 1,
+      description: "t",
+      cases: Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, asUser: "bob", query: "key rotation runbook", expected: ["jira:2"], tags: ["keyword"] })),
+    });
+    const replay = await replayLearnedRanker(golden, corpus, 10);
+    expect(replay.training).toMatchObject({ active: false, reason: "too_few" });
+    expect(replay.withRanker.mrr).toBe(replay.withoutRanker.mrr);
+    expect(replay.withRanker.cases.length + replay.training.answers).toBeLessThanOrEqual(10);
+    expect(replay.withRanker.cases.length).toBeGreaterThan(0);
   });
 });

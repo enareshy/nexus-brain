@@ -36,6 +36,7 @@ import { AgentsService } from "./agents/agents.service.js";
 import { TriggersService } from "./agents/triggers.service.js";
 import { createPgRateLimiter } from "./common/rate-limiter.js";
 import { createGraphStore, GraphService } from "./graph/graph.service.js";
+import { createRankerStore, RankerService } from "./ranking/ranker.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -131,8 +132,17 @@ const graph = new GraphService({
   onError: (err) => logger.warn({ err }, "Work graph unavailable; results keep their search order"),
 });
 
+// The company's learned ranker, trained offline by `ranker:train`; until then, ranking is unchanged.
+const rankerKeys = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
+const ranker = new RankerService({
+  store: createRankerStore(pool),
+  fingerprint: (value) => rankerKeys.fingerprint(value),
+  onError: (err) => logger.warn({ err }, "Learned ranker unavailable; results keep their search order"),
+});
+
 const connections = new ConnectionsService({
   graph,
+  ranker,
   pool,
   expander,
   box: createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY),
@@ -145,7 +155,7 @@ const connections = new ConnectionsService({
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
-const conversations = new ConversationsService({ pool, box, graph });
+const conversations = new ConversationsService({ pool, box, graph, ranking: ranker });
 const memory = new MemoryService({ pool, box, logger });
 const skills = new SkillsService({ pool, box, logger });
 const usage = new UsageService({ pool });

@@ -38,6 +38,7 @@ import {
 import { createHash } from "node:crypto";
 import { withExpandedTerms, type QueryExpander } from "../answers/query-rewriter.js";
 import type { WorkGraph } from "../graph/graph.service.js";
+import type { LearnedRanking } from "../ranking/ranker.service.js";
 import { KeyedMutex } from "./keyed-mutex.js";
 import { SessionPool } from "./session-pool.js";
 import { TtlCache } from "./ttl-cache.js";
@@ -129,6 +130,8 @@ export interface ConnectionsDeps {
   readonly searchBudgetMs?: number;
   /** The person's own work graph: reorders their results and notes what they open. Without one, neither. */
   readonly graph?: Pick<WorkGraph, "rank" | "opened">;
+  /** The company's learned ranker, applied before the person's own graph. Without one, none. */
+  readonly ranker?: Pick<LearnedRanking, "rank">;
 }
 
 /** Runs `work` while no other server runs work for the same key; `signal` ends the wait early. */
@@ -387,9 +390,16 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     return result;
   }
 
-  /** The person's own results, reordered by what they have used; never more or fewer of them. */
-  private personalise<T extends SearchHit>(scope: UserScope, hits: readonly T[]): Promise<T[]> {
-    return this.deps.graph ? this.deps.graph.rank(scope, hits) : Promise.resolve([...hits]);
+  /**
+   * The person's own results, reordered first by what their company's ratings taught (FR-RET-08),
+   * then by what they themselves have used (FR-RET-09); never more or fewer of them.
+   */
+  private async personalise<T extends SearchHit>(scope: UserScope, hits: readonly T[]): Promise<T[]> {
+    // Each result keeps its place in the search's own order, so a rating later teaches the ranker
+    // about that order rather than about its own reordering.
+    const placed = hits.map((hit, searchRank) => ({ ...hit, searchRank }));
+    const learned = this.deps.ranker ? await this.deps.ranker.rank(scope, placed) : placed;
+    return this.deps.graph ? this.deps.graph.rank(scope, learned) : learned;
   }
 
   /** Only a clean search that found nothing retries: an empty result during an outage means nothing. */

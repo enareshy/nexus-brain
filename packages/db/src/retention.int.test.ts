@@ -150,6 +150,9 @@ describe("deleting a company (FR-ADM-03)", () => {
     await conversation(tenantId, person, 1);
     await owner.query("INSERT INTO credit_topups (id, tenant_id, credits, added_by) VALUES ($1, $2, 5, $3)", [randomUUID(), tenantId, person]);
     await owner.query("INSERT INTO audit_log (tenant_id, user_id, action) VALUES ($1, $2, 'x')", [tenantId, person]);
+    await owner.query("INSERT INTO work_graph_edges (tenant_id, user_id, source_key, target_key, kind) VALUES ($1, $2, 'me', 'atlassian:X-1', 'opened')", [tenantId, person]);
+    await owner.query("INSERT INTO ranking_examples (tenant_id, answer_group, server_id, position, score_ratio, label) VALUES ($1, $2, 'atlassian', 0, 1, 1)", [tenantId, randomUUID()]);
+    await owner.query("INSERT INTO tenant_rankers (tenant_id, model, metrics) VALUES ($1, NULL, '{}')", [tenantId]);
 
     expect(await deleteTenant(ownerPool, randomUUID(), "Doomed Ltd")).toEqual({ deleted: false, reason: "not_found" });
     expect(await deleteTenant(ownerPool, tenantId, "doomed ltd")).toEqual({ deleted: false, reason: "name_mismatch" });
@@ -157,7 +160,7 @@ describe("deleting a company (FR-ADM-03)", () => {
 
     await owner.query("UPDATE users SET deactivated_at = now() WHERE id = $1", [person]);
     expect(await deleteTenant(ownerPool, tenantId, "Doomed Ltd")).toEqual({ deleted: true });
-    for (const table of ["tenants", "users", "conversations", "conversation_messages", "credit_topups", "audit_log"]) {
+    for (const table of ["tenants", "users", "conversations", "conversation_messages", "credit_topups", "audit_log", "work_graph_edges", "ranking_examples", "tenant_rankers"]) {
       const column = table === "tenants" ? "id" : "tenant_id";
       expect((await owner.query(`SELECT 1 FROM ${table} WHERE ${column} = $1`, [tenantId])).rowCount).toBe(0);
     }

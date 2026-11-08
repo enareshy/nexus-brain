@@ -14,7 +14,7 @@ const readJson = async (file: string): Promise<unknown> => JSON.parse(await read
 const golden = GoldenSetSchema.parse(await readJson(goldenFile));
 const corpus = CorpusSchema.parse(await readJson(corpusFile));
 const rewrites = rewritesFile ? RewritesSchema.parse(await readJson(rewritesFile)) : undefined;
-const { baseline, reranked, rewritten, personal, passed } = await compareRanking(golden, corpus, 10, rewrites);
+const { baseline, reranked, rewritten, personal, learned, passed } = await compareRanking(golden, corpus, 10, rewrites);
 
 const line = (label: string, r: Pick<EvalReport, "recallAtK" | "mrr" | "ndcgAtK">) =>
   `${label.padEnd(16)} recall@k ${r.recallAtK.toFixed(3)}  mrr ${r.mrr.toFixed(3)}  ndcg@k ${r.ndcgAtK.toFixed(3)}`;
@@ -43,6 +43,14 @@ process.stdout.write(
       return `${label!.padEnd(18)} mrr ${before?.mrr.toFixed(3) ?? "-"} without graph, ${after?.mrr.toFixed(3) ?? "-"} with  (${after?.cases ?? 0} questions)`;
     }),
     `if half of histories matched (an assumption): mrr ${personal.withoutGraph.mrr.toFixed(3)} without graph, ${personal.withGraph.mrr.toFixed(3)} with; unrelated history may cost at most ${MAX_UNRELATED_COST}`,
+    `learned ranker: ${learned.training.answers} made-up rated answers from four questions in five; ${
+      learned.training.active
+        ? "switched on"
+        : learned.training.reason === "too_few"
+          ? "too few to train, so switching it on is not exercised here (the unit and integration tests cover it)"
+          : "trained, but no clear gain over the search's own order, so it stays off"
+    }`,
+    `held-back questions mrr ${learned.withoutRanker.mrr.toFixed(3)} without ranker, ${learned.withRanker.mrr.toFixed(3)} with  (${learned.withRanker.cases.length} questions; must not get worse)`,
     passed ? "PASS" : "FAIL",
     "",
   ].join("\n"),
