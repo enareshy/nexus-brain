@@ -356,9 +356,15 @@ describe("an @Brain mention (FR-AST-05)", () => {
     await triggers.create(bob, { kind: "jira_mention", goal: "Help" });
     await tickAndSettle();
     mentioned = [mention("7", "first", "ENG-1"), mention("7", "second", "ENG-2")];
-    await makeDue(bob);
-    await tickAndSettle();
-    expect(await runsOf(bob)).toHaveLength(2);
+    // One automatic run works at a time, so the second may wait for the next round if the first is
+    // still running; a few rounds let both start, and never twice.
+    for (let round = 0; round < 3 && (await runsOf(bob)).length < 2; round += 1) {
+      await makeDue(bob);
+      await tickAndSettle();
+    }
+    const runs = await runsOf(bob);
+    expect(runs).toHaveLength(2);
+    expect(runs.map((run) => run.goal.includes("ENG-2"))).toEqual(expect.arrayContaining([true, false]));
   });
 
   it("lives alongside an assignment trigger, but only once per person", async () => {
