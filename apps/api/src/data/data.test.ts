@@ -85,6 +85,7 @@ describe("ExportService and the data routes", () => {
     automaticAgents: { list: async () => [] },
     changes: { exportAll: async (_s: unknown, limit: number) => Array.from({ length: limit }, () => ({})) },
     connections: { list: async () => [{ serverId: "s", displayName: "S", status: "connected", lastUsedAt: null, setup: "ready" }] },
+    workGraph: { exportAll: async () => [{ source: "me", target: "s:1", kind: "opened", weight: 1, lastSeenAt: "2026-11-08T00:00:00.000Z" }] },
   };
 
   it("exports only the person's own skills and no connection details beyond status, once a minute", async () => {

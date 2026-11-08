@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { leakedIds, mean, ndcgAtK, reciprocalRank, recallAtK } from "./metrics.js";
 
+/** What the person did before asking: items they opened, and answers they rated up (by cited items). */
+export const HistorySchema = z.object({
+  opened: z.array(z.string()).default([]),
+  helpful: z.array(z.array(z.string()).min(1)).default([]),
+});
+export type History = z.infer<typeof HistorySchema>;
+
 export const GoldenCaseSchema = z.object({
   id: z.string().min(1),
   /** Seed user key from @brain/db seed-data, e.g. "patAcme". */
@@ -12,6 +19,8 @@ export const GoldenCaseSchema = z.object({
   tags: z.array(z.string()).default([]),
   /** Harness self-test only: canned results used by the fixture retriever. */
   fixtureResults: z.array(z.string()).optional(),
+  /** The person's earlier activity, for work graph cases (FR-RET-09). */
+  history: HistorySchema.optional(),
 });
 export type GoldenCase = z.infer<typeof GoldenCaseSchema>;
 
@@ -25,7 +34,7 @@ export const GoldenSetSchema = z.object({
 export type GoldenSet = z.infer<typeof GoldenSetSchema>;
 
 export interface Retriever {
-  retrieve(input: { asUser: string; query: string; k: number }): Promise<readonly string[]>;
+  retrieve(input: { asUser: string; query: string; k: number; history?: History }): Promise<readonly string[]>;
 }
 
 export interface CaseResult {
@@ -72,7 +81,7 @@ export async function runEval(
 ): Promise<EvalReport> {
   const cases: CaseResult[] = [];
   for (const c of golden.cases) {
-    const ranked = await retriever.retrieve({ asUser: c.asUser, query: c.query, k });
+    const ranked = await retriever.retrieve({ asUser: c.asUser, query: c.query, k, ...(c.history ? { history: c.history } : {}) });
     cases.push({
       id: c.id,
       recall: recallAtK(ranked, c.expected, k),

@@ -1,6 +1,6 @@
 // A person's data export and their company's retention settings (FR-ADM-03, NFR-COMP-01), on real Postgres.
 import { createSecretBox } from "@brain/core";
-import { applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
+import { applyMigrations, createAppPool, exportGraph, loadMigrations, MIGRATIONS_DIR, recordGraphEdges, seed } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import { createLogger } from "@brain/telemetry";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -45,7 +45,7 @@ const people = () => [seedUser("bob").id, seedUser("alice").id];
 const cleanup = async () => {
   await owner.query("DELETE FROM tenant_retention WHERE tenant_id = $1", [TENANTS.acme.id]);
   await owner.query("DELETE FROM rate_limit_uses WHERE user_id = ANY($1)", [people()]);
-  for (const table of ["memories", "skills", "conversations"]) await owner.query(`DELETE FROM ${table} WHERE user_id = ANY($1)`, [people()]);
+  for (const table of ["memories", "skills", "conversations", "work_graph_edges"]) await owner.query(`DELETE FROM ${table} WHERE user_id = ANY($1)`, [people()]);
 };
 
 beforeAll(async () => {
@@ -70,6 +70,7 @@ beforeAll(async () => {
     automaticAgents: none,
     changes: { exportAll: async () => [] },
     connections: { list: async () => [{ serverId: "atlassian", displayName: "Atlassian", status: "connected", lastUsedAt: null, setup: "ready" }] as never },
+    workGraph: { exportAll: (scope) => exportGraph(pool, scope) },
   };
   const exports = new ExportService({ pool, logger, sources, limiter: createPgRateLimiter(pool) });
   // Another API server, with its own connections, sharing the same database.
@@ -120,6 +121,9 @@ describe("exporting your own data (FR-ADM-03)", () => {
       truncatedDocuments: 0,
     });
 
+    await recordGraphEdges(pool, scopeOf("bob"), [{ source: "me", target: "atlassian:ENG-7", kind: "opened" }]);
+    await recordGraphEdges(pool, scopeOf("alice"), [{ source: "me", target: "atlassian:ALICE-1", kind: "opened" }]);
+
     const res = await bob("GET", "/me/export");
     expect(res.statusCode).toBe(200);
     const data = res.json().data;
@@ -130,7 +134,8 @@ describe("exporting your own data (FR-ADM-03)", () => {
     expect(data.conversations[0]).toMatchObject({ title: "when does Falcon launch?" });
     expect(data.conversations[0].messages.map((m: { role: string }) => m.role)).toEqual(["user", "assistant"]);
     expect(data.connections).toEqual([{ serverId: "atlassian", displayName: "Atlassian", status: "connected", lastUsedAt: null }]);
-    expect(res.body).not.toMatch(/Alice's|token|ciphertext/i);
+    expect(data.workGraph).toEqual([expect.objectContaining({ source: "me", target: "atlassian:ENG-7", kind: "opened" })]);
+    expect(res.body).not.toMatch(/Alice's|ALICE-1|token|ciphertext/i);
 
     const audit = await owner.query("SELECT meta::text AS meta FROM audit_log WHERE action = 'data.exported' AND user_id = $1 ORDER BY id DESC LIMIT 1", [seedUser("bob").id]);
     expect(audit.rows[0].meta).not.toContain("Falcon");

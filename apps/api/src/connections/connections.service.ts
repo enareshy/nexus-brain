@@ -37,6 +37,7 @@ import {
 } from "@brain/mcp-client";
 import { createHash } from "node:crypto";
 import { withExpandedTerms, type QueryExpander } from "../answers/query-rewriter.js";
+import type { WorkGraph } from "../graph/graph.service.js";
 import { KeyedMutex } from "./keyed-mutex.js";
 import { SessionPool } from "./session-pool.js";
 import { TtlCache } from "./ttl-cache.js";
@@ -126,6 +127,8 @@ export interface ConnectionsDeps {
   readonly sharedLock?: SharedLock;
   /** How long a search waits for each service. Shorter in tests. */
   readonly searchBudgetMs?: number;
+  /** The person's own work graph: reorders their results and notes what they open. Without one, neither. */
+  readonly graph?: Pick<WorkGraph, "rank" | "opened">;
 }
 
 /** Runs `work` while no other server runs work for the same key; `signal` ends the wait early. */
@@ -373,7 +376,8 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
 
   async search(scope: UserScope, query: string, limit: number): Promise<FederatedResult> {
     const first = await this.searchOnce(scope, query, limit);
-    const result = await this.retryWithBetterWords(scope, query, limit, first);
+    const found = await this.retryWithBetterWords(scope, query, limit, first);
+    const result = { ...found, hits: await this.personalise(scope, found.hits) };
     await this.audit(scope, "search", undefined, {
       queryFingerprint: this.deps.box.fingerprint(query),
       results: result.hits.map((h) => ({ serverId: h.serverId, externalId: h.externalId })),
@@ -381,6 +385,11 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       expanded: result.expandedTerms !== undefined,
     });
     return result;
+  }
+
+  /** The person's own results, reordered by what they have used; never more or fewer of them. */
+  private personalise<T extends SearchHit>(scope: UserScope, hits: readonly T[]): Promise<T[]> {
+    return this.deps.graph ? this.deps.graph.rank(scope, hits) : Promise.resolve([...hits]);
   }
 
   /** Only a clean search that found nothing retries: an empty result during an outage means nothing. */
@@ -422,6 +431,8 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     const hit: SearchHit = { ...rest, ...(siteId ? { siteId } : {}), title: "", snippet: "", updatedAt: null };
     const read = await this.readWithSession(scope, item.serverId, (session) => adapter.readDocuments?.(session, [hit]) ?? Promise.resolve(null));
     await this.audit(scope, "item.read", item.serverId, { externalId: item.externalId });
+    // Only an item that could be read counts as opened.
+    if (read?.has(item.url)) await this.deps.graph?.opened(scope, item);
     return read?.get(item.url) ?? null;
   }
 
@@ -454,7 +465,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       })),
       { limit: options.limit, rerankQuery: query },
     );
-    return { ...result, bodies };
+    return { ...result, hits: await this.personalise(scope, result.hits), bodies };
   }
 
   private lockKey(scope: UserScope, serverId: string): string {

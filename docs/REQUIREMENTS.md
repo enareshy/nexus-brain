@@ -173,6 +173,7 @@ Assumptions (change here first, then in TECH-STACK.md):
 In: tenancy + RLS, OIDC, **MCP client + per-user OAuth token vault**, **federated connectors via MCP (Drive, Slack, M365+Teams, Gmail, GitHub, existing work-system product)**, federated retrieval orchestrator with merge + rerank, cited chat with streaming, gateway with 2 tiers, usage ledger, audit log, eval harness, leak red-team suite. Hybrid index (OpenSearch/pgvector) only for connectors switched to `indexed` mode or for chat memory; ACL filtering and fetch-time verification apply to indexed content.
 Also in MVP (decision 8): approval-gated write tools (FR-WR-01..05, 07) and per-user Connections (FR-CON-01..03).
 Out (deferred): first-party work system, knowledge graph, learned ranker, ambient agents, notetaker, voice, SCIM, SOC 2.
+Update 2026-11-08: a per-person work graph (FR-RET-09) was built after the MVP, as decided by the project owner; a company-wide graph stays deferred.
 
 Trade-off accepted: federated MCP search is simpler and inherits each source's permissions (the user's own token), but gives lower and uneven latency, depends on each server's search quality, and has no cross-source ranking signals until indexed mode is enabled. Re-evaluate after the Phase 1 eval.
 

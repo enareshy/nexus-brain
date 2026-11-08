@@ -35,6 +35,7 @@ import { createPeopleService } from "./admin/people.service.js";
 import { AgentsService } from "./agents/agents.service.js";
 import { TriggersService } from "./agents/triggers.service.js";
 import { createPgRateLimiter } from "./common/rate-limiter.js";
+import { createGraphStore, GraphService } from "./graph/graph.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -124,7 +125,14 @@ const gateway = env.ANTHROPIC_API_KEY
   : null;
 const expander = new QueryRewriter({ pool, gateway, logger });
 
+// Each person's own work graph; a problem with it never fails a search or rating.
+const graph = new GraphService({
+  store: createGraphStore(pool),
+  onError: (err) => logger.warn({ err }, "Work graph unavailable; results keep their search order"),
+});
+
 const connections = new ConnectionsService({
+  graph,
   pool,
   expander,
   box: createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY),
@@ -137,7 +145,7 @@ const connections = new ConnectionsService({
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);
-const conversations = new ConversationsService({ pool, box });
+const conversations = new ConversationsService({ pool, box, graph });
 const memory = new MemoryService({ pool, box, logger });
 const skills = new SkillsService({ pool, box, logger });
 const usage = new UsageService({ pool });
@@ -203,6 +211,7 @@ const exports = new ExportService({
     automaticAgents: triggers,
     changes: proposals,
     connections,
+    workGraph: graph,
   },
 });
 

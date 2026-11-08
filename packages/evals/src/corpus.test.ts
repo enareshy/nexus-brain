@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { compareRanking, corpusRetriever, CorpusSchema, type Corpus } from "./corpus.js";
+import { compareRanking, corpusRetriever, CorpusSchema, graphHelps, type Corpus } from "./corpus.js";
 import { GoldenSetSchema, runEval } from "./harness.js";
+import { buildPersonalSet, historyLinks } from "./personal.js";
 
 const corpus: Corpus = CorpusSchema.parse({
   version: 1,
@@ -139,5 +140,67 @@ describe("compareRanking", () => {
     const result = await compareRanking(leaky, corpus);
     expect(result.reranked.leakCount).toBe(1);
     expect(result.passed).toBe(false);
+  });
+});
+
+describe("work graph questions (FR-RET-09)", () => {
+  const golden = GoldenSetSchema.parse({
+    version: 1,
+    description: "test",
+    cases: [
+      { id: "lunch", asUser: "bob", query: "rotation of the lunch rota", expected: ["jira:1"], tags: ["keyword"] },
+      { id: "runbook", asUser: "bob", query: "rotation runbook keys", expected: ["jira:2"], tags: ["keyword"] },
+      { id: "secret", asUser: "gus", query: "rotation", expected: [], forbidden: ["jira:1"], tags: ["perm-private"] },
+    ],
+  });
+
+  it("asks each ranking question shortly, once with the right answer in the history and once with another result", async () => {
+    const set = await buildPersonalSet(golden, corpusRetriever(corpus, { rerank: true }), 10);
+    expect(set.cases.map((c) => c.id)).toEqual(["lunch-used", "lunch-unrelated", "runbook-used", "runbook-unrelated"]);
+    // Cut to two keywords, so each question matches more documents.
+    expect(set.cases.map((c) => c.query)).toEqual(["rotation lunch", "rotation lunch", "rotation runbook", "rotation runbook"]);
+    expect(set.cases[0]?.history).toEqual({ opened: ["jira:1"], helpful: [] });
+    expect(set.cases[1]?.history).toEqual({ opened: ["jira:2"], helpful: [] });
+    // Every other one is a rated-up answer that cited the right result with another.
+    expect(set.cases[2]?.history).toEqual({ opened: [], helpful: [["jira:2", "jira:1"]] });
+    expect(set.cases[3]?.history).toEqual({ opened: ["jira:1"], helpful: [] });
+  });
+
+  it("lifts what the person used only when the graph is on, and never adds a result", async () => {
+    const history = { opened: ["jira:2"], helpful: [] };
+    const plain = await corpusRetriever(corpus, { rerank: true }).retrieve({ asUser: "bob", query: "rotation", k: 10, history });
+    const personal = await corpusRetriever(corpus, { rerank: true, graph: true }).retrieve({ asUser: "bob", query: "rotation", k: 10, history });
+    expect(personal.indexOf("jira:2")).toBeLessThanOrEqual(plain.indexOf("jira:2"));
+    expect([...personal].sort()).toEqual([...plain].sort());
+  });
+
+  it("turns a history into the links the production graph would hold", () => {
+    const sources = new Map([["jira:1", "jira"], ["wiki:1", "wiki"]]);
+    const links = historyLinks({ opened: ["jira:1"], helpful: [["jira:1", "wiki:1"]] }, sources);
+    expect(links.map((l) => `${l.kind}:${l.via}:${l.key}`)).toEqual([
+      "opened:direct:jira:jira:1",
+      "cited_up:direct:jira:jira:1",
+      "cited_up:direct:wiki:wiki:1",
+      "co_cited:neighbour:wiki:wiki:1",
+      "co_cited:neighbour:jira:jira:1",
+    ]);
+  });
+});
+
+describe("graphHelps", () => {
+  const report = (used: number, unrelated: number) =>
+    ({ mrr: (used + unrelated) / 2, byTag: { "personal-used": { mrr: used }, "personal-unrelated": { mrr: unrelated } } }) as never;
+
+  it("passes a graph that lifts used answers at little cost to unrelated ones", () => {
+    expect(graphHelps({ withoutGraph: report(0.79, 0.79), withGraph: report(0.83, 0.785) })).toBe(true);
+  });
+
+  it("fails a graph strong enough to push good answers down when the history is unrelated", () => {
+    expect(graphHelps({ withoutGraph: report(0.79, 0.79), withGraph: report(0.95, 0.7) })).toBe(false);
+  });
+
+  it("fails a graph that does nothing where it could have helped", () => {
+    expect(graphHelps({ withoutGraph: report(0.79, 0.79), withGraph: report(0.79, 0.79) })).toBe(false);
+    expect(graphHelps({ withoutGraph: report(1, 1), withGraph: report(1, 1) })).toBe(true);
   });
 });

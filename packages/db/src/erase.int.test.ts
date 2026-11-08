@@ -58,6 +58,8 @@ async function addEverything(userId: string, proposalStatus = "pending"): Promis
     randomUUID(),
   ]);
   await q("INSERT INTO usage_ledger (tenant_id, user_id, feature, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'erase-test', 'm', 1, 1, 0.5)", [ACME, userId]);
+  await q("INSERT INTO work_graph_edges (tenant_id, user_id, source_key, target_key, kind) VALUES ($1, $2, 'me', 'atlassian:ENG-1', 'opened')", [ACME, userId]);
+  await q("INSERT INTO rate_limit_uses (id, tenant_id, user_id, bucket, expires_at) VALUES ($1, $2, $3, 'answer', now() + interval '1 minute')", [randomUUID(), ACME, userId]);
 }
 
 const count = async (table: string, userId: string) =>
@@ -99,13 +101,15 @@ describe("erasing one person (FR-ADM-03)", () => {
 
     const result = await eraseUser(appPool, admin, person);
     expect(result).toEqual({ erased: true, conversations: 1, memories: 1, skills: 1, agentRuns: 1, automaticAgents: 1, changes: 1, notifications: 1 });
-    for (const table of ["conversations", "conversation_messages", "memories", "skills", "agent_runs", "agent_triggers", "write_proposals", "notifications", "mcp_connections"]) {
+    for (const table of ["conversations", "conversation_messages", "memories", "skills", "agent_runs", "agent_triggers", "write_proposals", "notifications", "mcp_connections", "work_graph_edges", "rate_limit_uses"]) {
       expect(await count(table, person)).toBe(0);
     }
     expect(await count("group_members", person)).toBe(0);
     expect(await count("usage_ledger", person)).toBe(1);
     expect(await count("memories", colleague)).toBe(1);
     expect(await count("skills", colleague)).toBe(1);
+    expect(await count("work_graph_edges", colleague)).toBe(1);
+    expect(await count("rate_limit_uses", colleague)).toBe(1);
 
     // Nothing can be written for them afterwards, even by a chat that was already under way.
     await expect(

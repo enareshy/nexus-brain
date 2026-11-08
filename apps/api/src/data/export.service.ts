@@ -20,6 +20,8 @@ export interface ExportSources {
   readonly automaticAgents: { list(scope: UserScope): Promise<readonly unknown[]> };
   readonly changes: { exportAll(scope: UserScope, limit: number): Promise<readonly unknown[]> };
   readonly connections: { list(scope: UserScope): Promise<ReadonlyArray<{ readonly serverId: string; readonly displayName: string; readonly status: string; readonly lastUsedAt: string | null }>> };
+  /** The links Brain learned from what the person opened and found helpful. */
+  readonly workGraph: { exportAll(scope: UserScope): Promise<readonly unknown[]> };
 }
 
 export interface PersonalExport {
@@ -36,6 +38,8 @@ export interface PersonalExport {
   readonly changes: readonly unknown[];
   /** Which services are connected. Tokens are never exported. */
   readonly connections: readonly unknown[];
+  /** Ids of items the person used and how they are linked; no titles or text are kept. */
+  readonly workGraph: readonly unknown[];
 }
 
 export interface ExportApi {
@@ -89,7 +93,7 @@ export class ExportService implements ExportApi {
     const profile = await getProfile(this.deps.pool, scope);
     if (!profile) throw new AppError("NOT_FOUND", "Your account could not be found");
     const s = this.deps.sources;
-    const [conversations, memories, skills, agentRuns, automaticAgents, changes, connections] = await Promise.all([
+    const [conversations, memories, skills, agentRuns, automaticAgents, changes, connections, workGraph] = await Promise.all([
       s.conversations.exportAll(scope),
       s.memories.list(scope),
       s.skills.list(scope),
@@ -97,6 +101,7 @@ export class ExportService implements ExportApi {
       s.automaticAgents.list(scope),
       s.changes.exportAll(scope, EXPORT_LIMIT),
       s.connections.list(scope),
+      s.workGraph.exportAll(scope),
     ]);
     // Recorded before anything is handed over: an export with no trail is not given out.
     await appendAudit(this.deps.pool, { tenantId: scope.tenantId, userId: scope.userId, action: "data.exported" }).catch((err: unknown) => {
@@ -114,6 +119,7 @@ export class ExportService implements ExportApi {
       automaticAgents,
       changes,
       connections: connections.map(({ serverId, displayName, status, lastUsedAt }) => ({ serverId, displayName, status, lastUsedAt })),
+      workGraph,
     };
   }
 }

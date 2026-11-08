@@ -1,4 +1,4 @@
-import { AppError, type SecretBox } from "@brain/core";
+import { AppError, isAppError, type SecretBox } from "@brain/core";
 import type { RankedHit } from "@brain/connectors";
 import {
   addMessage,
@@ -17,6 +17,7 @@ import {
 } from "@brain/db";
 import type { HistoryTurn } from "@brain/llm-gateway";
 import { randomUUID } from "node:crypto";
+import type { WorkGraph } from "../graph/graph.service.js";
 
 const TITLE_CHARS = 80;
 const LIST_LIMIT = 50;
@@ -88,7 +89,14 @@ function textOf(answer: StoredAnswer): string {
 }
 
 export class ConversationsService implements ConversationsApi, ConversationStore {
-  constructor(private readonly deps: { readonly pool: PoolLike; readonly box: Pick<SecretBox, "seal" | "open"> }) {}
+  constructor(
+    private readonly deps: {
+      readonly pool: PoolLike;
+      readonly box: Pick<SecretBox, "seal" | "open">;
+      /** Learns from answers rated helpful. Without one, ratings are only stored. */
+      readonly graph?: Pick<WorkGraph, "answerHelpful" | "report">;
+    },
+  ) {}
 
   /** Bound to the owner and conversation, so a copied row cannot be opened anywhere else. */
   private context(scope: UserScope, conversationId: string): string {
@@ -163,6 +171,9 @@ export class ConversationsService implements ConversationsApi, ConversationStore
     messageId: string,
     input: { readonly rating: "up" | "down"; readonly reason?: string | undefined },
   ): Promise<void> {
+    const graph = this.deps.graph;
+    // Read before the rating changes, so only a change to "up" teaches the graph, not a repeat.
+    const before = input.rating === "up" && graph ? await this.ratedAnswer(scope, conversationId, messageId, graph) : null;
     const saved = await saveFeedback(this.deps.pool, scope, {
       conversationId,
       messageId,
@@ -170,6 +181,23 @@ export class ConversationsService implements ConversationsApi, ConversationStore
       reasonCiphertext: input.reason ? this.seal(scope, conversationId, input.reason) : null,
     });
     if (!saved) throw new AppError("NOT_FOUND", "Answer not found");
+    if (graph && before && before.rating !== "up") await graph.answerHelpful(scope, before.answer);
+  }
+
+  /** The answer being rated, or null if it cannot be read: the rating is saved either way. */
+  private async ratedAnswer(
+    scope: UserScope,
+    conversationId: string,
+    messageId: string,
+    graph: Pick<WorkGraph, "report">,
+  ): Promise<Extract<MessageView, { role: "assistant" }> | null> {
+    try {
+      const message = (await this.get(scope, conversationId)).messages.find((m) => m.id === messageId);
+      return message?.role === "assistant" ? message : null;
+    } catch (err) {
+      if (!(isAppError(err) && err.code === "NOT_FOUND")) graph.report(err);
+      return null;
+    }
   }
 
   async begin(scope: UserScope, conversationId: string | undefined, question: string): Promise<ConversationStart> {
