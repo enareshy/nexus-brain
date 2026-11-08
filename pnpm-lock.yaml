@@ -215,6 +215,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.2
         version: 1.32.2(zod@3.25.76)
+      undici:
+        specifier: 8.12.3
+        version: 8.12.3
       zod:
         specifier: ^3.24.1
         version: 3.25.76

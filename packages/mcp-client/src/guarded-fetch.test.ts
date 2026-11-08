@@ -1,5 +1,7 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi } from "vitest";
-import { createGuardedFetch, isPrivateAddress } from "./guarded-fetch.js";
+import { checkedLookup, createGuardedFetch, isLoopbackAddress, isPrivateAddress } from "./guarded-fetch.js";
 
 const ok = () => vi.fn(async (_input: unknown, _init?: RequestInit) => new Response("ok"));
 
@@ -152,4 +154,97 @@ describe("isPrivateAddress", () => {
       expect(isPrivateAddress(ip)).toBe(false);
     },
   );
+});
+
+describe("connecting to the address that was checked (DNS rebinding)", () => {
+  it("refuses at connect time when the name now points somewhere private, though it passed the first check", async () => {
+    let calls = 0;
+    // Public on the first look-up, then a cloud metadata address: the classic rebinding trick.
+    const resolve = vi.fn(async () => (++calls === 1 ? ["104.192.142.10"] : ["169.254.169.254"]));
+    const guarded = createGuardedFetch({ allowedHosts: ["mcp.atlassian.com"], resolve, timeoutMs: 5_000 });
+    await expect(guarded("https://mcp.atlassian.com/v1/mcp")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringMatching(/non-public/),
+    });
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
+  /** A local server answering by path, reached through the real checked connection. */
+  async function withLocalServer(run: (base: string) => Promise<void>) {
+    const server = createServer((req, res) => {
+      if (req.url === "/empty") return res.writeHead(204).end();
+      if (req.url === "/moved") return res.writeHead(302, { location: "http://localhost/elsewhere" }).end();
+      res.end("pinned ok");
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const { port } = server.address() as AddressInfo;
+    try {
+      await run(`http://localhost:${port}`);
+    } finally {
+      await new Promise((done) => server.close(done));
+    }
+  }
+  const local = () => createGuardedFetch({ allowedHosts: ["localhost"], allowInsecureLoopback: true, resolve: async () => ["127.0.0.1"] });
+
+  it("connects through the checked look-up for a real request, and answers in Node's own Response", async () => {
+    await withLocalServer(async (base) => {
+      const response = await local()(`${base}/`);
+      expect(response).toBeInstanceOf(Response);
+      expect(await response.text()).toBe("pinned ok");
+      const empty = await local()(`${base}/empty`);
+      expect(empty).toBeInstanceOf(Response);
+      expect(empty.status).toBe(204);
+    });
+  });
+
+  it("refuses a redirect on the real connection", async () => {
+    await withLocalServer(async (base) => {
+      await expect(local()(`${base}/moved`)).rejects.toThrow();
+    });
+  });
+
+  it("does not let an allowed loopback name lead to another private address", async () => {
+    const guarded = createGuardedFetch({ allowedHosts: ["localhost"], allowInsecureLoopback: true, resolve: async () => ["169.254.169.254"], timeoutMs: 5_000 });
+    await expect(guarded("http://localhost:65000/")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("checkedLookup", () => {
+  const run = (resolve: (host: string) => Promise<readonly string[]>, all: boolean, allowLoopback = false) =>
+    new Promise<{ err: Error | null; result: unknown; family?: number }>((done) =>
+      checkedLookup(resolve, allowLoopback)("mcp.atlassian.com", { all }, (err, result, family) => done({ err, result, family })),
+    );
+
+  it("hands back only public addresses, in either form the socket asks for", async () => {
+    expect(await run(async () => ["104.192.142.10"], false)).toEqual({ err: null, result: "104.192.142.10", family: 4 });
+    expect(await run(async () => ["104.192.142.10", "2606:4700::1"], true)).toEqual({
+      err: null,
+      result: [{ address: "104.192.142.10", family: 4 }, { address: "2606:4700::1", family: 6 }],
+      family: undefined,
+    });
+  });
+
+  it("refuses when any address is private, or none came back", async () => {
+    expect((await run(async () => ["104.192.142.10", "10.0.0.1"], true)).err).toMatchObject({ code: "FORBIDDEN" });
+    expect((await run(async () => [], false)).err).toMatchObject({ code: "FORBIDDEN" });
+    expect((await run(async () => { throw new Error("ENOTFOUND"); }, false)).err?.message).toBe("ENOTFOUND");
+  });
+
+  it("lets a loopback name through only when loopback is allowed", async () => {
+    const loop = (allow: boolean) =>
+      new Promise<Error | null>((done) => checkedLookup(async () => ["127.0.0.1"], allow)("localhost", { all: false }, (err) => done(err)));
+    expect(await loop(true)).toBeNull();
+    expect(await loop(false)).toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("isLoopbackAddress", () => {
+  it.each([["127.0.0.1", true], ["127.8.9.10", true], ["::1", true], ["::ffff:127.0.0.1", true], ["10.0.0.1", false], ["169.254.169.254", false], ["2606:4700::1", false], ["localhost", false]])(
+    "%s is loopback: %s",
+    (address, expected) => expect(isLoopbackAddress(address)).toBe(expected),
+  );
+});
+
+describe("isPrivateAddress, rarer IPv6 ranges", () => {
+  it.each(["2001::1", "100::1", "64:ff9b:1::a00:1"])("blocks %s", (address) => expect(isPrivateAddress(address)).toBe(true));
 });
