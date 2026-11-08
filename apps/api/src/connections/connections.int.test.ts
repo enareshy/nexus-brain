@@ -30,6 +30,8 @@ let keys: TestKeys;
 let lockPool: pg.Pool;
 /** A second API server: its own process state, the same database and lock. */
 let otherServer: ConnectionsService;
+let serverOptions: ConstructorParameters<typeof ConnectionsService>[0];
+const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 beforeAll(async () => {
   const owner = new pg.Client({ connectionString: OWNER_URL });
@@ -54,7 +56,7 @@ beforeAll(async () => {
   pool = createAppPool({ connectionString: APP_URL, onError: () => {} });
   lockPool = createAppPool({ connectionString: APP_URL, onError: () => {} });
   keys = await createTestKeys();
-  const serverOptions = {
+  serverOptions = {
     pool,
     box: createSecretBox(randomBytes(32).toString("base64")),
     registry: createRegistry([mock.definition]),
@@ -198,6 +200,26 @@ describe("connect Jira (mock) and search as that user", () => {
     expect((await pat("GET", "/connections")).json().data[0].status).toBe("active");
   });
 
+  it("sends nothing for a search that ran out of time while its session was still opening", async () => {
+    // A server with no open sessions yet and a short search time, so the session opens after the deadline.
+    const quick = new ConnectionsService({ ...serverOptions, searchBudgetMs: 300 });
+    const scope = { tenantId: ACME, userId: seedUser("patAcme").id };
+    const calledBefore = mock.calledTools.length;
+    mock.setMcpDelay(500);
+    try {
+      const result = await quick.search(scope, "late-session", 5);
+      expect(result.sources[0]).toMatchObject({ ok: false, error: "TIMEOUT" });
+      // Long enough for the session to finish opening, and for any call it would have sent.
+      await later(2_500);
+      expect(mock.calledTools.slice(calledBefore)).toEqual([]);
+    } finally {
+      mock.setMcpDelay(0);
+    }
+    // The connection is untouched and the next search works as usual.
+    const pat = await as("patAcme");
+    expect((await pat("GET", "/search?q=after-timeout")).json().data.sources[0]).toMatchObject({ ok: true });
+  });
+
   it("reuses the MCP session across requests", async () => {
     const pat = await as("patAcme");
     await pat("GET", "/search?q=first-reuse");
@@ -294,6 +316,27 @@ describe("connect Jira (mock) and search as that user", () => {
     expect(res.json().data).toEqual({ disconnected: true, revoked: true });
     expect(mock.stats.revocations).toBeGreaterThan(before);
     expect((await pat("GET", "/connections")).json().data[0].status).toBe("not_connected");
+  });
+
+  it("registers Brain with a service once when two people connect it for the first time together", async () => {
+    const owner = new pg.Client({ connectionString: OWNER_URL });
+    await owner.connect();
+    try {
+      await owner.query("DELETE FROM mcp_client_registrations WHERE server_id = $1", [SERVER]);
+    } finally {
+      await owner.end();
+    }
+    const before = mock.stats.registrations;
+    const pat = await as("patAcme");
+    const bob = { tenantId: ACME, userId: seedUser("bob").id };
+    // One start on each of two servers, at the same moment.
+    const [here, there] = await Promise.all([pat("POST", `/connections/${SERVER}/authorize`), otherServer.authorize(bob, SERVER)]);
+    expect(here.json()).toMatchObject({ success: true });
+    expect(there.authorizationUrl).toEqual(expect.any(String));
+    expect(mock.stats.registrations - before).toBe(1);
+    // Both sign-ins name the one saved registration.
+    const clientOf = (url: string) => new URL(url).searchParams.get("client_id");
+    expect(clientOf(here.json().data.authorizationUrl)).toBe(clientOf(there.authorizationUrl));
   });
 
   it("marks a connection for reconnect when the grant is revoked elsewhere", async () => {

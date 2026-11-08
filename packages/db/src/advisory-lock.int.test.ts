@@ -14,6 +14,19 @@ let serverB: pg.Pool;
 
 const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Waits until some server holds the lock on `key`, rather than guessing how long that takes. */
+async function untilHeld(key: string): Promise<void> {
+  for (let tries = 0; tries < 200; tries += 1) {
+    const { rows } = await owner.query(
+      "SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted AND objid = (hashtextextended($1, 0) & x'ffffffff'::bigint)::oid",
+      [key],
+    );
+    if (rows.length > 0) return;
+    await later(10);
+  }
+  throw new Error(`lock ${key} was never taken`);
+}
+
 beforeAll(async () => {
   owner = new pg.Client({ connectionString: OWNER_URL });
   await owner.connect();
@@ -37,7 +50,7 @@ describe("withSharedLock", () => {
       await gate;
       order.push("a end");
     });
-    await later(100);
+    await untilHeld("conn|t|u|jira");
     const second = withSharedLock(serverB, "conn|t|u|jira", 5_000, async () => {
       order.push("b");
     });
@@ -56,7 +69,7 @@ describe("withSharedLock", () => {
     let release = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const holder = withSharedLock(serverA, "conn|busy", 5_000, () => gate);
-    await later(100);
+    await untilHeld("conn|busy");
     await expect(withSharedLock(serverB, "conn|busy", 200, async () => "never")).rejects.toMatchObject({ code: "UNAVAILABLE" });
     release();
     await holder;
@@ -76,6 +89,29 @@ describe("withSharedLock", () => {
     }
   });
 
+  it("stops waiting at once when the request is cancelled, and gives its connection back", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const holder = withSharedLock(serverA, "conn|cancel", 5_000, () => gate);
+    await untilHeld("conn|cancel");
+    const controller = new AbortController();
+    const started = Date.now();
+    const waiting = withSharedLock(serverB, "conn|cancel", 5_000, async () => "never", controller.signal);
+    setTimeout(() => controller.abort(), 150);
+    await expect(waiting).rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "lock_cancelled" } });
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // Already cancelled: nothing is asked of the database at all.
+    await expect(withSharedLock(serverB, "conn|cancel", 5_000, async () => "never", controller.signal)).rejects.toMatchObject({
+      details: { reason: "lock_cancelled" },
+    });
+    // Both of the other server's connections are free again.
+    const [one, two] = await Promise.all([serverB.connect(), serverB.connect()]);
+    one.release();
+    two.release();
+    release();
+    await holder;
+  });
+
   it("frees the lock when the work fails, and returns its result otherwise", async () => {
     await expect(withSharedLock(serverA, "conn|fail", 1_000, async () => { throw new Error("work failed"); })).rejects.toThrow("work failed");
     await expect(withSharedLock(serverB, "conn|fail", 1_000, async () => 42)).resolves.toBe(42);
@@ -85,7 +121,7 @@ describe("withSharedLock", () => {
     let release = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const holder = withSharedLock(serverA, "conn|crash", 5_000, () => gate);
-    await later(100);
+    await untilHeld("conn|crash");
     const lock = await owner.query(
       "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND objid = (hashtextextended('conn|crash', 0) & x'ffffffff'::bigint)::oid",
     );

@@ -132,8 +132,8 @@ const connections = new ConnectionsService({
   adapters: new Map(enabled.map((e) => [e.def.id, e.adapter])),
   client: { redirectUrl: oauthRedirectUrl(env), clientName: "Nexus Brain" },
   onBackgroundError: (err) => logger.warn({ err }, "MCP session housekeeping failed"),
-  // Under the pool's 10 s statement limit, so a long wait ends as "busy" rather than a timeout.
-  sharedLock: (key, work) => withSharedLock(lockPool, key, CONNECTION_LOCK_WAIT_MS, work),
+  // A wait longer than this reports the service as busy; a search that runs out of time stops waiting sooner.
+  sharedLock: (key, work, signal) => withSharedLock(lockPool, key, CONNECTION_LOCK_WAIT_MS, work, signal),
 });
 
 const box = createSecretBox(env.CONNECTOR_TOKEN_ENC_KEY);

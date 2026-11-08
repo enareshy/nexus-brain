@@ -1,11 +1,18 @@
 import { AppError } from "@brain/core";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { PoolLike } from "./tenant.js";
 
-/** Postgres codes for a lock wait that hit `lock_timeout`, or a statement stopped by `statement_timeout`. */
-const WAIT_ENDED = new Set(["55P03", "57014"]);
+/** How often a waiting server asks for the lock again: soon at first, then every 200 ms. */
+const FIRST_RETRY_MS = 25;
+const MAX_RETRY_MS = 200;
+const BUSY = "This service is busy with another request. Please try again.";
 
 function codeOf(err: unknown): string | undefined {
   return typeof err === "object" && err !== null && "code" in err && typeof err.code === "string" ? err.code : undefined;
+}
+
+function stopped(): AppError {
+  return new AppError("UNAVAILABLE", "The request ended before this service was free.", { reason: "lock_cancelled" });
 }
 
 /**
@@ -14,14 +21,23 @@ function codeOf(err: unknown): string | undefined {
  * and Postgres drops it if that connection or the server holding it goes away.
  *
  * Use a pool kept for locks, so servers waiting for a lock cannot use up the connections the work
- * itself needs. Waits at most `waitMs`, then reports the service as busy.
+ * itself needs. The lock is asked for again and again rather than waited on inside Postgres, so a
+ * request that is cancelled (`signal`) stops waiting at once and frees its connection. Waits at
+ * most `waitMs`, then reports the service as busy.
  */
-export async function withSharedLock<T>(pool: PoolLike, key: string, waitMs: number, work: () => Promise<T>): Promise<T> {
+export async function withSharedLock<T>(
+  pool: PoolLike,
+  key: string,
+  waitMs: number,
+  work: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   if (!Number.isInteger(waitMs) || waitMs < 1) throw new Error("A lock wait needs a limit");
+  if (signal?.aborted) throw stopped();
   const client = await pool.connect().catch((err: unknown) => {
     // Every lock connection is in use, or the database cannot be reached. The kind of failure is
     // kept for the logs; its message is not, as it can name hosts.
-    throw new AppError("UNAVAILABLE", "This service is busy with another request. Please try again.", {
+    throw new AppError("UNAVAILABLE", BUSY, {
       reason: "lock_pool",
       errorType: err instanceof Error ? err.name : typeof err,
       ...(codeOf(err) ? { pgCode: codeOf(err) } : {}),
@@ -34,36 +50,54 @@ export async function withSharedLock<T>(pool: PoolLike, key: string, waitMs: num
     lost = err;
   };
   client.on("error", onLost);
-  const close = (err: unknown) => {
+  const finish = (err?: unknown) => {
     client.off("error", onLost);
-    client.release(err instanceof Error ? err : true);
+    // A connection in an unknown state is closed rather than reused.
+    client.release(err === undefined ? undefined : err instanceof Error ? err : true);
   };
+
   try {
-    await client.query("SELECT set_config('lock_timeout', $1, false)", [`${waitMs}ms`]);
-    await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [key]);
+    await acquire(client, key, waitMs, signal);
   } catch (err) {
-    // The connection may be in an unknown state, so it is closed rather than reused.
-    close(err);
-    if (WAIT_ENDED.has(codeOf(err) ?? "")) {
-      throw new AppError("UNAVAILABLE", "This service is busy with another request. Please try again.", { reason: "lock_wait" });
-    }
+    // Not getting the lock leaves the connection as it was, so it goes back to the pool.
+    finish(err instanceof AppError && !lost ? undefined : err);
     throw err;
   }
   const unlock = async () => {
     // Closing the connection frees the lock as well, so a lost or failing one is just closed.
-    if (lost) return close(lost);
+    if (lost) return finish(lost);
     try {
       await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [key]);
-      await client.query("RESET lock_timeout");
-      client.off("error", onLost);
-      client.release();
+      finish();
     } catch (err) {
-      close(err);
+      finish(err);
     }
   };
   try {
     return await work();
   } finally {
     await unlock();
+  }
+}
+
+async function acquire(
+  client: { query(text: string, values: unknown[]): Promise<{ rows: Array<{ ok?: boolean }> }> },
+  key: string,
+  waitMs: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const deadline = Date.now() + waitMs;
+  let retryMs = FIRST_RETRY_MS;
+  for (;;) {
+    const { rows } = await client.query("SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS ok", [key]);
+    if (rows[0]?.ok === true) return;
+    if (signal?.aborted) throw stopped();
+    if (Date.now() + retryMs > deadline) throw new AppError("UNAVAILABLE", BUSY, { reason: "lock_wait" });
+    try {
+      await sleep(retryMs, undefined, signal ? { signal } : undefined);
+    } catch {
+      throw stopped();
+    }
+    retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
   }
 }

@@ -124,10 +124,12 @@ export interface ConnectionsDeps {
    * refresh one rotating token at once. Without one, the lock covers only this process.
    */
   readonly sharedLock?: SharedLock;
+  /** How long a search waits for each service. Shorter in tests. */
+  readonly searchBudgetMs?: number;
 }
 
-/** Runs `work` while no other server runs work for the same key. */
-export type SharedLock = <T>(key: string, work: () => Promise<T>) => Promise<T>;
+/** Runs `work` while no other server runs work for the same key; `signal` ends the wait early. */
+export type SharedLock = <T>(key: string, work: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
 
 function appContext(tenantId: string, serverId: string): string {
   return `app|${tenantId}|${serverId}`;
@@ -245,7 +247,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
     await this.requireAllowed(scope, serverId);
     const def = await this.definitionFor(scope, serverId);
     const store = createVaultStore(this.deps.pool, this.deps.box, scope, serverId);
-    const start = await beginAuthorization(def, store, this.deps.client);
+    const start = await this.registeringOnce(def.id, def.client !== undefined, () => beginAuthorization(def, store, this.deps.client));
     const stateHash = hashState(start.state);
 
     await savePendingAuthorization(this.deps.pool, scope, {
@@ -407,7 +409,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
         run: (signal) =>
           this.withSession(scope, c.serverId, (session) => this.searchHits(c.serverId, session, query, limit, scope), signal),
       })),
-      { limit, rerankQuery: query },
+      { limit, rerankQuery: query, ...(this.deps.searchBudgetMs ? { budgetMs: this.deps.searchBudgetMs } : {}) },
     );
   }
 
@@ -460,12 +462,26 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
   }
 
   /**
+   * The first person to connect a service registers Brain with it, and that registration is shared
+   * by everyone. Two first connections at once would each register, and the later save would replace
+   * the registration the earlier person's sign-in was made with. So, until a registration is saved,
+   * starting a connection takes a lock per service (here, then across servers); the second start
+   * then finds the saved registration and uses it.
+   */
+  private async registeringOnce<T>(serverId: string, configured: boolean, start: () => Promise<T>): Promise<T> {
+    if (configured || (await readClientInfo(this.deps.pool, this.deps.box, serverId))) return start();
+    return this.exclusive(serverId, start, undefined, "register");
+  }
+
+  /**
    * One piece of work at a time per connection: first within this process, so only one request
    * here waits on the shared lock, then across servers.
    */
-  private exclusive<T>(key: string, work: () => Promise<T>): Promise<T> {
+  private exclusive<T>(key: string, work: () => Promise<T>, signal?: AbortSignal, kind: "connection" | "register" = "connection"): Promise<T> {
+    // Each kind of lock has its own names, so a key of one kind can never match one of the other.
+    const name = `${kind}|${key}`;
     const shared = this.deps.sharedLock;
-    return this.sessions.run(key, () => (shared ? shared(`mcp-connection|${key}`, work) : work()));
+    return this.sessions.run(name, () => (shared ? shared(`mcp-${name}`, work, signal) : work()));
   }
 
   /**
@@ -540,7 +556,7 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
         }
       }
       return this.useSession(key, scope, serverId, await this.openFresh(scope, serverId), work, signal);
-    });
+    }, signal);
   }
 
   private async openFresh(scope: UserScope, serverId: string): Promise<McpSession> {
@@ -588,6 +604,12 @@ export class ConnectionsService implements ConnectionsApi, DocumentSource {
       closed = true;
       session.close().catch((err: unknown) => this.deps.onBackgroundError?.(err));
     };
+    // Opening a session can outlast the search's time, and an abort that already happened fires no
+    // event: the session is closed here, before any call is sent for a search nobody is waiting on.
+    if (signal?.aborted) {
+      close();
+      throw new AppError("UNAVAILABLE", "Search budget exceeded");
+    }
     signal?.addEventListener("abort", close, { once: true });
     try {
       const result = await work(session);
