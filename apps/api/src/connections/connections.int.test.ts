@@ -300,7 +300,11 @@ describe("connect Jira (mock) and search as that user", () => {
     const pat = await as("patAcme");
     mock.setNextIdentity("pat-jira");
     const started = await pat("POST", `/connections/${SERVER}/authorize`);
-    await pat("POST", "/connections/complete", await consentViaCallback(started.json().data.authorizationUrl));
+    expect(started.json()).toMatchObject({ success: true });
+    const done = await pat("POST", "/connections/complete", await consentViaCallback(started.json().data.authorizationUrl));
+    // Checked here, so a failed reconnect is reported as itself rather than as a missing source below.
+    expect(done.json()).toMatchObject({ success: true, data: { serverId: SERVER } });
+    expect((await pat("GET", "/connections")).json().data[0].status).toBe("active");
 
     mock.expireAccessTokens();
     mock.revokeRefreshTokens();
