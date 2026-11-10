@@ -298,6 +298,26 @@ export const GraphItemSchema = z.object({
 });
 export type GraphItem = z.infer<typeof GraphItemSchema>;
 
+/** Whether the company's learned ranker is in use (FR-RET-08), for admins. */
+export const RankerStatusSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("never_trained"), minAnswers: z.number() }),
+  z.object({
+    state: z.enum(["on", "off"]),
+    minAnswers: z.number(),
+    trainedAt: z.string(),
+    details: z
+      .object({
+        reason: z.enum(["too_few", "no_gain", "better"]),
+        answers: z.number(),
+        examples: z.number(),
+        holdoutMrr: z.number(),
+        baselineMrr: z.number(),
+      })
+      .nullable(),
+  }),
+]);
+export type RankerStatus = z.infer<typeof RankerStatusSchema>;
+
 export const ErasureSchema = z.object({
   erased: z.boolean(),
   conversations: z.number(),
@@ -369,6 +389,7 @@ export interface ApiClient {
   workGraph(): Promise<GraphItem[]>;
   forgetGraphItem(item: { serverId: string; itemId: string }): Promise<{ forgotten: number }>;
   clearWorkGraph(): Promise<{ deleted: number }>;
+  rankerStatus(): Promise<RankerStatus>;
   skills(): Promise<Skill[]>;
   addSkill(skill: SkillInput): Promise<Skill>;
   updateSkill(id: string, skill: SkillInput): Promise<Skill>;
@@ -497,6 +518,7 @@ export function createApiClient(
     forgetGraphItem: ({ serverId, itemId }) =>
       request(z.object({ forgotten: z.number() }), "/me/work-graph/forget", { method: "POST", body: JSON.stringify({ serverId, itemId }) }),
     clearWorkGraph: () => request(z.object({ deleted: z.number() }), "/me/work-graph", { method: "DELETE" }),
+    rankerStatus: () => request(RankerStatusSchema, "/admin/ranker"),
     skills: () => request(z.array(SkillSchema), "/skills"),
     addSkill: (skill) => request(SkillSchema, "/skills", { method: "POST", body: JSON.stringify(skill) }),
     updateSkill: (id, skill) => request(SkillSchema, `/skills/${enc(id)}`, { method: "POST", body: JSON.stringify(skill) }),

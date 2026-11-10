@@ -1,5 +1,5 @@
-import { applyLearnedRanker, examplesFromAnswer, type RankerModel } from "@brain/connectors";
-import { getTenantRanker, recordRankingExamples, type PoolLike, type StoredRankingExample, type UserScope } from "@brain/db";
+import { applyLearnedRanker, examplesFromAnswer, RANKER_LIMITS, type RankerModel } from "@brain/connectors";
+import { getTenantRanker, recordRankingExamples, type PoolLike, type StoredRanker, type StoredRankingExample, type UserScope } from "@brain/db";
 import { z } from "zod";
 
 // Weights are bounded in training; anything larger did not come from it.
@@ -17,6 +17,42 @@ const ModelSchema = z.object({
 export interface RankerStore {
   model(tenantId: string): Promise<unknown>;
   record(tenantId: string, rows: readonly StoredRankingExample[]): Promise<void>;
+  /** The last training's saved result, for the Admin page. */
+  saved(tenantId: string): Promise<StoredRanker | null>;
+}
+
+/** What training reports, as saved by `ranker:train`; checked before it is shown. */
+const MetricsSchema = z.object({
+  examples: z.number().int().nonnegative(),
+  answers: z.number().int().nonnegative(),
+  holdoutMrr: z.number().finite(),
+  baselineMrr: z.number().finite(),
+  active: z.boolean(),
+  reason: z.enum(["too_few", "no_gain", "better"]),
+});
+
+/**
+ * Whether a company's learned ranker is in use, and why, for its admins (FR-RET-08). "On" means
+ * exactly what searches do: a usable model is saved. `details` is null if the training report saved
+ * with it cannot be read. `minAnswers` is what training needs, for the explanation.
+ */
+export type RankerStatus =
+  | { readonly state: "never_trained"; readonly minAnswers: number }
+  | {
+      readonly state: "on" | "off";
+      readonly minAnswers: number;
+      readonly trainedAt: string;
+      readonly details: {
+        readonly reason: "too_few" | "no_gain" | "better";
+        readonly answers: number;
+        readonly examples: number;
+        readonly holdoutMrr: number;
+        readonly baselineMrr: number;
+      } | null;
+    };
+
+export interface RankerStatusApi {
+  status(tenantId: string): Promise<RankerStatus>;
 }
 
 /** One rated answer: its results and which of them it cited (1-based source numbers). */
@@ -47,6 +83,7 @@ export function createRankerStore(pool: PoolLike): RankerStore {
   return {
     model: async (tenantId) => (await getTenantRanker(pool, tenantId))?.model ?? null,
     record: (tenantId, rows) => recordRankingExamples(pool, tenantId, rows),
+    saved: (tenantId) => getTenantRanker(pool, tenantId),
   };
 }
 
@@ -56,7 +93,7 @@ export function createRankerStore(pool: PoolLike): RankerStore {
  * work graph, it only reorders a person's own results, and a problem with it never fails a search
  * or a rating.
  */
-export class RankerService implements LearnedRanking {
+export class RankerService implements LearnedRanking, RankerStatusApi {
   private readonly cache = new Map<string, { readonly model: RankerModel | null; readonly until: number }>();
   /** One read per company at a time, shared by searches waiting on it. */
   private readonly loading = new Map<string, Promise<RankerModel | null>>();
@@ -94,6 +131,23 @@ export class RankerService implements LearnedRanking {
 
   report(err: unknown): void {
     this.deps.onError(err);
+  }
+
+  /**
+   * The last training's result. It is "on" exactly when searches would use the saved model, whatever
+   * the training report says; a report that cannot be read is reported, and its details left out.
+   */
+  async status(tenantId: string): Promise<RankerStatus> {
+    const minAnswers = RANKER_LIMITS.minAnswers;
+    const saved = await this.deps.store.saved(tenantId);
+    if (!saved) return { state: "never_trained", minAnswers };
+    const usable = saved.model !== null && ModelSchema.safeParse(saved.model).success;
+    const metrics = MetricsSchema.safeParse(saved.metrics);
+    if (!metrics.success) this.deps.onError(new Error("Saved ranker training result is not valid"));
+    const details = metrics.success
+      ? (({ active: _active, ...rest }) => rest)(metrics.data)
+      : null;
+    return { state: usable ? "on" : "off", minAnswers, trainedAt: saved.trainedAt.toISOString(), details };
   }
 
   /** The same answer always gets the same group, so saving it again adds nothing. */

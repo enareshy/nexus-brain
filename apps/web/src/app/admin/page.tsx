@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AiSettingsForm } from "@/components/AiSettingsForm";
+import { RankerStatusPanel } from "@/components/RankerStatusPanel";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
-import { describeError, type AiSettings } from "@/lib/api";
+import { describeError, type AiSettings, type RankerStatus } from "@/lib/api";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
 
@@ -25,13 +26,21 @@ function AdminPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [ranker, setRanker] = useState<RankerStatus | null>(null);
+  const [rankerError, setRankerError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const [loaded, me] = await Promise.all([api.aiSettings(), api.me()]);
       setSettings(loaded);
-      setIsAdmin(ADMIN_ROLES.has(me.role));
+      const admin = ADMIN_ROLES.has(me.role);
+      setIsAdmin(admin);
+      // Admins only; its own failure must not hide the settings above.
+      if (admin) {
+        setRankerError(null);
+        api.rankerStatus().then(setRanker, (e: unknown) => setRankerError(describeError(e)));
+      }
     } catch (e) {
       setError(describeError(e));
     }
@@ -88,6 +97,32 @@ function AdminPage() {
           <AiSettingsForm key={JSON.stringify(settings)} settings={settings} canChange={isAdmin} isSaving={isSaving} onSave={(next) => void handleSave(next)} />
         )}
       </section>
+
+      {isAdmin && (
+        <section aria-labelledby="ranker-heading" className="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
+          <h2 id="ranker-heading" className="text-xl font-bold tracking-tight">
+            Learned ranking
+          </h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            Brain can learn from your company&apos;s ratings of answers which kinds of results people find useful, and
+            put those a little higher for everyone here. It keeps only general signals (place in the list, match score,
+            age and which service), never who rated or anything about a document.
+          </p>
+          <div className="mt-4">
+            {rankerError ? (
+              <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+                {rankerError}
+              </p>
+            ) : ranker ? (
+              <RankerStatusPanel status={ranker} />
+            ) : (
+              <p role="status" className="text-sm text-slate-500">
+                Loading…
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="more-heading" className="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
         <h2 id="more-heading" className="text-xl font-bold tracking-tight">

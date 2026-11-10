@@ -233,6 +233,7 @@ const app = await createApp({
   people: createPeopleService({ pool, logger, connections }),
   memory,
   workGraph: graph,
+  ranker,
   skills,
   data: { retention, exports },
   usage,

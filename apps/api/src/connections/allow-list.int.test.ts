@@ -126,9 +126,11 @@ describe("turning a service off", () => {
 
   it("stops work that was already waiting its turn when the service was turned off", async () => {
     // Holds this person's connection, so the search below has to wait for it.
-    let release!: () => void;
+    let release: (() => void) | undefined;
     const holding = connections.writeWithSession(bobScope, SERVER, () => new Promise<void>((resolve) => (release = resolve)));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Waits until the session is open and holding the connection, however long that takes here.
+    for (let tries = 0; !release && tries < 500; tries += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+    if (!release) throw new Error("The connection was never held");
     const waiting = connections.gatherDocuments(bobScope, "runbook", { limit: 5, maxDocuments: 2 });
     await new Promise((resolve) => setTimeout(resolve, 50));
     await setServerAllowed(pool, { tenantId: ACME, userId: seedUser("alice").id }, SERVER, false);

@@ -1,6 +1,6 @@
 // A person's data export and their company's retention settings (FR-ADM-03, NFR-COMP-01), on real Postgres.
 import { createSecretBox } from "@brain/core";
-import { applyMigrations, createAppPool, exportGraph, loadMigrations, MIGRATIONS_DIR, recordGraphEdges, seed } from "@brain/db";
+import { applyMigrations, createAppPool, exportGraph, loadMigrations, MIGRATIONS_DIR, recordGraphEdges, saveTenantRanker, seed } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import { createLogger } from "@brain/telemetry";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -19,6 +19,7 @@ import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support
 import { createPgRateLimiter } from "../common/rate-limiter.js";
 import { ExportService, type ExportSources } from "./export.service.js";
 import { createGraphStore, GraphService } from "../graph/graph.service.js";
+import { createRankerStore, RankerService } from "../ranking/ranker.service.js";
 import { RetentionService } from "./retention.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
@@ -90,6 +91,7 @@ beforeAll(async () => {
     answers: { answer: async () => {} },
     memory,
     workGraph: new GraphService({ store: createGraphStore(pool), onError: () => {} }),
+    ranker: new RankerService({ store: createRankerStore(pool), onError: () => {}, fingerprint: (value) => value }),
     skills,
     data: { retention: new RetentionService({ pool, logger }), exports },
   });
@@ -187,6 +189,24 @@ describe("seeing and clearing your own work graph (FR-RET-09)", () => {
     const audit = await owner.query("SELECT action, meta::text AS meta FROM audit_log WHERE user_id = $1 AND action LIKE 'work_graph.%' ORDER BY id DESC LIMIT 2", [seedUser("bob").id]);
     expect(audit.rows.map((r) => r.action).sort()).toEqual(["work_graph.cleared", "work_graph.item_forgotten"]);
     expect(audit.rows.map((r) => r.meta).join(" ")).not.toMatch(/ENG-7|pr-2/);
+  });
+});
+
+describe("the company's learned ranker status (FR-RET-08)", () => {
+  it("is shown to admins only, and reflects the last training", async () => {
+    const admin = await as("patAcme");
+    const member = await as("bob");
+    await owner.query("DELETE FROM tenant_rankers WHERE tenant_id = $1", [TENANTS.acme.id]);
+    try {
+      expect((await member("GET", "/admin/ranker")).statusCode).toBe(403);
+      expect((await admin("GET", "/admin/ranker")).json().data).toEqual({ state: "never_trained", minAnswers: 150 });
+
+      const metrics = { examples: 40, answers: 8, holdoutMrr: 0, baselineMrr: 0, active: false, reason: "too_few" };
+      await saveTenantRanker(owner, TENANTS.acme.id, null, metrics);
+      expect((await admin("GET", "/admin/ranker")).json().data).toMatchObject({ state: "off", details: { reason: "too_few", answers: 8 }, trainedAt: expect.any(String) });
+    } finally {
+      await owner.query("DELETE FROM tenant_rankers WHERE tenant_id = $1", [TENANTS.acme.id]);
+    }
   });
 });
 

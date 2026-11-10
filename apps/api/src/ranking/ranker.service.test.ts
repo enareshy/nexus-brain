@@ -16,8 +16,9 @@ function setup(store: Partial<RankerStore> = {}) {
   let clock = NOW;
   const model = vi.fn<RankerStore["model"]>(async () => MODEL);
   const record = vi.fn<RankerStore["record"]>(async () => {});
+  const saved = vi.fn<RankerStore["saved"]>(async () => null);
   const onError = vi.fn();
-  const service = new RankerService({ store: { model, record, ...store }, onError, fingerprint, now: () => clock });
+  const service = new RankerService({ store: { model, record, saved, ...store }, onError, fingerprint, now: () => clock });
   return { service, model, record, onError, advance: (ms: number) => (clock += ms) };
 }
 
@@ -104,5 +105,37 @@ describe("RankerService.answerRated", () => {
     const { service, onError } = setup({ record: async () => { throw new Error("db down"); } });
     await expect(service.answerRated(scope, { hits, parts: [{ kind: "cite", source: 1 }] }, "up", "message-4")).resolves.toBeUndefined();
     expect(onError).toHaveBeenCalled();
+  });
+});
+
+describe("RankerService.status", () => {
+  const trainedAt = new Date("2026-11-09T08:00:00Z");
+  const metrics = { examples: 900, answers: 180, holdoutMrr: 0.74, baselineMrr: 0.61, active: true, reason: "better" };
+
+  it("says when the company's ranker has never been trained, and what training needs", async () => {
+    expect(await setup().service.status(scope.tenantId)).toEqual({ state: "never_trained", minAnswers: 150 });
+  });
+
+  it("is on exactly when a usable model is saved, as that is what searches use", async () => {
+    const on = setup({ saved: async () => ({ model: MODEL, metrics, trainedAt }) });
+    expect(await on.service.status(scope.tenantId)).toEqual({
+      state: "on",
+      minAnswers: 150,
+      trainedAt: "2026-11-09T08:00:00.000Z",
+      details: { reason: "better", answers: 180, examples: 900, holdoutMrr: 0.74, baselineMrr: 0.61 },
+    });
+    const broken = setup({ saved: async () => ({ model: { version: 9 }, metrics, trainedAt }) });
+    expect(await broken.service.status(scope.tenantId)).toMatchObject({ state: "off", details: { reason: "better" } });
+  });
+
+  it("is off, with the reason, when training kept today's order", async () => {
+    const off = setup({ saved: async () => ({ model: null, metrics: { ...metrics, active: false, reason: "too_few", answers: 40 }, trainedAt }) });
+    expect(await off.service.status(scope.tenantId)).toMatchObject({ state: "off", details: { reason: "too_few", answers: 40 } });
+  });
+
+  it("still says it is on when the training report cannot be read, and reports the report", async () => {
+    const odd = setup({ saved: async () => ({ model: MODEL, metrics: { answers: "lots" }, trainedAt }) });
+    expect(await odd.service.status(scope.tenantId)).toMatchObject({ state: "on", details: null });
+    expect(odd.onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/not valid/) }));
   });
 });

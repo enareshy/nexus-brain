@@ -136,6 +136,7 @@ describe("createApiClient", () => {
       ],
       [() => api.forgetGraphItem({ serverId: "atlassian", itemId: "a/b?c" }), { forgotten: 1 }, "POST", "/me/work-graph/forget", { serverId: "atlassian", itemId: "a/b?c" }],
       [() => api.clearWorkGraph(), { deleted: 3 }, "DELETE", "/me/work-graph"],
+      [() => api.rankerStatus(), { state: "never_trained", minAnswers: 150 }, "GET", "/admin/ranker"],
       [() => api.usageStatus(), { level: "warn", limit: "person", percentUsed: 85 }, "GET", "/usage/status"],
       [() => api.usageOverview(), overview, "GET", "/admin/usage"],
       [() => api.setBudget(budget), budget, "POST", "/admin/budget", budget],

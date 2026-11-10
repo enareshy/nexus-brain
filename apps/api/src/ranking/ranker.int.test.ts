@@ -36,7 +36,7 @@ function resultsWithGithubAt(position: number) {
   }));
 }
 
-async function rateUp(scope: typeof bob, position: number): Promise<void> {
+async function rateUp(scope: typeof bob, position: number, rateAgain = false): Promise<void> {
   const { conversationId } = await conversations.begin(scope, undefined, "where is it?");
   const messageId = await conversations.saveAnswer(scope, conversationId, {
     parts: [{ kind: "text", text: "Here." }, { kind: "cite", source: position + 1, quotes: [] }],
@@ -47,7 +47,7 @@ async function rateUp(scope: typeof bob, position: number): Promise<void> {
   });
   await conversations.feedback(scope, conversationId, messageId, { rating: "up" });
   // A repeated rating teaches nothing more.
-  await conversations.feedback(scope, conversationId, messageId, { rating: "up" });
+  if (rateAgain) await conversations.feedback(scope, conversationId, messageId, { rating: "up" });
 }
 
 async function forget(): Promise<void> {
@@ -78,22 +78,24 @@ afterAll(async () => {
 
 describe("a company's learned ranker", () => {
   it("learns from its people's ratings, and once trained puts what they found useful higher for everyone there", async () => {
-    for (let i = 0; i < 200; i += 1) await rateUp(i % 2 ? bob : alice, i % 5);
+    // Repeats for a few answers only: each rating is a real round trip, and these take time. One in
+    // five answers is held back by a hash of its group, so 250 leave the 30 needed with a wide margin.
+    for (let i = 0; i < 250; i += 1) await rateUp(i % 2 ? bob : alice, i % 5, i < 10);
     const saved = await owner.query("SELECT count(*)::int AS n, count(DISTINCT answer_group)::int AS answers FROM ranking_examples WHERE tenant_id = $1", [bob.tenantId]);
-    expect(saved.rows[0]).toEqual({ n: 1000, answers: 200 });
+    expect(saved.rows[0]).toEqual({ n: 1250, answers: 250 });
 
     const before = (await ranker.rank(bob, resultsWithGithubAt(4))).map((h) => h.serverId);
     expect(before.indexOf("github")).toBe(4);
 
     const trained = await trainCompanyRankers(owner);
-    expect(trained).toEqual([{ tenantId: bob.tenantId, metrics: expect.objectContaining({ active: true, examples: 1000 }) }]);
+    expect(trained).toEqual([{ tenantId: bob.tenantId, metrics: expect.objectContaining({ active: true, examples: 1250 }) }]);
 
     // A server that has not cached the old (empty) model.
     const fresh = new RankerService({ store: createRankerStore(pool), onError: () => {}, fingerprint });
     expect((await fresh.rank(bob, resultsWithGithubAt(4)))[0]?.serverId).toBe("github");
     expect((await fresh.rank(gus, resultsWithGithubAt(4))).map((h) => h.serverId).indexOf("github")).toBe(4);
     expect(await getTenantRanker(pool, gus.tenantId)).toBeNull();
-  });
+  }, 120_000);
 
   it("saves only that cited results were wrong when an answer is rated down", async () => {
     await owner.query("DELETE FROM ranking_examples");
