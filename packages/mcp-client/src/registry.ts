@@ -41,6 +41,20 @@ export const ATLASSIAN_SERVER: McpServerDefinition = Object.freeze({
 });
 
 /**
+ * Notion's hosted MCP server. Its OAuth metadata was probed on 2026-11-10: the authorization server,
+ * token, registration and revocation endpoints are all on mcp.notion.com, with PKCE (S256) and
+ * client registration without a secret, so no app is needed in advance. Only workspace members can
+ * connect, not guests. It also offers write tools, which Brain never calls: writes go only through
+ * the approval policy, which knows none of Notion's.
+ */
+export const NOTION_SERVER: McpServerDefinition = Object.freeze({
+  id: "notion",
+  displayName: "Notion",
+  url: "https://mcp.notion.com/mcp",
+  allowedHosts: Object.freeze(["mcp.notion.com"]),
+});
+
+/**
  * GitHub remote MCP, on the endpoint where the server itself refuses writes. Its sign-in has
  * no client registration (probed 2026-11-01), so it needs a GitHub App created in advance.
  */

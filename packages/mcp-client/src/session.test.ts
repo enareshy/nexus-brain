@@ -6,6 +6,7 @@ import {
   createGoogleDriveServer,
   createRegistry,
   createSlackServer,
+  NOTION_SERVER,
 } from "./registry.js";
 import {
   beginAuthorization,
@@ -214,6 +215,15 @@ describe("createGmailServer", () => {
     expect(def.needsApp).toBe(true);
     expect(def.appKey).toBe(createGoogleDriveServer().appKey);
     expect(def.client).toBeUndefined();
+  });
+});
+
+describe("NOTION_SERVER", () => {
+  it("talks only to Notion's MCP host, which also serves its sign-in, and needs no app in advance", () => {
+    expect(NOTION_SERVER).toMatchObject({ id: "notion", url: "https://mcp.notion.com/mcp" });
+    expect(NOTION_SERVER.allowedHosts).toEqual(["mcp.notion.com"]);
+    expect(NOTION_SERVER.needsApp).toBeUndefined();
+    expect(NOTION_SERVER.client).toBeUndefined();
   });
 });
 

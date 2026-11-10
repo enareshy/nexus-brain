@@ -20,7 +20,7 @@ const apiEnvObject = baseEnvSchema.extend({
   /** 32 random bytes, base64. Seals connector tokens (FR-CON-02). */
   CONNECTOR_TOKEN_ENC_KEY: z.string().min(40),
   /** Comma-separated allow-listed MCP server IDs (FR-MCP-02). */
-  MCP_SERVERS: z.string().default("atlassian,github,google-drive,gmail,slack"),
+  MCP_SERVERS: z.string().default("atlassian,github,google-drive,gmail,slack,notion"),
   /** Optional: normally an admin sets these apps up in the web app, per company. These override that. */
   GITHUB_MCP_CLIENT_ID: z.string().optional().transform((value) => value?.trim() || undefined),
   GITHUB_MCP_CLIENT_SECRET: z.string().optional().transform((value) => value?.trim() || undefined),

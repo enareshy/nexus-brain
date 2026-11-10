@@ -8,6 +8,7 @@ import {
   driveSearch,
   githubSearch,
   gmailSearch,
+  notionSearch,
   slackSearch,
   type SearchAdapter,
   type WriteAdapter,
@@ -21,6 +22,7 @@ import {
   createGoogleDriveServer,
   createRegistry,
   createSlackServer,
+  NOTION_SERVER,
   type McpServerDefinition,
 } from "@brain/mcp-client";
 import { createLogger, startTracing } from "@brain/telemetry";
@@ -80,6 +82,7 @@ const KNOWN_SERVERS: Readonly<Record<string, () => KnownServer>> = {
     adapter: gmailSearch,
   }),
   slack: () => ({ def: createSlackServer(), adapter: slackSearch }),
+  [NOTION_SERVER.id]: () => ({ def: NOTION_SERVER, adapter: notionSearch }),
 };
 
 /** Connections used at once by one server; more wait their turn in this process first. */
