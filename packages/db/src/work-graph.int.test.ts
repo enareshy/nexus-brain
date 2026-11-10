@@ -6,7 +6,7 @@ import { applyMigrations, loadMigrations } from "./migrator.js";
 import { seed } from "./seed.js";
 import { seedUser, TENANTS } from "./seed-data.js";
 import { withUser } from "./tenant.js";
-import { exportGraph, graphLinksFor, recordGraphEdges } from "./work-graph.js";
+import { clearGraph, exportGraph, forgetGraphItem, graphLinksFor, listGraphItems, recordGraphEdges } from "./work-graph.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
@@ -139,5 +139,33 @@ describe("a person's work graph", () => {
     const exported = await exportGraph(appPool, bob);
     expect(exported.map((edge) => edge.target)).toEqual(["atlassian:DOC-2", "atlassian:ENG-1"]);
     expect(exported[0]).toEqual({ source: "me", target: "atlassian:DOC-2", kind: "cited_up", weight: 1, lastSeenAt: expect.any(String) });
+  });
+
+  it("lists what the person used, newest first, and lets them forget one item or clear it all", async () => {
+    await recordGraphEdges(appPool, bob, [{ source: "me", target: "atlassian:ENG-1", kind: "opened" }]);
+    await recordGraphEdges(appPool, bob, [{ source: "me", target: "atlassian:ENG-1", kind: "opened" }]);
+    await recordGraphEdges(appPool, bob, [
+      { source: "me", target: "atlassian:DOC-2", kind: "cited_up" },
+      { source: "me", target: "github:pr-3", kind: "cited_up" },
+      { source: "atlassian:DOC-2", target: "github:pr-3", kind: "co_cited" },
+      { source: "github:pr-3", target: "atlassian:DOC-2", kind: "co_cited" },
+    ]);
+    await recordGraphEdges(appPool, alice, [{ source: "me", target: "atlassian:ALICE-1", kind: "opened" }]);
+    await owner.query("UPDATE work_graph_edges SET last_seen_at = now() - interval '1 day' WHERE target_key = 'atlassian:ENG-1'");
+
+    const items = await listGraphItems(appPool, bob);
+    expect(items.map((i) => i.key)).toEqual(["atlassian:DOC-2", "github:pr-3", "atlassian:ENG-1"]);
+    expect(items[0]).toMatchObject({ opened: 0, helpful: 1, linkedItems: 1 });
+    expect(items[2]).toMatchObject({ opened: 2, helpful: 0, linkedItems: 0 });
+
+    // Forgetting an item removes every link to and from it, and only Bob's.
+    expect(await forgetGraphItem(appPool, bob, "github:pr-3")).toBe(3);
+    expect((await listGraphItems(appPool, bob)).map((i) => i.key)).toEqual(["atlassian:DOC-2", "atlassian:ENG-1"]);
+    expect(await graphLinksFor(appPool, bob, ["github:pr-3"])).toEqual([]);
+    expect(await forgetGraphItem(appPool, alice, "atlassian:ENG-1")).toBe(0);
+
+    expect(await clearGraph(appPool, bob)).toBe(2);
+    expect(await listGraphItems(appPool, bob)).toEqual([]);
+    expect(await listGraphItems(appPool, alice)).toHaveLength(1);
   });
 });

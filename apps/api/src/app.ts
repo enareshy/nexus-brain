@@ -26,6 +26,8 @@ import type { AuditApi } from "./admin/audit.service.js";
 import { PeopleController } from "./admin/people.controller.js";
 import type { PeopleApi } from "./admin/people.service.js";
 import { MemoryController } from "./memory/memory.controller.js";
+import { GraphController } from "./graph/graph.controller.js";
+import type { WorkGraphApi } from "./graph/graph.service.js";
 import type { MemoryApi } from "./memory/memory.service.js";
 import { DataController } from "./data/data.controller.js";
 import type { ExportApi } from "./data/export.service.js";
@@ -41,7 +43,7 @@ import { ProposalsController } from "./proposals/proposals.controller.js";
 import type { ProposalsApi } from "./proposals/proposals.service.js";
 import { AiSettingsController } from "./admin/ai-settings.controller.js";
 import type { AiSettingsApi } from "./admin/ai-settings.service.js";
-import { AGENTS, AI_SETTINGS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, EXPORTS, MEMORY, PEOPLE, RETENTION, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
+import { AGENTS, AI_SETTINGS, ANSWERS, AUDIT, CONNECTIONS, CONVERSATIONS, IDENTITY_VERIFIER, LOGGER, MCP, EXPORTS, MEMORY, WORK_GRAPH, PEOPLE, RETENTION, SKILLS, PROPOSALS, TRIGGERS, USAGE, USER_DIRECTORY, WEB_APP_URL } from "./tokens.js";
 
 const RATE_LIMIT_PER_MINUTE = 120;
 
@@ -63,6 +65,8 @@ export interface AppDeps {
   readonly people?: PeopleApi;
   /** Without this, there is no Memory page. */
   readonly memory?: MemoryApi;
+  /** Without this, people cannot see or clear their own work graph. */
+  readonly workGraph?: WorkGraphApi;
   /** Without this, there is no Skills page. */
   readonly skills?: SkillsApi;
   /** Without both, there are no retention settings or data export. */
@@ -85,6 +89,7 @@ class AppModule {
         ...(deps.triggers ? [TriggersController] : []),
         ...(deps.people ? [PeopleController] : []),
         ...(deps.memory ? [MemoryController] : []),
+        ...(deps.workGraph ? [GraphController] : []),
         ...(deps.skills ? [SkillsController] : []),
         ...(deps.data ? [DataController] : []),
         ...(deps.usage ? [UsageController] : []),
@@ -114,6 +119,7 @@ class AppModule {
         ...(deps.triggers ? [{ provide: TRIGGERS, useValue: deps.triggers }] : []),
         ...(deps.people ? [{ provide: PEOPLE, useValue: deps.people }] : []),
         ...(deps.memory ? [{ provide: MEMORY, useValue: deps.memory }] : []),
+        ...(deps.workGraph ? [{ provide: WORK_GRAPH, useValue: deps.workGraph }] : []),
         ...(deps.skills ? [{ provide: SKILLS, useValue: deps.skills }] : []),
         ...(deps.data
           ? [

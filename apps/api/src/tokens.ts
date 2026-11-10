@@ -13,6 +13,7 @@ export const MCP = Symbol("MCP");
 export const TRIGGERS = Symbol("TRIGGERS");
 export const PEOPLE = Symbol("PEOPLE");
 export const MEMORY = Symbol("MEMORY");
+export const WORK_GRAPH = Symbol("WORK_GRAPH");
 export const SKILLS = Symbol("SKILLS");
 export const RETENTION = Symbol("RETENTION");
 export const EXPORTS = Symbol("EXPORTS");

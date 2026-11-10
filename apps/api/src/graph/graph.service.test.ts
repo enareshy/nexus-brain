@@ -8,9 +8,13 @@ function setup(store: Partial<GraphStore> = {}) {
   const record = vi.fn<GraphStore["record"]>(async () => {});
   const links = vi.fn<GraphStore["links"]>(async () => []);
   const exportAll = vi.fn<GraphStore["exportAll"]>(async () => []);
+  const list = vi.fn<GraphStore["list"]>(async () => []);
+  const forget = vi.fn<GraphStore["forget"]>(async () => 3);
+  const clear = vi.fn<GraphStore["clear"]>(async () => 7);
+  const audit = vi.fn<GraphStore["audit"]>(async () => {});
   const onError = vi.fn();
-  const service = new GraphService({ store: { record, links, exportAll, ...store }, onError });
-  return { service, record, links, onError };
+  const service = new GraphService({ store: { record, links, exportAll, list, forget, clear, audit, ...store }, onError });
+  return { service, record, links, list, forget, clear, audit, onError };
 }
 
 describe("GraphService", () => {
@@ -91,5 +95,34 @@ describe("GraphService", () => {
       parts: [1, 2, 3].map((source) => ({ kind: "cite", source })),
     });
     expect(record.mock.calls[0]?.[1]).toEqual([{ source: "me", target: "atlassian:OK", kind: "cited_up" }]);
+  });
+});
+
+describe("GraphService, for the person's own page", () => {
+  it("lists items by service and the item's own id, which may itself contain a colon", async () => {
+    const { service, list } = setup();
+    list.mockResolvedValue([{ key: "atlassian:confluence:123", opened: 2, helpful: 1, linkedItems: 0, lastSeenAt: "2026-11-09T00:00:00.000Z" }]);
+    expect(await service.list(scope)).toEqual([
+      { serverId: "atlassian", itemId: "confluence:123", opened: 2, helpful: 1, linkedItems: 0, lastSeenAt: "2026-11-09T00:00:00.000Z" },
+    ]);
+  });
+
+  it("forgets one item or clears everything, auditing counts only", async () => {
+    const { service, forget, clear, audit } = setup();
+    expect(await service.forget(scope, { serverId: "atlassian", itemId: "ENG-1" })).toEqual({ forgotten: 3 });
+    expect(forget).toHaveBeenCalledWith(scope, "atlassian:ENG-1");
+    expect(await service.clear(scope)).toEqual({ deleted: 7 });
+    expect(clear).toHaveBeenCalledWith(scope);
+    expect(audit.mock.calls).toEqual([
+      [scope, "work_graph.item_forgotten", { links: 3 }],
+      [scope, "work_graph.cleared", { links: 7 }],
+    ]);
+    expect(JSON.stringify(audit.mock.calls)).not.toContain("ENG-1");
+  });
+
+  it("reports a missing audit row rather than undoing what was already removed", async () => {
+    const { service, onError } = setup({ audit: async () => { throw new Error("audit down"); } });
+    expect(await service.clear(scope)).toEqual({ deleted: 7 });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "audit down" }));
   });
 });

@@ -287,6 +287,17 @@ export const PersonSchema = z.object({
 });
 export type Person = z.infer<typeof PersonSchema>;
 
+/** One item in the person's own work graph (FR-RET-09). Ids only: titles are never stored. */
+export const GraphItemSchema = z.object({
+  serverId: z.string(),
+  itemId: z.string(),
+  opened: z.number(),
+  helpful: z.number(),
+  linkedItems: z.number(),
+  lastSeenAt: z.string(),
+});
+export type GraphItem = z.infer<typeof GraphItemSchema>;
+
 export const ErasureSchema = z.object({
   erased: z.boolean(),
   conversations: z.number(),
@@ -355,6 +366,9 @@ export interface ApiClient {
   updateMemory(id: string, text: string): Promise<Memory>;
   deleteMemory(id: string): Promise<{ deleted: true }>;
   deleteAllMemories(): Promise<{ deleted: number }>;
+  workGraph(): Promise<GraphItem[]>;
+  forgetGraphItem(item: { serverId: string; itemId: string }): Promise<{ forgotten: number }>;
+  clearWorkGraph(): Promise<{ deleted: number }>;
   skills(): Promise<Skill[]>;
   addSkill(skill: SkillInput): Promise<Skill>;
   updateSkill(id: string, skill: SkillInput): Promise<Skill>;
@@ -479,6 +493,10 @@ export function createApiClient(
     updateMemory: (id, text) => request(MemorySchema, `/memories/${enc(id)}`, { method: "POST", body: JSON.stringify({ text }) }),
     deleteMemory: (id) => request(z.object({ deleted: z.literal(true) }), `/memories/${enc(id)}`, { method: "DELETE" }),
     deleteAllMemories: () => request(z.object({ deleted: z.number() }), "/memories", { method: "DELETE" }),
+    workGraph: () => request(z.array(GraphItemSchema), "/me/work-graph"),
+    forgetGraphItem: ({ serverId, itemId }) =>
+      request(z.object({ forgotten: z.number() }), "/me/work-graph/forget", { method: "POST", body: JSON.stringify({ serverId, itemId }) }),
+    clearWorkGraph: () => request(z.object({ deleted: z.number() }), "/me/work-graph", { method: "DELETE" }),
     skills: () => request(z.array(SkillSchema), "/skills"),
     addSkill: (skill) => request(SkillSchema, "/skills", { method: "POST", body: JSON.stringify(skill) }),
     updateSkill: (id, skill) => request(SkillSchema, `/skills/${enc(id)}`, { method: "POST", body: JSON.stringify(skill) }),

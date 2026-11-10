@@ -232,6 +232,7 @@ const app = await createApp({
   triggers,
   people: createPeopleService({ pool, logger, connections }),
   memory,
+  workGraph: graph,
   skills,
   data: { retention, exports },
   usage,

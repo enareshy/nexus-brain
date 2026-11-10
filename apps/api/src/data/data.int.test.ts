@@ -18,6 +18,7 @@ import { unusedAudit, unusedConversations, unusedProposals } from "../test-suppo
 import { AUDIENCE, createTestKeys, ISSUER, type TestKeys } from "../test-support/tokens.js";
 import { createPgRateLimiter } from "../common/rate-limiter.js";
 import { ExportService, type ExportSources } from "./export.service.js";
+import { createGraphStore, GraphService } from "../graph/graph.service.js";
 import { RetentionService } from "./retention.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
@@ -88,6 +89,7 @@ beforeAll(async () => {
     agents: { list: async () => [] } as never,
     answers: { answer: async () => {} },
     memory,
+    workGraph: new GraphService({ store: createGraphStore(pool), onError: () => {} }),
     skills,
     data: { retention: new RetentionService({ pool, logger }), exports },
   });
@@ -155,6 +157,36 @@ describe("exporting your own data (FR-ADM-03)", () => {
     });
     await expect(failing.exportFor(scopeOf("bob"))).rejects.toThrow();
     await expect(secondServer.exports.exportFor(scopeOf("bob"))).resolves.toMatchObject({ truncated: false });
+  });
+});
+
+describe("seeing and clearing your own work graph (FR-RET-09)", () => {
+  it("shows a person only their own items, and lets them forget one or clear the rest", async () => {
+    const bob = await as("bob");
+    const alice = await as("alice");
+    await owner.query("DELETE FROM work_graph_edges WHERE user_id = ANY($1)", [people()]);
+    await recordGraphEdges(pool, scopeOf("bob"), [{ source: "me", target: "atlassian:ENG-7", kind: "opened" }]);
+    await recordGraphEdges(pool, scopeOf("bob"), [{ source: "me", target: "github:pr-2", kind: "cited_up" }]);
+    await recordGraphEdges(pool, scopeOf("alice"), [{ source: "me", target: "atlassian:ALICE-1", kind: "opened" }]);
+
+    const listed = (await bob("GET", "/me/work-graph")).json().data;
+    expect(listed.map((item: { serverId: string; itemId: string }) => `${item.serverId}/${item.itemId}`).sort()).toEqual(["atlassian/ENG-7", "github/pr-2"]);
+    expect(JSON.stringify(listed)).not.toContain("ALICE");
+
+    expect((await bob("POST", "/me/work-graph/forget", { serverId: "atlassian", itemId: "ENG-7" })).json().data).toEqual({ forgotten: 1 });
+    // Bob cannot reach Alice's items, and odd input is refused.
+    expect((await bob("POST", "/me/work-graph/forget", { serverId: "atlassian", itemId: "ALICE-1" })).json().data).toEqual({ forgotten: 0 });
+    for (const bad of [{ serverId: "Atlassian", itemId: "X" }, { serverId: "atlassian", itemId: "a\nb" }, { serverId: "atlassian" }, { serverId: "atlassian", itemId: "X", extra: 1 }]) {
+      expect((await bob("POST", "/me/work-graph/forget", bad)).statusCode).toBe(400);
+    }
+
+    expect((await bob("DELETE", "/me/work-graph")).json().data).toEqual({ deleted: 1 });
+    expect((await bob("GET", "/me/work-graph")).json().data).toEqual([]);
+    expect((await alice("GET", "/me/work-graph")).json().data).toHaveLength(1);
+
+    const audit = await owner.query("SELECT action, meta::text AS meta FROM audit_log WHERE user_id = $1 AND action LIKE 'work_graph.%' ORDER BY id DESC LIMIT 2", [seedUser("bob").id]);
+    expect(audit.rows.map((r) => r.action).sort()).toEqual(["work_graph.cleared", "work_graph.item_forgotten"]);
+    expect(audit.rows.map((r) => r.meta).join(" ")).not.toMatch(/ENG-7|pr-2/);
   });
 });
 

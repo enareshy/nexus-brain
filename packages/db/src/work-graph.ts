@@ -99,3 +99,61 @@ export function exportGraph(pool: PoolLike, scope: UserScope): Promise<Array<Gra
     }));
   });
 }
+
+/** One item in the person's graph, as they see it on the Memory page. */
+export interface GraphItem {
+  /** `<service>:<item id>`, as stored. */
+  readonly key: string;
+  /** Times they opened it, and times it was a source of an answer they rated up. */
+  readonly opened: number;
+  readonly helpful: number;
+  /** Other items it was cited alongside. */
+  readonly linkedItems: number;
+  readonly lastSeenAt: string;
+}
+
+/** Items shown at most; the person's whole graph is in their data export. */
+const MAX_LISTED_ITEMS = 200;
+
+/** The items the person is linked to, most recent first. */
+export function listGraphItems(pool: PoolLike, scope: UserScope): Promise<GraphItem[]> {
+  return withUser(pool, scope, async (db) => {
+    const { rows } = await db.execute(sql`
+      SELECT d.target_key AS key,
+             COALESCE(max(d.weight) FILTER (WHERE d.kind = 'opened'), 0) AS opened,
+             COALESCE(max(d.weight) FILTER (WHERE d.kind = 'cited_up'), 0) AS helpful,
+             (SELECT count(*) FROM work_graph_edges c WHERE c.kind = 'co_cited' AND c.source_key = d.target_key) AS linked,
+             max(d.last_seen_at) AS last_seen_at
+        FROM work_graph_edges d
+       WHERE d.source_key = 'me'
+       GROUP BY d.target_key
+       ORDER BY max(d.last_seen_at) DESC, d.target_key
+       LIMIT ${MAX_LISTED_ITEMS}`);
+    return (rows as Array<{ key: string; opened: number; helpful: number; linked: number | string; last_seen_at: Date | string }>).map((row) => ({
+      key: row.key,
+      opened: Number(row.opened),
+      helpful: Number(row.helpful),
+      linkedItems: Number(row.linked),
+      lastSeenAt: new Date(row.last_seen_at).toISOString(),
+    }));
+  });
+}
+
+/** Forgets one item: every link to or from it. Returns how many links went. */
+export function forgetGraphItem(pool: PoolLike, scope: UserScope, key: string): Promise<number> {
+  return withUser(pool, scope, async (db) => {
+    const result = await db.execute(sql`
+      DELETE FROM work_graph_edges
+       WHERE tenant_id = ${scope.tenantId} AND user_id = ${scope.userId}
+         AND (source_key = ${key} OR target_key = ${key})`);
+    return result.rowCount ?? 0;
+  });
+}
+
+/** Clears the person's whole graph. Returns how many links went. */
+export function clearGraph(pool: PoolLike, scope: UserScope): Promise<number> {
+  return withUser(pool, scope, async (db) => {
+    const result = await db.execute(sql`DELETE FROM work_graph_edges WHERE tenant_id = ${scope.tenantId} AND user_id = ${scope.userId}`);
+    return result.rowCount ?? 0;
+  });
+}
