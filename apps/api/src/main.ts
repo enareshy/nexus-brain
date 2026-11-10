@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { AppError, createSecretBox } from "@brain/core";
+import { AppError, createSecretBox, isAppError } from "@brain/core";
 import {
   atlassianAssignedIssues,
   atlassianMentionRequests,
@@ -37,6 +37,8 @@ import { TriggersService } from "./agents/triggers.service.js";
 import { createPgRateLimiter } from "./common/rate-limiter.js";
 import { createGraphStore, GraphService } from "./graph/graph.service.js";
 import { createRankerStore, RankerService } from "./ranking/ranker.service.js";
+import { appTrainingStore } from "./ranking/train.js";
+import { RankerTrainer } from "./ranking/trainer.service.js";
 import { AnswersService } from "./answers/answers.service.js";
 import { QueryRewriter } from "./answers/query-rewriter.js";
 import { ConnectionsService } from "./connections/connections.service.js";
@@ -209,6 +211,19 @@ const triggers = new TriggersService({
 });
 
 const retention = new RetentionService({ pool, logger });
+// Retrains each company's ranker once a day, through the app's scoped functions; one server at a time.
+const rankerTrainer = new RankerTrainer({
+  store: appTrainingStore(pool),
+  logger,
+  exclusive: async (work) => {
+    try {
+      return await withSharedLock(lockPool, "ranker-training", 1, work);
+    } catch (err) {
+      if (isAppError(err) && (err.details?.reason === "lock_wait" || err.details?.reason === "lock_pool")) return null;
+      throw err;
+    }
+  },
+});
 const exports = new ExportService({
   limiter,
   pool,
@@ -262,6 +277,7 @@ const app = await createApp({
 app.getHttpAdapter().getInstance().addHook("onClose", async () => {
   triggers.stop();
   retention.stop();
+  rankerTrainer.stop();
   connections.close();
   await pool.end();
   await lockPool.end();
@@ -271,6 +287,7 @@ app.getHttpAdapter().getInstance().addHook("onClose", async () => {
 await app.listen({ host: env.API_HOST, port: env.API_PORT });
 triggers.start();
 retention.start();
+rankerTrainer.start();
 logger.info(
   { host: env.API_HOST, port: env.API_PORT, mcpServers: enabled.map((e) => e.def.id), tracing: tracing.enabled },
   "API listening",

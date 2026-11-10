@@ -93,3 +93,42 @@ export async function saveTenantRanker(client: pg.ClientBase, tenantId: string, 
     [tenantId, model === null ? null : JSON.stringify(model), JSON.stringify(metrics)],
   );
 }
+
+// Training by the app itself, on a timer (migration 0028). These use the app's own pool and reach
+// ratings only through functions that work on one company at a time.
+
+/** Ratings handed to one training run at most; a company with more learns from the most recently saved. */
+export const MAX_TRAINING_EXAMPLES = 100_000;
+
+/** Companies with ratings to learn from (ids only). */
+export async function companiesToTrain(pool: PoolLike): Promise<string[]> {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<{ tenant_id: string }>("SELECT tenant_id FROM app_companies_with_ranking_examples()");
+    return rows.map((row) => row.tenant_id);
+  } finally {
+    client.release();
+  }
+}
+
+/** One company's recent ratings, deleting any past the limit first. */
+export function trainingExamples(pool: PoolLike, tenantId: string, maxRows: number = MAX_TRAINING_EXAMPLES): Promise<StoredRankingExample[]> {
+  return withTenant(pool, tenantId, async (db) => {
+    const { rows } = await db.execute(sql`SELECT * FROM app_ranking_examples_for_training(${maxRows})`);
+    return (rows as Array<{ answer_group: string; server_id: string; position: number; score_ratio: number; age_days: number | null; label: number }>).map((row) => ({
+      group: row.answer_group,
+      serverId: row.server_id,
+      position: Number(row.position),
+      scoreRatio: Number(row.score_ratio),
+      ageDays: row.age_days === null ? null : Number(row.age_days),
+      label: Number(row.label) === 1 ? 1 : 0,
+    }));
+  });
+}
+
+/** Saves one company's training result; a null model keeps today's order. */
+export async function saveTrainedRanker(pool: PoolLike, tenantId: string, model: unknown, metrics: unknown): Promise<void> {
+  await withTenant(pool, tenantId, (db) =>
+    db.execute(sql`SELECT app_save_tenant_ranker(${model === null ? null : JSON.stringify(model)}::jsonb, ${JSON.stringify(metrics)}::jsonb)`),
+  );
+}

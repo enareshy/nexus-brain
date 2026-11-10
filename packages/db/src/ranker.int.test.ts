@@ -6,12 +6,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MIGRATIONS_DIR } from "./config.js";
 import { applyMigrations, loadMigrations } from "./migrator.js";
 import {
+  companiesToTrain,
   companiesWithRankingExamples,
   getTenantRanker,
   loadRankingExamples,
   purgeOldRankingExamples,
   recordRankingExamples,
   saveTenantRanker,
+  saveTrainedRanker,
+  trainingExamples,
   type StoredRankingExample,
 } from "./ranker.js";
 import { seed } from "./seed.js";
@@ -115,5 +118,86 @@ describe("a company's trained ranker", () => {
     await expect(
       withTenant(appPool, ACME, (db) => db.execute("UPDATE tenant_rankers SET model = NULL")),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("training by the app itself (migration 0028)", () => {
+  it("hands the app one company's ratings at a time, and nothing without a company", async () => {
+    const acme = randomUUID();
+    const globex = randomUUID();
+    await recordRankingExamples(appPool, ACME, [example({ group: acme }), example({ group: acme, position: 1, label: 0 })]);
+    await recordRankingExamples(appPool, GLOBEX, [example({ group: globex, serverId: "github" })]);
+
+    expect((await companiesToTrain(appPool)).sort()).toEqual([ACME, GLOBEX].sort());
+    expect((await trainingExamples(appPool, ACME)).map((r) => r.group)).toEqual([acme, acme]);
+    expect((await trainingExamples(appPool, GLOBEX)).map((r) => r.serverId)).toEqual(["github"]);
+    // With no company set the function returns nothing, and the table itself stays closed to the app.
+    const client = await appPool.connect();
+    try {
+      expect((await client.query("SELECT * FROM app_ranking_examples_for_training(10)")).rows).toEqual([]);
+      await expect(client.query("SELECT label FROM ranking_examples")).rejects.toThrow(/permission denied/);
+    } finally {
+      client.release();
+    }
+  });
+
+  it("keeps the data keeper's reach to one company outside listing", async () => {
+    await recordRankingExamples(appPool, ACME, [example()]);
+    await recordRankingExamples(appPool, GLOBEX, [example({ serverId: "github" })]);
+    // As the data keeper, with Acme in scope: Globex's rows are neither seen nor deletable.
+    await owner.query("BEGIN");
+    try {
+      await owner.query("SET LOCAL ROLE brain_data_keeper");
+      await owner.query("SELECT set_config('app.tenant_id', $1, true)", [ACME]);
+      const seen = await owner.query("SELECT DISTINCT tenant_id FROM ranking_examples");
+      expect(seen.rows.map((r) => r.tenant_id)).toEqual([ACME]);
+      expect((await owner.query("DELETE FROM ranking_examples WHERE tenant_id = $1", [GLOBEX])).rowCount).toBe(0);
+    } finally {
+      await owner.query("ROLLBACK");
+    }
+    // Listing leaves nothing switched on afterwards in the same transaction.
+    const client = await appPool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT * FROM app_companies_with_ranking_examples()");
+      expect((await client.query("SELECT current_setting('app.ranking_listing', true) AS v")).rows[0].v).toBe("");
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+  });
+
+  it("hands over the most recently saved ratings when a company has more than the limit", async () => {
+    const old = randomUUID();
+    const recent = randomUUID();
+    await recordRankingExamples(appPool, ACME, [example({ group: old })]);
+    await recordRankingExamples(appPool, ACME, [example({ group: recent })]);
+    await owner.query("UPDATE ranking_examples SET saved_on = current_date - 10 WHERE answer_group = $1", [old]);
+    expect((await trainingExamples(appPool, ACME, 1)).map((r) => r.group)).toEqual([recent]);
+  });
+
+  it("deletes ratings past 180 days before training on them", async () => {
+    const old = randomUUID();
+    await recordRankingExamples(appPool, ACME, [example({ group: old })]);
+    await recordRankingExamples(appPool, ACME, [example()]);
+    await owner.query("UPDATE ranking_examples SET saved_on = current_date - 181 WHERE answer_group = $1", [old]);
+    expect(await trainingExamples(appPool, ACME)).toHaveLength(1);
+    expect((await owner.query("SELECT count(*)::int AS n FROM ranking_examples")).rows[0].n).toBe(1);
+  });
+
+  it("saves a result for the company in scope only, and refuses one too large to be a model", async () => {
+    const model = { version: 1, bias: 0, weights: { position: 1, score: 0, recency: 0, undated: 0 }, sources: {} };
+    await saveTrainedRanker(appPool, ACME, model, { active: true });
+    expect((await getTenantRanker(appPool, ACME))?.model).toEqual(model);
+    expect(await getTenantRanker(appPool, GLOBEX)).toBeNull();
+    await saveTrainedRanker(appPool, ACME, null, { active: false });
+    expect((await getTenantRanker(appPool, ACME))?.model).toBeNull();
+    await expect(saveTrainedRanker(appPool, ACME, { padding: "x".repeat(20_000) }, {})).rejects.toThrow(/too large/);
+    const client = await appPool.connect();
+    try {
+      await expect(client.query("SELECT app_save_tenant_ranker(NULL, '{}'::jsonb)")).rejects.toThrow(/no company/);
+    } finally {
+      client.release();
+    }
   });
 });

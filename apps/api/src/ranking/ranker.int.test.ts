@@ -5,10 +5,11 @@ import { applyMigrations, createAppPool, getTenantRanker, loadMigrations, MIGRAT
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import { createHash, randomBytes } from "node:crypto";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ConversationsService } from "../conversations/conversations.service.js";
 import { createRankerStore, RankerService } from "./ranker.service.js";
-import { trainCompanyRankers } from "./train.js";
+import { appTrainingStore } from "./train.js";
+import { RankerTrainer } from "./trainer.service.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
@@ -87,7 +88,10 @@ describe("a company's learned ranker", () => {
     const before = (await ranker.rank(bob, resultsWithGithubAt(4))).map((h) => h.serverId);
     expect(before.indexOf("github")).toBe(4);
 
-    const trained = await trainCompanyRankers(owner);
+    // The daily job, on the app's own role, through its scoped functions.
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const trained = await new RankerTrainer({ store: appTrainingStore(pool), logger }).trainAll();
+    expect(logger.error).not.toHaveBeenCalled();
     expect(trained).toEqual([{ tenantId: bob.tenantId, metrics: expect.objectContaining({ active: true, examples: 1250 }) }]);
 
     // A server that has not cached the old (empty) model.
