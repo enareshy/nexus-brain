@@ -33,6 +33,7 @@ pnpm dev               # api + web + worker
 pnpm typecheck | lint | test | test:cov
 pnpm test:int          # integration tests (needs infra:up); use their own `brain_test` database, never the dev one
 pnpm test:leak         # red-team permission leak suite (must be 0 failures); today = Postgres RLS suite
+pnpm test:e2e          # Playwright browser flows on brain_test (needs infra:up, ports 3000/3001 free, no paid calls)
 node scripts/smoke-login.mjs   # end-to-end: Keycloak login -> API /me (needs infra + db:seed + dev)
 pnpm eval              # retrieval + answer quality vs golden set
 pnpm secrets:scan
