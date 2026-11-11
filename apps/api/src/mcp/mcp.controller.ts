@@ -8,7 +8,7 @@ import { bearerToken, Public } from "../auth/auth.guard.js";
 import type { IdentityVerifier } from "../auth/jwt-verifier.js";
 import type { UserDirectory } from "../auth/user-directory.js";
 import { MCP, USER_DIRECTORY } from "../tokens.js";
-import { MCP_TOOLS, type McpCaller, type McpToolsApi } from "./mcp.service.js";
+import type { McpCaller, McpToolsApi } from "./mcp.service.js";
 
 export interface McpEndpointDeps {
   /** Accepts only tokens issued for this endpoint, not ones for the web app (FR-MCP-03). */
@@ -34,7 +34,7 @@ function isNestedTooDeeply(body: unknown): boolean {
 
 function buildServer(caller: McpCaller, tools: McpToolsApi): Server {
   const server = new Server({ name: "nexus-brain", version: "1.0.0" }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...MCP_TOOLS] }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...(await tools.list(caller))] }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const result = await tools.call(caller, request.params.name, request.params.arguments ?? {});
     return { content: [{ type: "text" as const, text: result.text }], isError: result.isError };

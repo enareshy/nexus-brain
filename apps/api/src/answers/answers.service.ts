@@ -1,6 +1,6 @@
 import type { RankedHit, SourceStatus } from "@brain/connectors";
 import { AppError, isAppError, type SecretBox } from "@brain/core";
-import { appendAudit, appendUsage, type PoolLike, type UserScope } from "@brain/db";
+import { appendAudit, appendUsage, effectiveModel, getAiPreferences, type PoolLike, type UserScope } from "@brain/db";
 import { isProviderOutage, type AnswerDocument, type AnswerOutcome, type LlmGateway, type ModelChoice, type UsageReport } from "@brain/llm-gateway";
 import type { Logger } from "@brain/telemetry";
 import type { AiSettingsSource } from "../admin/ai-settings.service.js";
@@ -106,10 +106,12 @@ export class AnswersService implements AnswersApi {
     this.limiter = deps.limiter ?? createMemoryRateLimiter(deps.now);
   }
 
-  /** Read for every answer, so an admin's change applies to the next one. */
+  /** Read for every answer, so a change applies to the next one: the person's own model if allowed, else the company's. */
   private async modelChoice(scope: UserScope): Promise<{ modelChoice?: ModelChoice }> {
     const settings = await this.deps.aiSettings?.get(scope.tenantId);
-    return settings ? { modelChoice: settings.modelChoice } : {};
+    if (!settings) return {};
+    const personal = settings.peopleChooseModel ? (await getAiPreferences(this.deps.pool, scope)).modelChoice : null;
+    return { modelChoice: effectiveModel(settings, personal) };
   }
 
   async answer(

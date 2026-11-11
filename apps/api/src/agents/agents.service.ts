@@ -1,7 +1,9 @@
 import { argsHash } from "@brain/connectors";
 import { AppError, isAppError, type SecretBox } from "@brain/core";
 import {
+  effectiveModel,
   getAgentMode,
+  getAiPreferences,
   setAgentMode,
   type AgentMode,
   addAgentStep,
@@ -493,10 +495,13 @@ export class AgentsService implements AgentsApi {
     runId: string,
   ): Promise<{ readonly choice: { modelChoice?: ModelChoice }; readonly changes: boolean } | "agents_off" | "settings_unavailable"> {
     try {
-      const [settings, mode] = await Promise.all([this.deps.aiSettings?.get(scope.tenantId), getAgentMode(this.deps.pool, scope)]);
-      if (!settings) return { choice: {}, changes: mode === "ask" };
+      const [settings, preferences] = await Promise.all([this.deps.aiSettings?.get(scope.tenantId), getAiPreferences(this.deps.pool, scope)]);
+      if (!settings) return { choice: {}, changes: preferences.mode === "ask" };
       if (!settings.agentsEnabled) return "agents_off";
-      return { choice: { modelChoice: settings.modelChoice }, changes: settings.agentChangesAllowed && mode === "ask" };
+      return {
+        choice: { modelChoice: effectiveModel(settings, preferences.modelChoice) },
+        changes: settings.agentChangesAllowed && preferences.mode === "ask",
+      };
     } catch (err) {
       this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, runId, tenant_id: scope.tenantId }, "AI settings check failed");
       return "settings_unavailable";

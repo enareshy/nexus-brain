@@ -21,7 +21,9 @@ const RUNS_PER_DAY = Array.from({ length: MAX_AUTOMATIC_RUNS_PER_DAY }, (_, i) =
 export function describeAiSettings(settings: AiSettings): readonly string[] {
   const model = MODELS.find((m) => m.value === settings.modelChoice)?.label ?? settings.modelChoice;
   return [
-    `Answers and agents use the ${model.toLowerCase()} model.`,
+    settings.peopleChooseModel
+      ? `Answers and agents use the ${model.toLowerCase()} model, unless people choose their own.`
+      : `Answers and agents use the ${model.toLowerCase()} model.`,
     settings.agentsEnabled ? "Agents are on." : "Agents are turned off.",
     !settings.agentsEnabled
       ? "Automatic agents do not run while agents are off."
@@ -77,6 +79,18 @@ export function AiSettingsForm({ settings, canChange, isSaving, onSave }: Props)
             </label>
           ))}
         </div>
+        <label className="mt-3 flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.peopleChooseModel}
+            onChange={(e) => setDraft({ ...draft, peopleChooseModel: e.target.checked })}
+            className={CHECKBOX}
+          />
+          <span>
+            People can choose their own model
+            <span className="block text-slate-500 dark:text-slate-400">The one above stays the default for everyone who does not.</span>
+          </span>
+        </label>
       </fieldset>
 
       <fieldset className="space-y-3">

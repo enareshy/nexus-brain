@@ -152,6 +152,26 @@ describe("the model", () => {
     expect(streamAnswer.mock.calls.map(([input]) => input.modelChoice)).toEqual(["premium", "standard"]);
   });
 
+  it("answers with a person's own model only while the company lets people choose (FR-LLM-07)", async () => {
+    const member = await as("bob");
+    try {
+      expect((await member("POST", "/me/model", { modelChoice: "standard" })).statusCode).toBe(403);
+      await change({ peopleChooseModel: true });
+      expect((await member("GET", "/me/model")).json().data).toEqual({ modelChoice: null, companyModel: "premium", peopleCanChoose: true, inUse: "premium" });
+      expect((await member("POST", "/me/model", { modelChoice: "standard" })).json().data).toMatchObject({ modelChoice: "standard", inUse: "standard" });
+      await member("POST", "/answers", { q: "anything" });
+      // Colleagues keep the company's model.
+      await (await as("patAcme"))("POST", "/answers", { q: "anything" });
+      await change({ peopleChooseModel: false });
+      await member("POST", "/answers", { q: "anything" });
+      expect(streamAnswer.mock.calls.map(([input]) => input.modelChoice)).toEqual(["standard", "premium", "premium"]);
+      // Going back to the company's model is always allowed.
+      expect((await member("POST", "/me/model", { modelChoice: null })).json().data.modelChoice).toBeNull();
+    } finally {
+      await owner.query("DELETE FROM agent_preferences");
+    }
+  });
+
   it("runs agents on the company's chosen model, read again for every step", async () => {
     agentTurn.mockImplementationOnce(async () => {
       await change({ modelChoice: "standard" });

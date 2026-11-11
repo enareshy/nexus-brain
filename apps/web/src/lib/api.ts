@@ -258,8 +258,19 @@ export const AiSettingsSchema = z.object({
   automaticAgentsEnabled: z.boolean(),
   automaticRunsPerDay: z.number().int().min(1).max(MAX_AUTOMATIC_RUNS_PER_DAY),
   agentChangesAllowed: z.boolean(),
+  peopleChooseModel: z.boolean(),
 });
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
+export type ModelChoice = AiSettings["modelChoice"];
+
+const ModelChoiceSchema = z.enum(["premium", "standard"]);
+export const PersonalModelViewSchema = z.object({
+  modelChoice: ModelChoiceSchema.nullable(),
+  companyModel: ModelChoiceSchema,
+  peopleCanChoose: z.boolean(),
+  inUse: ModelChoiceSchema,
+});
+export type PersonalModelView = z.infer<typeof PersonalModelViewSchema>;
 
 export const AgentModeViewSchema = z.object({ mode: z.enum(["ask", "read_only"]), companyAllowsChanges: z.boolean() });
 export type AgentModeView = z.infer<typeof AgentModeViewSchema>;
@@ -427,6 +438,8 @@ export interface ApiClient {
   /** With a skill, the run follows its instructions and uses only its tools. Pass the skill as it was shown. */
   startAgentRun(goal: string, skill?: Pick<Skill, "id" | "updatedAt">): Promise<AgentRunSummary>;
   agentMode(): Promise<AgentModeView>;
+  personalModel(): Promise<PersonalModelView>;
+  setPersonalModel(modelChoice: ModelChoice | null): Promise<PersonalModelView>;
   setAgentMode(mode: AgentMode): Promise<AgentModeView>;
   cancelAgentRun(id: string): Promise<{ cancelled: true }>;
   proposal(id: string): Promise<Proposal>;
@@ -564,6 +577,9 @@ export function createApiClient(
     agentRuns: () => request(z.array(AgentRunSummarySchema), "/agent-runs"),
     agentRun: (id) => request(AgentRunSchema, `/agent-runs/${enc(id)}`),
     agentMode: () => request(AgentModeViewSchema, "/agent-runs/mode"),
+    personalModel: () => request(PersonalModelViewSchema, "/me/model"),
+    setPersonalModel: (modelChoice) =>
+      request(PersonalModelViewSchema, "/me/model", { method: "POST", body: JSON.stringify({ modelChoice }) }),
     setAgentMode: (mode) => request(AgentModeViewSchema, "/agent-runs/mode", { method: "POST", body: JSON.stringify({ mode }) }),
     startAgentRun: (goal, skill) =>
       request(AgentRunSummarySchema, "/agent-runs", {

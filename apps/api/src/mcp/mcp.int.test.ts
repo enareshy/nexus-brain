@@ -1,7 +1,7 @@
 // Brain's own MCP server: a real MCP client -> the API -> Postgres RLS, proposals and audit (FR-MCP-01, FR-MCP-03).
 import { createSecretBox } from "@brain/core";
 import type { SearchHit, WriteAdapter } from "@brain/connectors";
-import { applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
+import { applyMigrations, createAppPool, DEFAULT_AI_SETTINGS, loadMigrations, MIGRATIONS_DIR, seed, setAgentMode } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import { createRegistry } from "@brain/mcp-client";
 import { simulateConsent, startMockMcpServer, type MockMcpServer } from "@brain/mcp-client/testing";
@@ -33,6 +33,7 @@ const documents: SearchHit[] = [
   { serverId: SERVER, externalId: "D-1", siteId: "site", title: "Runbook", url: `${ORIGIN}/wiki/1`, snippet: "Rotate keys.", updatedAt: null },
 ];
 
+let companyAllowsChanges = true;
 let app: NestFastifyApplication;
 let pool: pg.Pool;
 let owner: pg.Client;
@@ -127,7 +128,14 @@ beforeAll(async () => {
     answers: { answer: async () => {} },
     mcp: {
       verifier: verifierFor(MCP_AUDIENCE),
-      tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: "http://localhost:3000" }),
+      tools: new McpToolsService({
+        pool,
+        connections,
+        proposals,
+        logger,
+        webAppUrl: "http://localhost:3000",
+        aiSettings: { get: async () => ({ ...DEFAULT_AI_SETTINGS, agentChangesAllowed: companyAllowsChanges }) },
+      }),
       resourceUrl: "http://127.0.0.1:3001/mcp",
       issuer: ISSUER,
     },
@@ -152,6 +160,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await owner.query("DELETE FROM write_proposals WHERE user_id = $1", [seedUser("bob").id]);
+  await owner.query("DELETE FROM agent_preferences");
+  companyAllowsChanges = true;
 });
 
 afterAll(async () => {
@@ -285,6 +295,39 @@ describe("tools", () => {
     ];
     for (const attempt of attempts) expect((await client.callTool(attempt) as ToolResult).isError).toBe(true);
     expect(mock.calledTools.slice(callsBefore)).toEqual([]);
+    await client.close();
+  });
+});
+
+describe("read only (FR-AGT-04)", () => {
+  const bobScope = () => ({ tenantId: TENANTS.acme.id, userId: seedUser("bob").id });
+  const proposals = async () => (await owner.query("SELECT count(*)::int AS n FROM write_proposals WHERE user_id = $1", [seedUser("bob").id])).rows[0].n;
+
+  it("offers no proposals, and refuses one, once the person makes their agents read only", async () => {
+    const client = await connect("bob");
+    expect((await client.listTools()).tools.some((t) => t.name.startsWith("propose_"))).toBe(true);
+    await setAgentMode(pool, bobScope(), "read_only");
+    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["get_item", "get_proposal", "list_jira_projects", "search_documents"]);
+    // A client holding the list from before is refused too, as for a tool that does not exist.
+    const result = await client.callTool({ name: "propose_jira_issue", arguments: propose });
+    expect((result as ToolResult).isError).toBe(true);
+    expect(textOf(result)).toBe("There is no such tool.");
+    // Bad input gets the same answer, so nothing shows the tool is there.
+    expect(textOf(await client.callTool({ name: "propose_jira_issue", arguments: { bad: true } }))).toBe("There is no such tool.");
+    expect(await proposals()).toBe(0);
+    // Alice's tools are unchanged.
+    const alice = await connect("alice");
+    expect((await alice.listTools()).tools.some((t) => t.name.startsWith("propose_"))).toBe(true);
+    await client.close();
+    await alice.close();
+  });
+
+  it("offers no proposals to anyone in the company once an admin turns them off", async () => {
+    const client = await connect("bob");
+    companyAllowsChanges = false;
+    expect((await client.listTools()).tools.some((t) => t.name.startsWith("propose_"))).toBe(false);
+    expect((await client.callTool({ name: "propose_jira_comment", arguments: { siteId: "site", issueKey: "ENG-1", body: "x" } }) as ToolResult).isError).toBe(true);
+    expect(await proposals()).toBe(0);
     await client.close();
   });
 });

@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { getAgentMode, setAgentMode } from "./agent-preferences.js";
+import { getAgentMode, getAiPreferences, setAgentMode, setModelPreference } from "./agent-preferences.js";
 import { MIGRATIONS_DIR } from "./config.js";
 import { applyMigrations, loadMigrations } from "./migrator.js";
 import { seed } from "./seed.js";
@@ -27,12 +27,12 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await owner.query("DELETE FROM agent_preferences");
-  await owner.query("DELETE FROM audit_log WHERE action = 'agent.mode_changed'");
+  await owner.query("DELETE FROM audit_log WHERE action IN ('agent.mode_changed', 'ai.model_preference_changed')");
 });
 
 afterAll(async () => {
   await owner?.query("DELETE FROM agent_preferences");
-  await owner?.query("DELETE FROM audit_log WHERE action = 'agent.mode_changed'");
+  await owner?.query("DELETE FROM audit_log WHERE action IN ('agent.mode_changed', 'ai.model_preference_changed')");
   await owner?.end();
   await appPool?.end();
 });
@@ -62,6 +62,21 @@ describe("a person's agent mode", () => {
       withUser(appPool, alice, (db) => db.execute(sql`INSERT INTO agent_preferences (tenant_id, user_id, read_only) VALUES (${bob.tenantId}, ${bob.userId}, false)`)),
     ).rejects.toThrow();
     expect(await getAgentMode(appPool, bob)).toBe("read_only");
+  });
+
+  it("keeps a person's own model choice apart from their agent mode, and audits it", async () => {
+    expect(await getAiPreferences(appPool, bob)).toEqual({ mode: "ask", modelChoice: null });
+    await setModelPreference(appPool, bob, "standard");
+    await setAgentMode(appPool, bob, "read_only");
+    expect(await getAiPreferences(appPool, bob)).toEqual({ mode: "read_only", modelChoice: "standard" });
+    await setModelPreference(appPool, bob, null);
+    expect(await getAiPreferences(appPool, bob)).toEqual({ mode: "read_only", modelChoice: null });
+    expect(await getAiPreferences(appPool, alice)).toEqual({ mode: "ask", modelChoice: null });
+    const { rows } = await owner.query("SELECT meta FROM audit_log WHERE action = 'ai.model_preference_changed' ORDER BY created_at");
+    expect(rows).toEqual([{ meta: { modelChoice: "standard" } }, { meta: { modelChoice: null } }]);
+    await expect(
+      withUser(appPool, bob, (db) => db.execute(sql`UPDATE agent_preferences SET model_choice = 'huge'`)),
+    ).rejects.toThrow();
   });
 
   it("cannot be set by someone turned off", async () => {

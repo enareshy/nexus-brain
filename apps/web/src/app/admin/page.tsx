@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AiSettingsForm } from "@/components/AiSettingsForm";
+import { PersonalModelSetting } from "@/components/PersonalModelSetting";
 import { RankerStatusPanel } from "@/components/RankerStatusPanel";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
-import { describeError, type AiSettings, type RankerStatus } from "@/lib/api";
+import { describeError, type AiSettings, type ModelChoice, type RankerStatus } from "@/lib/api";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
 
@@ -28,6 +29,8 @@ function AdminPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [ranker, setRanker] = useState<RankerStatus | null>(null);
   const [rankerError, setRankerError] = useState<string | null>(null);
+  const loadPersonalModel = useCallback(() => api.personalModel(), [api]);
+  const savePersonalModel = useCallback((choice: ModelChoice | null) => api.setPersonalModel(choice), [api]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -97,6 +100,16 @@ function AdminPage() {
           <AiSettingsForm key={JSON.stringify(settings)} settings={settings} canChange={isAdmin} isSaving={isSaving} onSave={(next) => void handleSave(next)} />
         )}
       </section>
+
+      {settings && (
+        <section aria-labelledby="model-heading" className="mt-10">
+          <h2 id="model-heading" className="text-xl font-bold tracking-tight">
+            Your model
+          </h2>
+          {/* Loaded again when the company's settings change, as they decide what can be chosen. */}
+          <PersonalModelSetting key={JSON.stringify(settings)} load={loadPersonalModel} save={savePersonalModel} />
+        </section>
+      )}
 
       {isAdmin && (
         <section aria-labelledby="ranker-heading" className="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">

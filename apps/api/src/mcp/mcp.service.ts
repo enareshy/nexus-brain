@@ -1,9 +1,10 @@
 import { argsHash } from "@brain/connectors";
 import { isAppError, UuidSchema } from "@brain/core";
-import { appendAudit, type PoolLike, type UserScope } from "@brain/db";
+import { appendAudit, getAgentMode, type PoolLike, type UserScope } from "@brain/db";
 import type { Logger } from "@brain/telemetry";
 import { z } from "zod";
-import { AGENT_TOOLS, parseToolCall, untrusted } from "../agents/tools.js";
+import type { AiSettingsSource } from "../admin/ai-settings.service.js";
+import { AGENT_TOOLS, isProposeTool, parseToolCall, untrusted } from "../agents/tools.js";
 import type { ConnectionsApi } from "../connections/connections.service.js";
 import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.js";
 
@@ -90,6 +91,8 @@ export interface McpToolResult {
 }
 
 export interface McpToolsApi {
+  /** The tools this person may use now: no proposals while they or their company have made agents read only. */
+  list(caller: McpCaller): Promise<readonly McpTool[]>;
   call(caller: McpCaller, name: string, input: unknown): Promise<McpToolResult>;
 }
 
@@ -99,6 +102,8 @@ export interface McpToolsDeps {
   readonly proposals: Pick<ProposalsApi, "targets" | "propose" | "get">;
   readonly logger: Pick<Logger, "error">;
   readonly webAppUrl: string;
+  /** The company's settings, for whether proposals are allowed. Required, so a wiring slip cannot skip the check. */
+  readonly aiSettings: AiSettingsSource;
 }
 
 const ok = (value: string): McpToolResult => ({ text: value, isError: false });
@@ -116,6 +121,20 @@ function proposalOutcome(proposal: ProposalView): string {
 
 export class McpToolsService implements McpToolsApi {
   constructor(private readonly deps: McpToolsDeps) {}
+
+  async list(caller: McpCaller): Promise<readonly McpTool[]> {
+    const allowed = await this.proposalsAllowed({ tenantId: caller.tenantId, userId: caller.userId });
+    return allowed ? MCP_TOOLS : MCP_TOOLS.filter((tool) => !isProposeTool(tool.name));
+  }
+
+  /**
+   * The same two settings as Brain's own agents (FR-AGT-04): the company's switch and the person's
+   * "read only". Read at every call, so a change applies at once even to a tool list fetched before.
+   */
+  private async proposalsAllowed(scope: UserScope): Promise<boolean> {
+    const [settings, mode] = await Promise.all([this.deps.aiSettings.get(scope.tenantId), getAgentMode(this.deps.pool, scope)]);
+    return settings.agentChangesAllowed && mode === "ask";
+  }
 
   async call(caller: McpCaller, name: string, input: unknown): Promise<McpToolResult> {
     const { tenantId, userId } = caller;
@@ -145,6 +164,9 @@ export class McpToolsService implements McpToolsApi {
       if (!parsed.success) return failed("That input was not valid.");
       return ok(proposalOutcome(await this.deps.proposals.get(scope, parsed.data.proposalId)));
     }
+    // By name and before the input is checked, so a read-only person's tools look the same either way,
+    // and any later propose_* tool is covered as the list already leaves it out.
+    if (isProposeTool(name) && !(await this.proposalsAllowed(scope))) return failed("There is no such tool.");
     const call = parseToolCall(name, input);
     switch (call.kind) {
       case "refused":

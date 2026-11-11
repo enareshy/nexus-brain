@@ -2,7 +2,7 @@
 // model that behaves as a hijacked model might (FR-AGT-01..04, FR-AGT-06, NFR-SEC-02).
 import { AppError, createSecretBox } from "@brain/core";
 import type { SearchHit, WriteAdapter } from "@brain/connectors";
-import { applyMigrations, createAppPool, DEFAULT_AI_SETTINGS, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
+import { applyMigrations, createAppPool, DEFAULT_AI_SETTINGS, loadMigrations, MIGRATIONS_DIR, seed, setModelPreference } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import type { AgentMessage, AgentTurn, LlmGateway } from "@brain/llm-gateway";
 import { createRegistry } from "@brain/mcp-client";
@@ -411,6 +411,26 @@ describe("read-only agents (FR-AGT-04)", () => {
     expect(run.steps.map((s) => s.outcome)).toEqual(["not_in_manifest"]);
     expect(await governed.mode(bobScope())).toEqual({ mode: "ask", companyAllowsChanges: false });
     expect((await owner.query("SELECT count(*)::int AS n FROM write_proposals WHERE user_id = $1", [seedUser("bob").id])).rows[0].n).toBe(0);
+  });
+});
+
+describe("the person's own model (FR-LLM-07)", () => {
+  it("uses it while the company lets people choose, and the company's model otherwise", async () => {
+    let peopleChooseModel = true;
+    const settings = { get: async () => ({ ...DEFAULT_AI_SETTINGS, modelChoice: "premium" as const, peopleChooseModel }) };
+    const agents = new AgentsService({ ...agentDeps, aiSettings: settings });
+    await setModelPreference(pool, bobScope(), "standard");
+    try {
+      script(say("one"), say("two"));
+      await agents.start(bobScope(), "first");
+      await agents.settled();
+      peopleChooseModel = false;
+      await agents.start(bobScope(), "second");
+      await agents.settled();
+      expect(agentTurn.mock.calls.map(([input]) => input.modelChoice)).toEqual(["standard", "premium"]);
+    } finally {
+      await setModelPreference(pool, bobScope(), null);
+    }
   });
 });
 

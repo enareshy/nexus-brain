@@ -15,7 +15,7 @@ const ACME = TENANTS.acme.id;
 const GLOBEX = TENANTS.globex.id;
 const admin = { tenantId: ACME, userId: seedUser("patAcme").id };
 const member = { tenantId: ACME, userId: seedUser("bob").id };
-const cautious: AiSettings = { modelChoice: "standard", agentsEnabled: true, automaticAgentsEnabled: false, automaticRunsPerDay: 3, agentChangesAllowed: true };
+const cautious: AiSettings = { modelChoice: "standard", agentsEnabled: true, automaticAgentsEnabled: false, automaticRunsPerDay: 3, agentChangesAllowed: true, peopleChooseModel: false };
 
 let owner: pg.Client;
 let appPool: pg.Pool;

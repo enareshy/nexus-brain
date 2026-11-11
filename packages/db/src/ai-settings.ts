@@ -17,6 +17,8 @@ export interface AiSettings {
   readonly automaticRunsPerDay: number;
   /** Off: agents only search and answer, and cannot propose changes for anyone (FR-AGT-04). */
   readonly agentChangesAllowed: boolean;
+  /** On: each person may pick their own model; the one above is the default for those who do not. */
+  readonly peopleChooseModel: boolean;
 }
 
 export const MAX_AUTOMATIC_RUNS_PER_DAY = 10;
@@ -27,6 +29,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = Object.freeze({
   automaticAgentsEnabled: true,
   automaticRunsPerDay: MAX_AUTOMATIC_RUNS_PER_DAY,
   agentChangesAllowed: true,
+  peopleChooseModel: false,
 });
 
 const COLUMNS = {
@@ -35,8 +38,14 @@ const COLUMNS = {
   automaticAgentsEnabled: tenantAiSettings.automaticAgentsEnabled,
   automaticRunsPerDay: tenantAiSettings.automaticRunsPerDay,
   agentChangesAllowed: tenantAiSettings.agentChangesAllowed,
+  peopleChooseModel: tenantAiSettings.peopleChooseModel,
 };
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
+
+/** The model a person's answers and agents use: their own choice while the company allows it, else the company's. */
+export function effectiveModel(settings: Pick<AiSettings, "modelChoice" | "peopleChooseModel">, personal: ModelChoice | null): ModelChoice {
+  return settings.peopleChooseModel && personal ? personal : settings.modelChoice;
+}
 
 /** The company's settings, or the defaults when its admins have never changed them. */
 export async function getAiSettings(pool: PoolLike, tenantId: string): Promise<AiSettings> {

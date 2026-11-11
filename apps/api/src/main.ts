@@ -258,7 +258,7 @@ const app = await createApp({
   aiSettings,
   mcp: {
     verifier: createJwtVerifier({ issuer: env.OIDC_ISSUER, audience: env.MCP_SERVER_AUDIENCE, keySet }),
-    tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL }),
+    tools: new McpToolsService({ pool, connections, proposals, logger, webAppUrl: env.WEB_APP_URL, aiSettings }),
     resourceUrl: new URL("/mcp", env.PUBLIC_API_URL).toString(),
     issuer: env.OIDC_ISSUER,
   },
