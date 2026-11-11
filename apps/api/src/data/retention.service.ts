@@ -1,4 +1,14 @@
-import { getRetention, PurgeAuditError, purgeExpired, saveRetention, type PoolLike, type PurgeResult, type Retention, type UserScope } from "@brain/db";
+import {
+  forgetStaleGraphLinks,
+  getRetention,
+  PurgeAuditError,
+  purgeExpired,
+  saveRetention,
+  type PoolLike,
+  type PurgeResult,
+  type Retention,
+  type UserScope,
+} from "@brain/db";
 import type { Logger } from "@brain/telemetry";
 
 /** Once an hour is plenty for settings counted in days. */
@@ -50,12 +60,35 @@ export class RetentionService implements RetentionApi {
     return all;
   }
 
+  /**
+   * Removes everyone's work graph links not seen for 90 days (FR-RET-09), so someone who stops using
+   * Brain does not keep theirs. Logs the count only.
+   */
+  async forgetStaleLinks(): Promise<number> {
+    let removed = 0;
+    try {
+      for (let round = 0; round < MAX_ROUNDS; round += 1) {
+        const batch = await forgetStaleGraphLinks(this.deps.pool, SWEEP_BATCH);
+        removed += batch;
+        if (batch < SWEEP_BATCH) break;
+      }
+    } finally {
+      // Also when a later batch fails, so what was removed is still on record.
+      if (removed > 0) this.deps.logger.info({ removed }, "Old work graph links removed");
+    }
+    return removed;
+  }
+
   start(): void {
     if (this.timer) return;
-    const run = () =>
-      void this.sweep().catch((err: unknown) =>
-        this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err }, "Removing expired data failed"),
+    const errorType = (err: unknown) => (err instanceof Error ? err.name : typeof err);
+    // Each on its own, so one failing never stops the other.
+    const run = () => {
+      void this.sweep().catch((err: unknown) => this.deps.logger.error({ errorType: errorType(err) }, "Removing expired data failed"));
+      void this.forgetStaleLinks().catch((err: unknown) =>
+        this.deps.logger.error({ errorType: errorType(err) }, "Removing old work graph links failed"),
       );
+    };
     this.timer = setInterval(run, SWEEP_MS);
     this.timer.unref?.();
     run();

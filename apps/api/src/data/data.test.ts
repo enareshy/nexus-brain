@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
   getRetention: vi.fn(),
   saveRetention: vi.fn(),
   purgeExpired: vi.fn(),
+  forgetStaleGraphLinks: vi.fn(),
   getProfile: vi.fn(),
   appendAudit: vi.fn(),
 }));
@@ -56,10 +57,53 @@ describe("RetentionService", () => {
     expect(await service.sweep()).toHaveLength(20);
   });
 
+  it("removes old work graph links in batches until done, logging only the count", async () => {
+    const service = new RetentionService({ pool: {} as never, logger });
+    db.forgetStaleGraphLinks.mockResolvedValueOnce(1_000).mockResolvedValueOnce(4).mockResolvedValue(0);
+    expect(await service.forgetStaleLinks()).toBe(1_004);
+    expect(db.forgetStaleGraphLinks).toHaveBeenCalledTimes(2);
+    expect(logger.info).toHaveBeenCalledWith({ removed: 1_004 }, "Old work graph links removed");
+    // Nothing to remove: nothing logged. A huge backlog: at most 20 batches a sweep.
+    logger.info.mockReset();
+    db.forgetStaleGraphLinks.mockReset().mockResolvedValue(0);
+    expect(await service.forgetStaleLinks()).toBe(0);
+    expect(logger.info).not.toHaveBeenCalled();
+    db.forgetStaleGraphLinks.mockReset().mockResolvedValue(1_000);
+    expect(await service.forgetStaleLinks()).toBe(20_000);
+    // A failing batch still leaves the earlier ones on record.
+    logger.info.mockReset();
+    db.forgetStaleGraphLinks.mockReset().mockResolvedValueOnce(1_000).mockRejectedValue(new Error("down"));
+    await expect(service.forgetStaleLinks()).rejects.toThrow("down");
+    expect(logger.info).toHaveBeenCalledWith({ removed: 1_000 }, "Old work graph links removed");
+  });
+
+  it("keeps sweeping one kind of data when the other fails", async () => {
+    vi.useFakeTimers();
+    try {
+      db.purgeExpired.mockRejectedValue(new Error("down"));
+      db.forgetStaleGraphLinks.mockResolvedValue(3);
+      const service = new RetentionService({ pool: {} as never, logger });
+      service.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(logger.info).toHaveBeenCalledWith({ removed: 3 }, "Old work graph links removed");
+      service.stop();
+      db.purgeExpired.mockReset().mockResolvedValue([]);
+      db.forgetStaleGraphLinks.mockReset().mockRejectedValue(new TypeError("down"));
+      service.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(db.purgeExpired).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith({ errorType: "TypeError" }, "Removing old work graph links failed");
+      service.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("sweeps at start and then on a timer, and reports a failed sweep without stopping", async () => {
     vi.useFakeTimers();
     try {
       db.purgeExpired.mockRejectedValueOnce(new Error("down")).mockResolvedValue([]);
+      db.forgetStaleGraphLinks.mockResolvedValue(0);
       const service = new RetentionService({ pool: {} as never, logger });
       service.start();
       service.start();

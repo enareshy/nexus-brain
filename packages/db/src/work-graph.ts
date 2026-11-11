@@ -18,7 +18,7 @@ export interface StoredGraphLink {
   readonly ageDays: number;
 }
 
-/** Links older than this are dropped, and the newest this many are kept per person. */
+/** Links older than this are dropped, and the newest this many are kept per person. Also in migration 0029. */
 const MAX_AGE_DAYS = 90;
 const MAX_EDGES_PER_PERSON = 5_000;
 /** At most this many links are recorded at once (one answer's sources, paired). */
@@ -49,6 +49,20 @@ export async function recordGraphEdges(pool: PoolLike, scope: UserScope, edges: 
         SELECT source_key, target_key, kind FROM work_graph_edges WHERE ${mine}
         ORDER BY last_seen_at DESC, source_key, target_key, kind OFFSET ${MAX_EDGES_PER_PERSON})`);
   });
+}
+
+/**
+ * Removes up to `maxRows` links, anyone's, not seen for 90 days, and says how many; 0 means done (or
+ * another server is sweeping). Runs through one database function, which can delete nothing newer.
+ */
+export async function forgetStaleGraphLinks(pool: PoolLike, maxRows: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<{ removed: number }>("SELECT app_forget_stale_graph_links($1) AS removed", [maxRows]);
+    return rows[0]?.removed ?? 0;
+  } finally {
+    client.release();
+  }
 }
 
 /**

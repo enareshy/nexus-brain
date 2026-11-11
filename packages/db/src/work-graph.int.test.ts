@@ -1,4 +1,5 @@
 // Each person's own work graph (FR-RET-09): private to them, bounded, and holding ids only.
+import { sql } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MIGRATIONS_DIR } from "./config.js";
@@ -6,7 +7,7 @@ import { applyMigrations, loadMigrations } from "./migrator.js";
 import { seed } from "./seed.js";
 import { seedUser, TENANTS } from "./seed-data.js";
 import { withUser } from "./tenant.js";
-import { clearGraph, exportGraph, forgetGraphItem, graphLinksFor, listGraphItems, recordGraphEdges } from "./work-graph.js";
+import { clearGraph, exportGraph, forgetGraphItem, forgetStaleGraphLinks, graphLinksFor, listGraphItems, recordGraphEdges } from "./work-graph.js";
 
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://brain:brain@localhost:5432/brain_test";
 const APP_URL = process.env.DATABASE_APP_ROLE_URL ?? "postgres://brain_app:brain_app@localhost:5432/brain_test";
@@ -139,6 +140,34 @@ describe("a person's work graph", () => {
     const exported = await exportGraph(appPool, bob);
     expect(exported.map((edge) => edge.target)).toEqual(["atlassian:DOC-2", "atlassian:ENG-1"]);
     expect(exported[0]).toEqual({ source: "me", target: "atlassian:DOC-2", kind: "cited_up", weight: 1, lastSeenAt: expect.any(String) });
+  });
+
+  it("sweeps away everyone's links older than 90 days, even for people who stopped using Brain", async () => {
+    await recordGraphEdges(appPool, bob, [
+      { source: "me", target: "atlassian:OLD-1", kind: "opened" },
+      { source: "me", target: "atlassian:NEW-1", kind: "opened" },
+    ]);
+    await recordGraphEdges(appPool, globexPerson, [{ source: "me", target: "github:OLD-2", kind: "opened" }]);
+    await recordGraphEdges(appPool, alice, [{ source: "me", target: "atlassian:OLD-3", kind: "opened" }]);
+    await owner.query("UPDATE work_graph_edges SET last_seen_at = now() - interval '91 days' WHERE target_key LIKE '%:OLD-%'");
+    await owner.query("UPDATE work_graph_edges SET last_seen_at = now() - interval '89 days' WHERE target_key = 'atlassian:NEW-1'");
+
+    // In batches: the first call stops at its limit, the next finishes, and a third finds nothing.
+    expect(await forgetStaleGraphLinks(appPool, 2)).toBe(2);
+    expect(await forgetStaleGraphLinks(appPool, 2)).toBe(1);
+    expect(await forgetStaleGraphLinks(appPool, 2)).toBe(0);
+    const { rows } = await owner.query("SELECT target_key FROM work_graph_edges");
+    expect(rows).toEqual([{ target_key: "atlassian:NEW-1" }]);
+  });
+
+  it("lets the app reach other people's links only through the sweep", async () => {
+    await recordGraphEdges(appPool, alice, [{ source: "me", target: "atlassian:A-1", kind: "opened" }]);
+    await owner.query("UPDATE work_graph_edges SET last_seen_at = now() - interval '200 days'");
+    // Signed in as Bob, the app's own delete reaches none of Alice's links, however old.
+    await withUser(appPool, bob, (db) => db.execute(sql`DELETE FROM work_graph_edges`));
+    expect((await owner.query("SELECT count(*)::int AS n FROM work_graph_edges")).rows[0].n).toBe(1);
+    // The sweep's batch size is bounded both ways.
+    await expect(forgetStaleGraphLinks(appPool, 0)).resolves.toBe(1);
   });
 
   it("lists what the person used, newest first, and lets them forget one item or clear it all", async () => {
