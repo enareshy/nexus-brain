@@ -3,12 +3,14 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post } from "@nestjs/co
 import { z } from "zod";
 import { Ctx, type RequestContext } from "../context/request-context.js";
 import { AGENTS } from "../tokens.js";
-import type { AgentRunSummary, AgentRunView, AgentsApi } from "./agents.service.js";
+import type { AgentModeView, AgentRunSummary, AgentRunView, AgentsApi } from "./agents.service.js";
 
 /** A skill comes with the version the person read, so one changed since is refused rather than followed unseen. */
 const StartSchema = z
   .strictObject({ goal: z.string().trim().min(1).max(2_000), skillId: UuidSchema.optional(), skillVersion: z.string().max(40).optional() })
   .refine((body) => !body.skillId === !body.skillVersion);
+
+const ModeSchema = z.strictObject({ mode: z.enum(["ask", "read_only"]) });
 
 function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -24,6 +26,18 @@ function scopeOf(ctx: RequestContext) {
 @Controller("agent-runs")
 export class AgentsController {
   constructor(@Inject(AGENTS) private readonly agents: AgentsApi) {}
+
+  /** The person's own choice of whether their agents may propose changes (FR-AGT-04). */
+  @Get("mode")
+  async mode(@Ctx() ctx: RequestContext): Promise<ApiSuccess<AgentModeView>> {
+    return ok(await this.agents.mode(scopeOf(ctx)), { requestId: ctx.requestId });
+  }
+
+  @Post("mode")
+  @HttpCode(200)
+  async setMode(@Ctx() ctx: RequestContext, @Body() body: unknown): Promise<ApiSuccess<AgentModeView>> {
+    return ok(await this.agents.setMode(scopeOf(ctx), parse(ModeSchema, body).mode), { requestId: ctx.requestId });
+  }
 
   @Post()
   @HttpCode(201)

@@ -28,6 +28,7 @@ export function describeAiSettings(settings: AiSettings): readonly string[] {
       : settings.automaticAgentsEnabled
         ? `Automatic agents are on, up to ${settings.automaticRunsPerDay} ${settings.automaticRunsPerDay === 1 ? "run" : "runs"} a day for each person.`
         : "Automatic agents are turned off.",
+    settings.agentChangesAllowed ? "Agents can propose changes, which people approve." : "Agents are read only: they never propose changes.",
   ];
 }
 
@@ -103,6 +104,21 @@ export function AiSettingsForm({ settings, canChange, isSaving, onSave }: Props)
           <span>
             Automatic agents can run
             <span className="block text-slate-500 dark:text-slate-400">Scheduled agents, and ones started by Jira assignments or @Brain comments.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.agentChangesAllowed}
+            disabled={!draft.agentsEnabled}
+            onChange={(e) => setDraft({ ...draft, agentChangesAllowed: e.target.checked })}
+            className={CHECKBOX}
+          />
+          <span>
+            Agents can propose changes
+            <span className="block text-slate-500 dark:text-slate-400">
+              People still approve every change. Off: Brain's agents only search and answer, for everyone.
+            </span>
           </span>
         </label>
         <label className="block text-sm">

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AgentRunDetail } from "@/components/AgentRunDetail";
+import { AgentModeSetting } from "@/components/AgentModeSetting";
 import { AgentTriggers } from "@/components/AgentTriggers";
 import { AgentNotifications } from "@/components/AgentNotifications";
 import { RequireAuth } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { SkillPicker } from "@/components/SkillPicker";
-import { describeError, type AgentRun, type AgentRunSummary, type Proposal, type Skill } from "@/lib/api";
+import { describeError, type AgentMode, type AgentRun, type AgentRunSummary, type Proposal, type Skill } from "@/lib/api";
 
 const POLL_MS = 2_000;
 const MAX_GOAL = 2_000;
@@ -28,6 +29,8 @@ function AgentsPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [goal, setGoal] = useState("");
   const [skills, setSkills] = useState<Skill[] | null>(null);
+  const loadMode = useCallback(() => api.agentMode(), [api]);
+  const saveMode = useCallback((mode: AgentMode) => api.setAgentMode(mode), [api]);
   const [skillId, setSkillId] = useState("");
   const [skillsFailed, setSkillsFailed] = useState(false);
   /** Only a company that turned agents off blocks starting one. */
@@ -168,6 +171,8 @@ function AgentsPage() {
           An admin has turned agents off for your company, so new agents cannot start. Your earlier runs are still here.
         </p>
       )}
+
+      <AgentModeSetting load={loadMode} save={saveMode} />
 
       <form onSubmit={(e) => void handleStart(e)} className="mt-8">
         <label htmlFor="agent-goal" className="text-sm font-medium">

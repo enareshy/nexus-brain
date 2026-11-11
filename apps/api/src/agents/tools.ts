@@ -85,6 +85,9 @@ export const AGENT_TOOLS: readonly AgentTool[] = [
   },
 ];
 
+/** Tools that ask a person to approve a change. A read-only agent is never offered them. */
+export const isProposeTool = (name: string): boolean => name.startsWith("propose_");
+
 const MAX_LABEL_CHARS = 200;
 
 /** Tool output is written by other people. The label and escaping stop it posing as anything else. */

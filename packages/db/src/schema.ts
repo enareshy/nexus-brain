@@ -193,6 +193,7 @@ export const tenantAiSettings = pgTable("tenant_ai_settings", {
   agentsEnabled: boolean("agents_enabled").notNull(),
   automaticAgentsEnabled: boolean("automatic_agents_enabled").notNull(),
   automaticRunsPerDay: integer("automatic_runs_per_day").notNull(),
+  agentChangesAllowed: boolean("agent_changes_allowed").notNull(),
   updatedBy: uuid("updated_by").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

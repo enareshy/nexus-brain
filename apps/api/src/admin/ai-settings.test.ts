@@ -13,7 +13,7 @@ const { AiSettingsController } = await import("./ai-settings.controller.js");
 
 const scope = { tenantId: "t1", userId: "u1" };
 const ctx = (role: string) => ({ ...scope, requestId: "r", role, principals: [] }) as never;
-const settings = { modelChoice: "standard", agentsEnabled: true, automaticAgentsEnabled: false, automaticRunsPerDay: 4 } as const;
+const settings = { modelChoice: "standard", agentsEnabled: true, automaticAgentsEnabled: false, automaticRunsPerDay: 4, agentChangesAllowed: true } as const;
 
 beforeEach(() => {
   db.getAiSettings.mockReset();

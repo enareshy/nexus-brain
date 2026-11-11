@@ -12,6 +12,7 @@ const AiSettingsSchema = z.strictObject({
   agentsEnabled: z.boolean(),
   automaticAgentsEnabled: z.boolean(),
   automaticRunsPerDay: z.number().int().min(1).max(MAX_AUTOMATIC_RUNS_PER_DAY),
+  agentChangesAllowed: z.boolean(),
 });
 
 /** The company's AI settings (FR-ADM-02). */

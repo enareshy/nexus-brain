@@ -1,6 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRun, Proposal } from "@/lib/api";
+import { ApiError, type AgentMode, type AgentModeView, type AgentRun, type Proposal } from "@/lib/api";
+import { AgentModeSetting } from "./AgentModeSetting";
 import { AgentRunDetail } from "./AgentRunDetail";
 
 const base: AgentRun = {
@@ -41,6 +43,40 @@ const show = (run: Partial<AgentRun>, waiting: Proposal | null = null) =>
       onCancel={vi.fn()}
     />,
   );
+
+describe("AgentModeSetting", () => {
+  const view = (mode: AgentMode, companyAllowsChanges = true): AgentModeView => ({ mode, companyAllowsChanges });
+
+  it("shows the person's choice and saves a new one", async () => {
+    const save = vi.fn(async (mode: AgentMode) => view(mode));
+    render(<AgentModeSetting load={async () => view("ask")} save={save} />);
+    const readOnly = await screen.findByRole("radio", { name: /Read only/ });
+    expect(screen.getByRole("radio", { name: /Ask me first/ })).toBeChecked();
+    await userEvent.click(readOnly);
+    expect(save).toHaveBeenCalledWith("read_only");
+    await waitFor(() => expect(readOnly).toBeChecked());
+  });
+
+  it("says when an admin made agents read only, and offers no choice then", async () => {
+    render(<AgentModeSetting load={async () => view("ask", false)} save={vi.fn()} />);
+    expect(await screen.findByRole("status")).toHaveTextContent("An admin has made Brain's agents read only");
+    for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
+  });
+
+  it("explains a failure to load or save", async () => {
+    const load = vi.fn<() => Promise<AgentModeView>>().mockRejectedValueOnce(new ApiError("NETWORK", "x", 0)).mockResolvedValue(view("read_only"));
+    const { unmount } = render(<AgentModeSetting load={load} save={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("radio", { name: /Read only/ })).toBeChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+    unmount();
+    const save = vi.fn(async () => Promise.reject(new ApiError("NETWORK", "x", 0)));
+    render(<AgentModeSetting load={async () => view("ask")} save={save} />);
+    await userEvent.click(await screen.findByRole("radio", { name: /Read only/ }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Ask me first/ })).toBeChecked();
+  });
+});
 
 describe("AgentRunDetail", () => {
   it("shows the result, cost and the documents the run read", () => {

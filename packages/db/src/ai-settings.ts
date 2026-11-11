@@ -15,6 +15,8 @@ export interface AiSettings {
   readonly automaticAgentsEnabled: boolean;
   /** Automatic runs each person may have in a day, from 1 to 10. */
   readonly automaticRunsPerDay: number;
+  /** Off: agents only search and answer, and cannot propose changes for anyone (FR-AGT-04). */
+  readonly agentChangesAllowed: boolean;
 }
 
 export const MAX_AUTOMATIC_RUNS_PER_DAY = 10;
@@ -24,6 +26,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = Object.freeze({
   agentsEnabled: true,
   automaticAgentsEnabled: true,
   automaticRunsPerDay: MAX_AUTOMATIC_RUNS_PER_DAY,
+  agentChangesAllowed: true,
 });
 
 const COLUMNS = {
@@ -31,6 +34,7 @@ const COLUMNS = {
   agentsEnabled: tenantAiSettings.agentsEnabled,
   automaticAgentsEnabled: tenantAiSettings.automaticAgentsEnabled,
   automaticRunsPerDay: tenantAiSettings.automaticRunsPerDay,
+  agentChangesAllowed: tenantAiSettings.agentChangesAllowed,
 };
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
 

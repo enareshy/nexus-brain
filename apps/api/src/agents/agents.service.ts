@@ -1,6 +1,9 @@
 import { argsHash } from "@brain/connectors";
 import { AppError, isAppError, type SecretBox } from "@brain/core";
 import {
+  getAgentMode,
+  setAgentMode,
+  type AgentMode,
   addAgentStep,
   appendAudit,
   appendUsage,
@@ -28,7 +31,7 @@ import type { ProposalsApi, ProposalView } from "../proposals/proposals.service.
 import type { MemorySource } from "../memory/memory.service.js";
 import type { SkillForRun } from "../skills/skills.service.js";
 import type { BudgetGuard } from "../usage/usage.service.js";
-import { AGENT_TOOLS, parseToolCall, untrusted } from "./tools.js";
+import { AGENT_TOOLS, isProposeTool, parseToolCall, untrusted } from "./tools.js";
 
 // Caps per run (FR-AGT-06). Each ends the run with a clear status.
 const MAX_TURNS = 8;
@@ -112,6 +115,14 @@ export interface AgentsApi {
   /** Also picks up a run left behind by a restart, or waiting on a decision already made. */
   get(scope: UserScope, id: string): Promise<AgentRunView>;
   cancel(scope: UserScope, id: string): Promise<void>;
+  /** Whether the person's agents may propose changes, and whether their company allows it at all. */
+  mode(scope: UserScope): Promise<AgentModeView>;
+  setMode(scope: UserScope, mode: AgentMode): Promise<AgentModeView>;
+}
+
+export interface AgentModeView {
+  readonly mode: AgentMode;
+  readonly companyAllowsChanges: boolean;
 }
 
 export interface AgentsDeps {
@@ -393,11 +404,14 @@ export class AgentsService implements AgentsApi {
       // call already under way when they are turned off still finishes, but its tool call never runs.
       const allowed = await this.stepAllowed(scope, id);
       if (typeof allowed === "string") return fail(allowed);
+      // Read-only, by the person's or the company's choice: the agent is never offered a propose tool,
+      // and one saved before the change is refused like any tool outside its list.
+      const tools = allowed.changes ? toolsFor(state) : toolsFor(state).filter((tool) => !isProposeTool(tool.name));
       // A tool call saved before a restart runs first, without asking the model again.
       if (state.pendingCall) {
         const call = state.pendingCall;
         const seq = state.messages.length;
-        const outcome = await this.runTool(scope, id, seq, call, toolsFor(state));
+        const outcome = await this.runTool(scope, id, seq, call, tools);
         if (outcome.proposalId && outcome.pause) {
           await save("waiting_approval", { waitingProposalId: outcome.proposalId, leaseMs: null });
           await tell("run_needs_decision", `run:${id}:decision:${outcome.proposalId}`);
@@ -427,7 +441,7 @@ export class AgentsService implements AgentsApi {
       let turn;
       try {
         const memories = (await this.deps.memories?.forPrompt(scope)) ?? [];
-        turn = await modelTurnWithRetries(gateway, state.messages, toolsFor(state), memories, allowed, (usage) => {
+        turn = await modelTurnWithRetries(gateway, state.messages, tools, memories, allowed.choice, (usage) => {
           cost += usage.costUsd ?? 0;
           void this.meter(scope, usage);
         });
@@ -459,15 +473,30 @@ export class AgentsService implements AgentsApi {
     }
   }
 
+  async mode(scope: UserScope): Promise<AgentModeView> {
+    const [mode, settings] = await Promise.all([getAgentMode(this.deps.pool, scope), this.deps.aiSettings?.get(scope.tenantId)]);
+    return { mode, companyAllowsChanges: settings?.agentChangesAllowed ?? true };
+  }
+
+  async setMode(scope: UserScope, mode: AgentMode): Promise<AgentModeView> {
+    await setAgentMode(this.deps.pool, scope, mode);
+    return this.mode(scope);
+  }
+
   /**
-   * Whether the company still allows agents, and with which model. A check that cannot run stops the
-   * run, as with the budget: carrying on could go against what an admin just turned off.
+   * Whether the company still allows agents, with which model, and whether this run may propose
+   * changes. Read before every step, so a change takes effect at once. A check that cannot run stops
+   * the run, as with the budget: carrying on could go against what someone just turned off.
    */
-  private async stepAllowed(scope: UserScope, runId: string): Promise<{ modelChoice?: ModelChoice } | "agents_off" | "settings_unavailable"> {
-    if (!this.deps.aiSettings) return {};
+  private async stepAllowed(
+    scope: UserScope,
+    runId: string,
+  ): Promise<{ readonly choice: { modelChoice?: ModelChoice }; readonly changes: boolean } | "agents_off" | "settings_unavailable"> {
     try {
-      const settings = await this.deps.aiSettings.get(scope.tenantId);
-      return settings.agentsEnabled ? { modelChoice: settings.modelChoice } : "agents_off";
+      const [settings, mode] = await Promise.all([this.deps.aiSettings?.get(scope.tenantId), getAgentMode(this.deps.pool, scope)]);
+      if (!settings) return { choice: {}, changes: mode === "ask" };
+      if (!settings.agentsEnabled) return "agents_off";
+      return { choice: { modelChoice: settings.modelChoice }, changes: settings.agentChangesAllowed && mode === "ask" };
     } catch (err) {
       this.deps.logger.error({ errorType: err instanceof Error ? err.name : typeof err, runId, tenant_id: scope.tenantId }, "AI settings check failed");
       return "settings_unavailable";

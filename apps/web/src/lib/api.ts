@@ -257,8 +257,13 @@ export const AiSettingsSchema = z.object({
   agentsEnabled: z.boolean(),
   automaticAgentsEnabled: z.boolean(),
   automaticRunsPerDay: z.number().int().min(1).max(MAX_AUTOMATIC_RUNS_PER_DAY),
+  agentChangesAllowed: z.boolean(),
 });
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
+
+export const AgentModeViewSchema = z.object({ mode: z.enum(["ask", "read_only"]), companyAllowsChanges: z.boolean() });
+export type AgentModeView = z.infer<typeof AgentModeViewSchema>;
+export type AgentMode = AgentModeView["mode"];
 
 export const UsageOverviewSchema = z.object({
   summary: z.object({
@@ -421,6 +426,8 @@ export interface ApiClient {
   agentRun(id: string): Promise<AgentRun>;
   /** With a skill, the run follows its instructions and uses only its tools. Pass the skill as it was shown. */
   startAgentRun(goal: string, skill?: Pick<Skill, "id" | "updatedAt">): Promise<AgentRunSummary>;
+  agentMode(): Promise<AgentModeView>;
+  setAgentMode(mode: AgentMode): Promise<AgentModeView>;
   cancelAgentRun(id: string): Promise<{ cancelled: true }>;
   proposal(id: string): Promise<Proposal>;
   proposals(): Promise<Proposal[]>;
@@ -556,6 +563,8 @@ export function createApiClient(
       }),
     agentRuns: () => request(z.array(AgentRunSummarySchema), "/agent-runs"),
     agentRun: (id) => request(AgentRunSchema, `/agent-runs/${enc(id)}`),
+    agentMode: () => request(AgentModeViewSchema, "/agent-runs/mode"),
+    setAgentMode: (mode) => request(AgentModeViewSchema, "/agent-runs/mode", { method: "POST", body: JSON.stringify({ mode }) }),
     startAgentRun: (goal, skill) =>
       request(AgentRunSummarySchema, "/agent-runs", {
         method: "POST",

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient, type AiSettings } from "@/lib/api";
 import { AiSettingsForm, describeAiSettings } from "./AiSettingsForm";
 
-const defaults: AiSettings = { modelChoice: "premium", agentsEnabled: true, automaticAgentsEnabled: true, automaticRunsPerDay: 10 };
+const defaults: AiSettings = { modelChoice: "premium", agentsEnabled: true, automaticAgentsEnabled: true, automaticRunsPerDay: 10, agentChangesAllowed: true };
 
 describe("AiSettingsForm (FR-ADM-02)", () => {
   it("saves only once something changed, with the model and agent limits chosen", async () => {
@@ -38,14 +38,24 @@ describe("AiSettingsForm (FR-ADM-02)", () => {
     expect(screen.getByText("Only an admin can change these.")).toBeInTheDocument();
   });
 
+  it("lets an admin make every agent read only", async () => {
+    const onSave = vi.fn();
+    render(<AiSettingsForm settings={defaults} canChange isSaving={false} onSave={onSave} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: /Agents can propose changes/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(onSave).toHaveBeenCalledWith({ ...defaults, agentChangesAllowed: false });
+  });
+
   it("describes each combination plainly", () => {
     expect(describeAiSettings(defaults)).toEqual([
       "Answers and agents use the most capable model.",
       "Agents are on.",
       "Automatic agents are on, up to 10 runs a day for each person.",
+      "Agents can propose changes, which people approve.",
     ]);
+    expect(describeAiSettings({ ...defaults, agentChangesAllowed: false })[3]).toBe("Agents are read only: they never propose changes.");
     expect(describeAiSettings({ ...defaults, modelChoice: "standard", automaticRunsPerDay: 1 })[2]).toBe("Automatic agents are on, up to 1 run a day for each person.");
-    expect(describeAiSettings({ ...defaults, agentsEnabled: false }).slice(1)).toEqual(["Agents are turned off.", "Automatic agents do not run while agents are off."]);
+    expect(describeAiSettings({ ...defaults, agentsEnabled: false }).slice(1, 3)).toEqual(["Agents are turned off.", "Automatic agents do not run while agents are off."]);
   });
 });
 

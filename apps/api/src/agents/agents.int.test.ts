@@ -2,7 +2,7 @@
 // model that behaves as a hijacked model might (FR-AGT-01..04, FR-AGT-06, NFR-SEC-02).
 import { AppError, createSecretBox } from "@brain/core";
 import type { SearchHit, WriteAdapter } from "@brain/connectors";
-import { applyMigrations, createAppPool, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
+import { applyMigrations, createAppPool, DEFAULT_AI_SETTINGS, loadMigrations, MIGRATIONS_DIR, seed } from "@brain/db";
 import { seedUser, TENANTS } from "@brain/db/seed-data";
 import type { AgentMessage, AgentTurn, LlmGateway } from "@brain/llm-gateway";
 import { createRegistry } from "@brain/mcp-client";
@@ -361,6 +361,56 @@ describe("approval", () => {
     await owner.query("UPDATE write_proposals SET expires_at = now() - interval '1 second' WHERE id = $1", [waiting.waitingProposalId]);
     expect((await view(bob, id)).status).toBe("completed");
     expect(lastToolResult(1)).toContain("Nobody decided");
+  });
+});
+
+describe("read-only agents (FR-AGT-04)", () => {
+  const proposeTools = (index: number) =>
+    agentTurn.mock.calls[index]![0].tools.map((tool) => tool.name).filter((name) => name.startsWith("propose_"));
+  const proposeComment = call("propose_jira_comment", { siteId: "site", issueKey: "ENG-1", body: "posted anyway" });
+
+  it("lets a person make their own agents read only, and never offers or runs a proposal then", async () => {
+    const bob = await as("bob");
+    const alice = await as("alice");
+    try {
+      expect((await bob("GET", "/agent-runs/mode")).json().data).toEqual({ mode: "ask", companyAllowsChanges: true });
+      expect((await bob("POST", "/agent-runs/mode", { mode: "auto" })).statusCode).toBe(400);
+      expect((await bob("POST", "/agent-runs/mode", { mode: "read_only" })).json().data).toEqual({ mode: "read_only", companyAllowsChanges: true });
+      // Only Bob's own agents.
+      expect((await alice("GET", "/agent-runs/mode")).json().data.mode).toBe("ask");
+
+      script(proposeComment, say("I can only suggest it."));
+      const run = await view(bob, await startRun(bob));
+      expect(run).toMatchObject({ status: "completed", result: "I can only suggest it." });
+      expect(proposeTools(0)).toEqual([]);
+      expect(run.steps.map((s: { tool: string; outcome: string }) => [s.tool, s.outcome])).toEqual([["propose_jira_comment", "not_in_manifest"]]);
+      expect((await owner.query("SELECT count(*)::int AS n FROM write_proposals WHERE user_id = $1", [seedUser("bob").id])).rows[0].n).toBe(0);
+    } finally {
+      await bob("POST", "/agent-runs/mode", { mode: "ask" });
+    }
+  });
+
+  it("keeps every agent in the company read only when an admin turns proposals off, checked at every step", async () => {
+    let changesAllowed = true;
+    const governed = new AgentsService({ ...agentDeps, aiSettings: { get: async () => ({ ...DEFAULT_AI_SETTINGS, agentChangesAllowed: changesAllowed }) } });
+    agentTurn.mockImplementationOnce(async (_input, _signal, onUsage) => {
+      onUsage(USAGE);
+      changesAllowed = false; // Turned off while the model is thinking about a proposal.
+      return proposeComment;
+    });
+    agentTurn.mockImplementationOnce(async (_input, _signal, onUsage) => {
+      onUsage(USAGE);
+      return say("done");
+    });
+    const started = await governed.start(bobScope(), "comment on ENG-1");
+    await governed.settled();
+
+    expect(proposeTools(0)).toEqual(["propose_jira_issue", "propose_jira_update", "propose_jira_comment"]);
+    expect(proposeTools(1)).toEqual([]);
+    const run = await governed.get(bobScope(), started.id);
+    expect(run.steps.map((s) => s.outcome)).toEqual(["not_in_manifest"]);
+    expect(await governed.mode(bobScope())).toEqual({ mode: "ask", companyAllowsChanges: false });
+    expect((await owner.query("SELECT count(*)::int AS n FROM write_proposals WHERE user_id = $1", [seedUser("bob").id])).rows[0].n).toBe(0);
   });
 });
 

@@ -26,3 +26,4 @@ export * from "./tenant.js";
 export * from "./usage.js";
 export * from "./users.js";
 export * from "./work-graph.js";
+export * from "./agent-preferences.js";
