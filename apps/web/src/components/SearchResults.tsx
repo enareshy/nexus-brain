@@ -12,6 +12,8 @@ type Props = {
   onItemTask?: (hit: Hit, task: ItemTask) => void;
   /** Sends a draft or subtasks for approval. Without it, they can only be read. */
   onPropose?: (request: WriteRequest) => Promise<void>;
+  /** Told when the person opens a result, so their own later results can lean towards it. */
+  onOpen?: (hit: Hit) => void;
 };
 
 /** The site too, as one issue key can exist on two of a company's Jira sites. */
@@ -52,7 +54,7 @@ function SourceNotice({ sources }: { sources: readonly SourceStatus[] }) {
  * Renders hits as plain text. Titles and snippets come from connected services and are
  * untrusted: React escapes them, and links are only rendered for safe https URLs.
  */
-export function SearchResults({ result, query, work = null, onItemTask, onPropose }: Props) {
+export function SearchResults({ result, query, work = null, onItemTask, onPropose, onOpen }: Props) {
   const isWorking = work?.state.status === "streaming";
   const searched = result.sources.length;
   if (searched === 0) {
@@ -100,6 +102,11 @@ export function SearchResults({ result, query, work = null, onItemTask, onPropos
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
+                    // A middle click opens the result too; a right click only shows the menu.
+                    onClick={() => onOpen?.(hit)}
+                    onAuxClick={(event) => {
+                      if (event.button === 1) onOpen?.(hit);
+                    }}
                     className="text-lg font-semibold text-slate-900 decoration-brand decoration-2 underline-offset-4 hover:underline focus-visible:underline dark:text-slate-100"
                   >
                     {hit.title}

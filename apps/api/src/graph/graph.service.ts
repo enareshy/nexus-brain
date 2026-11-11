@@ -41,6 +41,8 @@ export interface GraphItemView {
 
 /** What the Memory page uses: the person's own graph, to look at and clear. */
 export interface WorkGraphApi {
+  /** The person opened one of their own search results. */
+  opened(scope: UserScope, item: { readonly serverId: string; readonly externalId: string }): Promise<void>;
   list(scope: UserScope): Promise<readonly GraphItemView[]>;
   forget(scope: UserScope, item: { readonly serverId: string; readonly itemId: string }): Promise<{ forgotten: number }>;
   clear(scope: UserScope): Promise<{ deleted: number }>;

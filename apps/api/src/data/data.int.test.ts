@@ -182,7 +182,15 @@ describe("seeing and clearing your own work graph (FR-RET-09)", () => {
       expect((await bob("POST", "/me/work-graph/forget", bad)).statusCode).toBe(400);
     }
 
-    expect((await bob("DELETE", "/me/work-graph")).json().data).toEqual({ deleted: 1 });
+    // Opening a result from the search list is remembered too, and only for Bob.
+    const opened = await bob("POST", "/me/work-graph/opened", { serverId: "atlassian", itemId: "ENG-9" });
+    expect(opened.json().data).toEqual({ recorded: true });
+    expect((await bob("POST", "/me/work-graph/opened", { serverId: "atlassian", itemId: "a\u0007b" })).statusCode).toBe(400);
+    const afterOpen = (await bob("GET", "/me/work-graph")).json().data as Array<{ itemId: string; opened: number }>;
+    expect(afterOpen.find((item) => item.itemId === "ENG-9")).toMatchObject({ opened: 1 });
+    expect((await alice("GET", "/me/work-graph")).json().data.map((i: { itemId: string }) => i.itemId)).not.toContain("ENG-9");
+
+    expect((await bob("DELETE", "/me/work-graph")).json().data).toEqual({ deleted: 2 });
     expect((await bob("GET", "/me/work-graph")).json().data).toEqual([]);
     expect((await alice("GET", "/me/work-graph")).json().data).toHaveLength(1);
 

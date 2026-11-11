@@ -387,6 +387,8 @@ export interface ApiClient {
   deleteMemory(id: string): Promise<{ deleted: true }>;
   deleteAllMemories(): Promise<{ deleted: number }>;
   workGraph(): Promise<GraphItem[]>;
+  /** Tells Brain the person opened one of their search results. Survives the page being left. */
+  openedResult(item: { serverId: string; itemId: string }): Promise<void>;
   forgetGraphItem(item: { serverId: string; itemId: string }): Promise<{ forgotten: number }>;
   clearWorkGraph(): Promise<{ deleted: number }>;
   rankerStatus(): Promise<RankerStatus>;
@@ -515,6 +517,9 @@ export function createApiClient(
     deleteMemory: (id) => request(z.object({ deleted: z.literal(true) }), `/memories/${enc(id)}`, { method: "DELETE" }),
     deleteAllMemories: () => request(z.object({ deleted: z.number() }), "/memories", { method: "DELETE" }),
     workGraph: () => request(z.array(GraphItemSchema), "/me/work-graph"),
+    openedResult: async ({ serverId, itemId }) => {
+      await request(z.unknown(), "/me/work-graph/opened", { method: "POST", body: JSON.stringify({ serverId, itemId }), keepalive: true });
+    },
     forgetGraphItem: ({ serverId, itemId }) =>
       request(z.object({ forgotten: z.number() }), "/me/work-graph/forget", { method: "POST", body: JSON.stringify({ serverId, itemId }) }),
     clearWorkGraph: () => request(z.object({ deleted: z.number() }), "/me/work-graph", { method: "DELETE" }),

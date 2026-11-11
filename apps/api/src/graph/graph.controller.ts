@@ -26,6 +26,20 @@ export class GraphController {
     return ok(await this.graph.list(scopeOf(ctx)), { requestId: ctx.requestId });
   }
 
+  /**
+   * The person opened one of their search results (FR-RET-09). It is recorded in their own graph
+   * only, which only ever reorders their own results, so a made-up id can change nothing but their
+   * own order. A problem recording it is reported, never shown: the link already opened.
+   */
+  @Post("opened")
+  @HttpCode(200)
+  async opened(@Ctx() ctx: RequestContext, @Body() body: unknown): Promise<ApiSuccess<{ recorded: true }>> {
+    const parsed = ItemSchema.safeParse(body);
+    if (!parsed.success) throw new AppError("VALIDATION", "Invalid request parameters");
+    await this.graph.opened(scopeOf(ctx), { serverId: parsed.data.serverId, externalId: parsed.data.itemId });
+    return ok({ recorded: true as const }, { requestId: ctx.requestId });
+  }
+
   /** POST with a body, as an item id can hold characters a URL path would need escaping for. */
   @Post("forget")
   @HttpCode(200)

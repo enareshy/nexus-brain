@@ -187,6 +187,8 @@ function SearchPage() {
             work={work}
             onItemTask={(hit, task) => void handleItemTask(hit, task)}
             onPropose={handlePropose}
+            // Remembering it is a nicety: a failure never gets in the way of the page that opened.
+            onOpen={(hit) => void api.openedResult({ serverId: hit.serverId, itemId: hit.externalId }).catch(() => undefined)}
           />
         )}
       </div>

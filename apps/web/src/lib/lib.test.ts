@@ -175,6 +175,16 @@ describe("createApiClient", () => {
     }
   });
 
+  it("records an opened result with a request that outlives the page", async () => {
+    const fetchImpl = vi.fn(async (_url: URL | RequestInfo, _init?: RequestInit) => ok({ recorded: true }));
+    const api = createApiClient("http://api.test", () => "tok", fetchImpl as typeof fetch);
+    await expect(api.openedResult({ serverId: "atlassian", itemId: "ENG-1" })).resolves.toBeUndefined();
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(`${init?.method} ${new URL(String(url)).pathname}`).toBe("POST /me/work-graph/opened");
+    expect(init?.body).toBe(JSON.stringify({ serverId: "atlassian", itemId: "ENG-1" }));
+    expect(init?.keepalive).toBe(true);
+  });
+
   it("refuses to call the API without a token", async () => {
     const fetchImpl = vi.fn();
     const api = createApiClient("http://api.test", () => null, fetchImpl as unknown as typeof fetch);

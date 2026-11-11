@@ -343,6 +343,20 @@ describe("SearchResults", () => {
     expect(screen.getByText("1 result for “login”")).toBeInTheDocument();
   });
 
+  it("tells the page when a result is opened, by click or middle click but not right click", async () => {
+    const onOpen = vi.fn();
+    const opened = hit();
+    render(<SearchResults query="login" result={{ hits: [opened], sources: [{ id: "atlassian", ok: true, hits: 1, ms: 40 }] }} onOpen={onOpen} />);
+    const link = screen.getByRole("link", { name: "Login bug on SSO" });
+    // Stops jsdom trying to follow the link.
+    link.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.click(link);
+    await userEvent.pointer({ keys: "[MouseMiddle]", target: link });
+    await userEvent.pointer({ keys: "[MouseRight]", target: link });
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenCalledWith(opened);
+  });
+
   it("never links unsafe URLs and renders hostile text as text", () => {
     const hostile = hit({ title: "<img src=x onerror=alert(1)>", url: "javascript:alert(1)", snippet: "<script>x</script>" });
     const { container } = render(
